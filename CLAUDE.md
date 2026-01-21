@@ -129,6 +129,7 @@ git add -A && git commit -m "feat(P01-F01): infra-setup complete"
 - P05-F01: HITL Web UI
 - P05-F02: End-to-end workflow integration
 - P05-F03: Observability and metrics
+- P05-F04: Adaptive Feedback Learning (Evaluator Agent)
 
 ## Key Principles
 
@@ -137,6 +138,7 @@ git add -A && git commit -m "feat(P01-F01): infra-setup complete"
 3. **Container isolation** — Governance has exclusive commit access.
 4. **Evidence required** — No gate advances without artifacts.
 5. **Idempotent handlers** — All event processing is retry-safe.
+6. **Continuous improvement** — HITL feedback trains the system via the Evaluator Agent.
 
 ## Memory Anchors
 
