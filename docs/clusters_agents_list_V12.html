@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aSDLC Master Blueprint v19.0 - Full Engineering Stack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .slide { width: 1750px; height: 1850px; background: white; box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.15); border-radius: 24px; padding: 50px; display: flex; flex-direction: column; position: relative; border: 1px solid #e2e8f0; }
+        
+        /* Modal Styles - High Fidelity Organization for Long Content */
+        #kb-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.98); z-index: 100; border-radius: 24px; padding: 40px; }
+        .kb-content { background: white; width: 100%; height: 100%; border-radius: 16px; padding: 60px; overflow-y: auto; text-align: left; position: relative; scroll-behavior: smooth; }
+        .kb-close { position: absolute; top: 25px; right: 35px; font-size: 35px; cursor: pointer; color: #64748b; font-weight: bold; transition: color 0.2s; z-index: 110; }
+        .kb-close:hover { color: #ef4444; }
+        
+        /* Unified Agent Card Style */
+        .agent-card {
+            background: rgba(239, 246, 255, 0.5); 
+            border: 1px solid #dbeafe; 
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+        .agent-card:hover { background: rgba(239, 246, 255, 0.8); border-color: #bfdbfe; transform: translateY(-1px); }
+
+        /* Typography */
+        .agent-name { font-size: 0.92rem; font-weight: 800; color: #0f172a; display: block; line-height: 1.2; margin-bottom: 2px; }
+        .agent-desc { font-size: 0.62rem; color: #64748b; font-style: italic; display: block; line-height: 1.1; font-weight: 400; text-transform: lowercase; margin-bottom: 4px; }
+        
+        .artifact, .jira-owner, .sdd-link { 
+            font-size: 0.62rem !important; 
+            font-weight: 500 !important; 
+            margin-top: 3px; 
+            display: block; 
+            width: fit-content; 
+            text-transform: lowercase !important; 
+            letter-spacing: 0.01em;
+            line-height: 1.2;
+        }
+        .artifact { font-family: 'Courier New', monospace; color: #2563eb; }
+        .jira-owner { color: #0369a1; background: #e0f2fe; padding: 1px 6px; border-radius: 4px; border: 1px solid #bae6fd; display: flex; align-items: center; gap: 3px; }
+        .sdd-link { font-family: 'Courier New', monospace; color: #9333ea; background: #faf5ff; border: 1px solid #e9d5ff; padding: 1px 6px; border-radius: 4px; }
+        
+        /* Layout Elements */
+        .governance-overlay { background: #eff6ff; border: 2px solid #3b82f6; border-radius: 16px; padding: 25px; text-align: center; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1); }
+        .mcp-channel { background: #f0fdf4; border: 1px dashed #34d399; border-radius: 12px; padding: 10px; margin: 15px 0; text-align: center; color: #065f46; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.25em; display: flex; align-items: center; justify-content: center; gap: 20px; }
+        .cluster-box { border-top-width: 8px; transition: all 0.3s ease; flex-grow: 1; display: flex; flex-direction: column; background: #ffffff; margin-bottom: 12px; border-radius: 0 0 16px 16px; border-left: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; padding: 15px; }
+        
+        /* TDD Engine Mechanics */
+        .tdd-loop-box { background: rgba(239, 246, 255, 0.5); border: 2px dashed #f87171; border-radius: 14px; padding: 18px 10px 10px 10px; margin: 10px 0; position: relative; }
+        .tdd-label { position: absolute; top: -10px; right: 10px; color: white; font-size: 8px; font-weight: 800; padding: 1px 8px; border-radius: 4px; text-transform: uppercase; }
+        .dev-parallel-container { position: relative; left: -45px; width: calc(100% + 90px); z-index: 10; }
+
+        /* Decision Gates */
+        .hitl-gate-integrated { background: #fff7ed; border: 2px solid #ea580c; color: #9a3412; padding: 10px; border-radius: 12px; font-weight: 800; font-size: 0.65rem; text-align: center; line-height: 1.2; box-shadow: 0 2px 5px rgba(234, 88, 12, 0.05); margin: 8px 0; display: flex; align-items: center; justify-content: center; min-height: 45px; position: relative; text-transform: uppercase; }
+        .hitl-gate-integrated.final { background: #0f172a; color: white; border-color: #0f172a; }
+
+        /* Legend Style */
+        .legend-container { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 15px; border-radius: 14px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; box-shadow: 0 2px 8px rgba(0,0,0,0.02); margin-top: 5px; }
+        .legend-title { font-size: 0.75rem; font-weight: 900; color: #1e293b; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #cbd5e1; width: 100%; text-align: right; padding-bottom: 3px; margin-bottom: 2px; }
+        .legend-items { display: flex; gap: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.62rem; font-weight: 700; color: #475569; }
+        .swatch { padding: 1px 6px; border-radius: 4px; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; border: 1px solid rgba(0,0,0,0.1); }
+        .swatch-hitl { background: #fff7ed; color: #9a3412; border-color: #ea580c; }
+        .swatch-jira { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+        .swatch-spec { background: #faf5ff; color: #9333ea; border-color: #e9d5ff; }
+        .swatch-artifact { background: #ffffff; color: #2563eb; border-color: #2563eb; font-family: 'Courier New', monospace; }
+
+        .kb-btn { background: #2563eb; color: white; padding: 10px 20px; border-radius: 10px; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; gap: 10px; transition: all 0.2s; cursor: pointer; border: none; margin-bottom: 8px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
+        .kb-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
+        .forking-badge { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 0.6rem; padding: 1px 5px; border-radius: 3px; font-weight: 800; text-transform: lowercase; margin-top: 3px; display: inline-block; }
+
+        /* KB Design Elements - High Intensity Content */
+        .kb-risk-box { background: #fff1f2; border-left: 5px solid #be123c; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .kb-risk-box b { color: #9f1239; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px; }
+        .kb-section-title { font-size: 1.8rem; font-weight: 800; color: #1e293b; border-bottom: 4px solid #3b82f6; padding-bottom: 12px; margin-bottom: 30px; text-transform: uppercase; }
+        .kb-subsection-title { font-size: 1.3rem; font-weight: 700; color: #2563eb; margin-top: 35px; margin-bottom: 15px; }
+        .kb-point { margin-bottom: 15px; padding-left: 25px; position: relative; color: #334155; font-size: 0.95rem; }
+        .kb-point::before { content: '→'; position: absolute; left: 0; color: #3b82f6; font-weight: bold; }
+        .kb-cluster-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
+    </style>
+</head>
+<body>
+
+<div class="slide">
+    <!-- Knowledge Base Full Modal - 100% MAXIMUM DETAIL -->
+    <div id="kb-modal">
+        <div class="kb-content shadow-2xl">
+            <span class="kb-close" onclick="closeKB()">&times;</span>
+            
+            <div class="kb-header border-b-4 border-blue-600 pb-8 mb-10">
+                <h1 class="text-5xl font-black text-slate-900 mb-2 uppercase tracking-tight">aSDLC Master Knowledge Base</h1>
+                <p class="text-slate-500 font-bold uppercase tracking-widest text-lg">Full Engineering Stack & Strategic Guardrails | Version 19.0</p>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-20 text-sm leading-relaxed pb-20">
+                
+                <!-- Column 1: Principles & Methodology -->
+                <div class="space-y-12">
+                    <section>
+                        <h2 class="kb-section-title">1. Spec-Driven Development (SDD)</h2>
+                        <p class="text-slate-700 text-lg mb-6">SDD ensures the <b>Specification is the Product</b>. All autonomous engineering stems from a versioned technical contract.</p>
+                        <div class="space-y-5">
+                            <div class="kb-point"><b>The Spec Index (spec_index.md):</b> Central registry in Git pointing to all active specifications (product_reqs, architecture, tasks). Ensures agents and humans reference the same "Ground Truth."</div>
+                            <div class="kb-point"><b>Git-First Truth:</b> Specs in Git enable versioning, branching, and a permanent audit trail. Engineering intent is never lost in ephemeral chat history.</div>
+                            <div class="kb-point"><b>Jira-Git Synergy:</b> Every task in Jira is bi-directionally linked to a specific Git commit of SDD files for 100% traceability.</div>
+                            <div class="kb-point"><b>Deterministic Engineering:</b> Agents execute against highly structured markdown, removing "intent guesswork" and ensuring measurable outcomes.</div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <h2 class="kb-section-title">2. Engineering Guardrails</h2>
+                        
+                        <div class="space-y-10">
+                            <div>
+                                <h3 class="kb-subsection-title">2.1 Cognitive Mode Separation (Mindset Specialization)</h3>
+                                <p class="text-slate-600 mb-4 text-base">We never ask a single agent to "Understand, Plan, and Execute" simultaneously. Mindset isolation forces a system of checks and balances.</p>
+                                <div class="kb-point"><b>Surveyor vs Architect:</b> One agent maps reality (What Is); the other proposes change (What Should Be).</div>
+                                <div class="kb-point"><b>Constructor vs Critic:</b> One agent builds code; a separate entity with a fresh cognitive state verifies it.</div>
+                                <div class="kb-risk-box">
+                                    <b>🚨 Risk Prevented: Agentic Hallucination</b>
+                                    <p class="text-slate-800 text-sm">Prevents an agent from "inventing" legacy system capabilities or functions to justify a flawed implementation plan. <b>Cognitive Isolation</b> grounds the Architect in verified facts.</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="kb-subsection-title">2.2 Independent Reviewer Protocol</h3>
+                                <p class="text-slate-600 mb-4 text-base">The reviewer must NEVER be the creator. We use heuristic diversity (different models, e.g., Claude reviewing GPT-4o) to catch logical gaps.</p>
+                                <div class="kb-risk-box">
+                                    <b>🚨 Risk Prevented: Confirmation Bias</b>
+                                    <p class="text-slate-800 text-sm">Creators naturally view their implementation bugs as "intended behavior." Independent review provides the critical second opinion required for production-ready code.</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="kb-subsection-title">2.3 Success-Contract First (TDD Safeguard)</h3>
+                                <p class="text-slate-600 mb-4 text-base">Success contracts (Acceptance/Unit Tests) must be designed by a specialized UT Agent BEFORE code implementation begins.</p>
+                                <div class="kb-risk-box">
+                                    <b>🚨 Risk Prevented: Requirement Drift (Scope Creep)</b>
+                                    <p class="text-slate-800 text-sm">Agents adding "nice-to-have" code or drifting from the PRD. The <b>Binary Boundary</b> of TDD forbids the agent from leaving the specification box.</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="kb-subsection-title">2.4 Targeted Context Injection</h3>
+                                <p class="text-slate-600 mb-4 text-base">Precision context packets via AST scanning Repo Mapper rather than full file dumps.</p>
+                                <div class="kb-risk-box">
+                                    <b>🚨 Risk Prevented: Context Window Dilution</b>
+                                    <p class="text-slate-800 text-sm">Ignoring critical constraints due to noise (Lost-in-the-Middle). Precision injection keeps reasoning power focused on the specific logic delta.</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 class="kb-subsection-title">2.5 Micro-Task Slicing (Atomic Boundaries)</h3>
+                                <p class="text-slate-600 mb-4 text-base">Requirements are sliced into technical tasks taking < 3 iterations. Small tasks prevent state drift.</p>
+                                <div class="kb-risk-box">
+                                    <b>🚨 Risk Prevented: Agentic Debt & State Drift</b>
+                                    <p class="text-slate-800 text-sm">Agents losing track of goals in long reasoning chains. Atomic logic blocks ensure focus remains 100% on the atomic sub-task spec.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Column 2: Swarm Cluster Deep Dive & HITL -->
+                <div class="space-y-12">
+                    <section>
+                        <h2 class="kb-section-title">3. Full Cluster & Agent deep dive</h2>
+                        
+                        <div class="space-y-8">
+                            <!-- Cluster 0 -->
+                            <div class="kb-cluster-card border-l-4 border-blue-500">
+                                <h4 class="font-black text-slate-800 uppercase text-sm mb-4">Cluster 0: Governance (Strategic Brain)</h4>
+                                <ul class="space-y-3 text-sm text-slate-600">
+                                    <li><b>Manager Agent:</b> The exclusive commit gateway. Orchestrates cluster transitions and manages the HITL queue.</li>
+                                    <li><b>Repo Mapper Agent:</b> Injects AST-based context packs. Ensures zero-hallucination engineering by mapping global dependencies.</li>
+                                    <li><b>Data Insight Agent:</b> Monitors "Human Bottlenecks" and agentic failure rates to optimize sprint velocity.</li>
+                                </ul>
+                            </div>
+
+                            <!-- Cluster 1 -->
+                            <div class="kb-cluster-card border-l-4 border-amber-500">
+                                <h4 class="font-black text-amber-800 uppercase text-sm mb-4">Cluster 1: Discovery (Requirements)</h4>
+                                <ul class="space-y-3 text-sm text-slate-700">
+                                    <li><b>PRD Agent:</b> Slices high-level intents into atomic, independent User Stories.</li>
+                                    <li><b>UI/UX Agent:</b> Generates visual prototypes (mocks) to align human expectations early.</li>
+                                    <li><b>Acceptance Agent:</b> Defines "Success Contracts" in ATDD/Gherkin format to ensure value delivery.</li>
+                                </ul>
+                            </div>
+
+                            <!-- Cluster 2 -->
+                            <div class="kb-cluster-card border-l-4 border-emerald-500">
+                                <h4 class="font-black text-emerald-800 uppercase text-sm mb-4">Cluster 2: Design & Planning</h4>
+                                <ul class="space-y-3 text-sm text-slate-700">
+                                    <li><b>Arch Agent (Surveyor):</b> Analytical map of "What Is" (Legacy/API). <b>Prevents Legacy Corruption</b>.</li>
+                                    <li><b>Solution Agent (Architect):</b> Creative planning of "What Should Be" using ONLY Surveyor-verified interfaces.</li>
+                                    <li><b>Design Gatekeeper:</b> Automated auditor ensuring solution adheres to Arch Layer 1 and organizational policy.</li>
+                                </ul>
+                            </div>
+
+                            <!-- Cluster 3 -->
+                            <div class="kb-cluster-card border-l-4 border-red-500">
+                                <h4 class="font-black text-red-800 uppercase text-sm mb-4">Cluster 3: Development (TDD Engine)</h4>
+                                <ul class="space-y-3 text-sm text-slate-700">
+                                    <li><b>Planner Agent (Decomposer):</b> Converts designs into technical sub-tasks (`tasks.md`).</li>
+                                    <li><b>UTest Agent:</b> Sets "Goal Posts" before coding. <b>Prevents Tautological Testing</b>.</li>
+                                    <li><b>Coding Agent:</b> Contract fulfiller; implements logic to pass binary test status.</li>
+                                    <li><b>Debugger Agent:</b> Triggered on <b>Fail > 4 Rule</b>. Analyzes stack traces to provide logic patches.</li>
+                                    <li><b>Automation Agent:</b> Strategic quality; identifies related regression flows & progression scripts.</li>
+                                    <li><b>Reviewer Agent:</b> Independent gate (separate model) enforcing Clean Code and security.</li>
+                                </ul>
+                            </div>
+
+                            <!-- Cluster 4 & 5 -->
+                            <div class="kb-cluster-card border-l-4 border-purple-500">
+                                <h4 class="font-black text-purple-800 uppercase text-sm mb-4">Cluster 4 & 5: Validation & Deployment</h4>
+                                <ul class="space-y-3 text-sm text-slate-700">
+                                    <li><b>Validation Agent:</b> Full integration testing (Playwright) in isolated Staging.</li>
+                                    <li><b>Security Agent:</b> SAST/SCA auditing. Autonomous speed must not sacrifice safety.</li>
+                                    <li><b>Release Mgmt Agent:</b> Packages artifacts and populates notes/changelogs.</li>
+                                    <li><b>Deployment Agent:</b> CI/CD orchestrator; marks epics as "Live" in Jira.</li>
+                                    <li><b>Env Monitoring:</b> Post-live health checks and verification of "Live Hashes."</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- HITL -->
+                    <section>
+                        <h2 class="kb-section-title">4. HITL Protocols (Safe Pass)</h2>
+                        <div class="grid grid-cols-2 gap-4 text-sm font-bold text-slate-700">
+                            <div class="bg-blue-50 p-5 border-l-4 border-blue-500 rounded shadow-sm">HITL 1: Backlog Sign-off</div>
+                            <div class="bg-blue-50 p-5 border-l-4 border-blue-500 rounded shadow-sm">HITL 2: Design Sign-off</div>
+                            <div class="bg-blue-50 p-5 border-l-4 border-blue-500 rounded shadow-sm">HITL 3: Task Plan Review</div>
+                            <div class="bg-blue-50 p-5 border-l-4 border-blue-500 rounded shadow-sm">HITL 4: Implementation Review</div>
+                            <div class="bg-blue-50 p-5 border-l-4 border-blue-500 rounded shadow-sm">HITL 5: Quality Gate (Final QA)</div>
+                            <div class="bg-slate-900 text-white p-5 rounded text-center text-base">HITL 6: RELEASE AUTHORIZATION</div>
+                        </div>
+                        <p class="mt-8 text-sm italic text-slate-500 border-t pt-4">* Human authority is preserved at every critical architectural transition to prevent automation bias.</p>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <div class="flex justify-between items-start mb-8">
+        <div class="border-l-8 border-blue-600 pl-6 text-left">
+            <h1 class="text-5xl font-black text-slate-900 tracking-tight leading-none mb-3 uppercase">aSDLC - Agentic Blueprint</h1>
+            <h2 class="text-2xl font-bold text-slate-500 uppercase tracking-wide text-left">Spec Driven Development (SDD)</h2>
+        </div>
+        
+        <div class="flex flex-col items-end">
+            <button class="kb-btn shadow-lg" onclick="openKB()">
+                <i class="fa-solid fa-book-open"></i> Knowledge Base
+            </button>
+            
+            <div class="legend-container shadow-sm">
+                <div class="legend-title">Legend</div>
+                <div class="legend-items">
+                    <div class="legend-item"><span class="swatch swatch-hitl">HITL</span> Decision Gate</div>
+                    <div class="legend-item"><span class="swatch swatch-jira"><i class="fa-brands fa-jira"></i> JIRA</span> State Sync</div>
+                    <div class="legend-item"><span class="swatch swatch-spec">SPEC</span> SDD Ref</div>
+                    <div class="legend-item"><span class="swatch swatch-artifact">.md</span> Artifact</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 0. Governance Cluster -->
+    <div class="governance-overlay mb-6">
+        <span class="text-blue-700 font-extrabold text-[12px] uppercase tracking-widest block mb-4 text-center">0. Central Governance & Spec Index Curator Layer</span>
+        <div class="flex justify-around items-center">
+            <div class="agent-card w-64 text-left">
+                <span class="agent-desc">spec indexing & jira summaries</span>
+                <span class="agent-name">Manager Agent</span>
+                <span class="artifact">spec_index.md</span>
+                <div class="jira-owner"><i class="fa-brands fa-jira"></i> summary & sync</div>
+            </div>
+            <div class="h-16 w-px bg-blue-200 mx-4"></div>
+            <div class="agent-card w-64 text-left">
+                <span class="agent-desc">operational performance kpis</span>
+                <span class="agent-name">Data Insight Agent</span>
+                <span class="artifact">metrics.csv</span>
+                <div class="jira-owner"><i class="fa-brands fa-jira"></i> alert comments</div>
+            </div>
+            <div class="h-16 w-px bg-blue-200 mx-4"></div>
+            <div class="agent-card w-64 text-left">
+                <span class="agent-desc">ast context injection</span>
+                <span class="agent-name">Repo Mapper Agent</span>
+                <span class="artifact">ast_context.json</span>
+                <div class="jira-owner"><i class="fa-brands fa-jira"></i> tech context links</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP CHANNEL -->
+    <div class="mcp-channel shadow-sm">
+        <i class="fa-solid fa-link"></i><span>MCP (Model Context Protocol) - Centralized Knowledge Bus</span><i class="fa-solid fa-link"></i>
+    </div>
+
+    <!-- Workflow Clusters Grid -->
+    <div class="grid grid-cols-5 gap-8 flex-grow mb-12">
+        
+        <!-- 1. Discovery -->
+        <div class="column-container">
+            <div class="cluster-box border-t-amber-500 shadow-sm">
+                <h3 class="font-bold text-amber-700 text-[10px] mb-3 uppercase tracking-widest text-left">1. DISCOVERY (Epic Level)</h3>
+                <div class="hitl-gate-integrated">HITL 0: Intent & Epic Creation (PO)</div>
+                <div class="agent-list">
+                    <div class="agent-card text-left">
+                        <span class="agent-desc">intent analysis & slicing</span>
+                        <span class="agent-name">PRD Agent</span>
+                        <span class="artifact">product_reqs.md</span>
+                        <span class="sdd-link">spec index ref</span>
+                        <div class="jira-owner"><i class="fa-brands fa-jira"></i> create stories</div>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc">visual flows & prototyping</span>
+                        <span class="agent-name">UI/UX Agent</span>
+                        <span class="artifact">mockup.fig</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc">success criteria</span>
+                        <span class="agent-name">Acceptance Agent</span>
+                        <span class="artifact">test_specs.md</span>
+                        <span class="sdd-link">test spec ref</span>
+                    </div>
+                </div>
+                <div class="mt-auto"><div class="hitl-gate-integrated">HITL 1: Backlog & Story Approval</div></div>
+            </div>
+        </div>
+
+        <!-- 2. Design -->
+        <div class="column-container">
+            <div class="cluster-box border-t-emerald-500 shadow-sm">
+                <h3 class="font-bold text-emerald-700 text-[10px] mb-4 uppercase tracking-widest text-left text-left">2. DESIGN & PLANNING</h3>
+                <div class="agent-list">
+                    <div class="agent-card text-left">
+                        <span class="agent-desc">maps legacy constraints</span>
+                        <span class="agent-name">Arch Agent</span>
+                        <span class="artifact text-left">legacy_audit.md</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">technical solution hld</span>
+                        <span class="agent-name text-left">Solution Agent</span>
+                        <span class="artifact text-left">architecture.md</span>
+                        <span class="sdd-link text-left">arch spec ref</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">technical story slicing</span>
+                        <span class="agent-name text-left">Planner Agent (Slicer)</span>
+                        <div class="jira-owner text-left"><i class="fa-brands fa-jira text-left"></i> update stories</div>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">cost/budget mapping</span>
+                        <span class="agent-name text-left">DCUT Agent</span>
+                        <span class="artifact text-left">cost_est.rpt</span>
+                        <div class="jira-owner text-left"><i class="fa-brands fa-jira text-left"></i> map budget</div>
+                    </div>
+                </div>
+                <div class="mt-auto"><div class="hitl-gate-integrated text-left">HITL 2: HLD & Budget Approval</div></div>
+            </div>
+        </div>
+
+        <!-- 3. Development -->
+        <div class="column-container">
+            <div class="cluster-box border-t-red-500 shadow-sm">
+                <h3 class="font-bold text-red-700 text-[10px] mb-3 uppercase tracking-widest text-left text-left text-left">3. DEVELOPMENT</h3>
+                <div class="agent-list flex flex-col text-left">
+                    <div class="agent-card">
+                        <span class="agent-desc">task decomposition</span>
+                        <span class="agent-name">Planner Agent (Decomposer)</span>
+                        <span class="artifact">tasks.md</span>
+                        <div class="jira-owner"><i class="fa-brands fa-jira"></i> create sub-tasks</div>
+                    </div>
+
+                    <div class="hitl-gate-integrated" style="margin-bottom: 25px;">HITL 3: Task Plan Approval</div>
+
+                    <div class="agent-card bg-slate-100 border-slate-800 border-l-4" style="margin-bottom: 20px;">
+                        <span class="agent-desc text-slate-500">parallel orchestration</span>
+                        <span class="agent-name">Dev Manager Agent</span>
+                        <span class="forking-badge">forking</span>
+                    </div>
+
+                    <div class="dev-parallel-container flex gap-4 mb-4">
+                        <!-- Logic Track (TDD) -->
+                        <div class="tdd-loop-box border-red-400 border-2 dashed flex-1 m-0">
+                            <span class="tdd-label bg-red-500 text-[7px]">logic (tdd) <i class="fa-solid fa-layer-group ml-1"></i></span>
+                            <div class="space-y-4 mt-2 text-left">
+                                <div class="text-left">
+                                    <span class="agent-desc">contract spec</span>
+                                    <span class="agent-name">UTest Agent</span>
+                                    <span class="artifact">specs.ts</span>
+                                </div>
+                                <div class="text-left">
+                                    <span class="agent-desc">implementation</span>
+                                    <span class="agent-name">Coding Agent</span>
+                                    <span class="artifact">logic.patch</span>
+                                </div>
+                                <div class="text-left">
+                                    <span class="agent-desc">repair (fail>4)</span>
+                                    <span class="agent-name">Debugger Agent</span>
+                                    <span class="artifact">fix.patch</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Automation Track -->
+                        <div class="tdd-loop-box bg-blue-50 border-blue-300 border-2 dashed flex-1 m-0 text-left">
+                            <span class="tdd-label bg-blue-600 text-[7px]">automation</span>
+                            <div class="mt-2 text-left">
+                                <span class="agent-desc text-left text-[0.58rem]">progression & related regression development</span>
+                                <span class="agent-name text-left text-[0.8rem]">Automation Agent</span>
+                                <span class="artifact text-left">e2e_suite.ts</span>
+                                <span class="sdd-link text-left">auto spec ref</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">real-time vuln audit</span>
+                        <span class="agent-name text-left">Security Review Agent</span>
+                        <span class="artifact text-left">security_audit.rpt</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">independent standards</span>
+                        <span class="agent-name text-left">Reviewer Agent</span>
+                        <span class="artifact text-left">cr_report.rpt</span>
+                        <div class="jira-owner text-left"><i class="fa-brands fa-jira text-left"></i> close sub-tasks</div>
+                    </div>
+                </div>
+                <div class="mt-auto text-left"><div class="hitl-gate-integrated text-left">HITL 4: Story Demo (Code & E2E)</div></div>
+            </div>
+        </div>
+
+        <!-- 4. Validation -->
+        <div class="column-container">
+            <div class="cluster-box border-t-purple-500 shadow-sm">
+                <h3 class="font-bold text-purple-700 text-[10px] mb-5 uppercase tracking-widest text-left">4. VALIDATION</h3>
+                <div class="agent-list">
+                    <div class="agent-card text-left">
+                        <span class="agent-desc">runs e2e (prog & reg)</span>
+                        <span class="agent-name text-left">Validation Agent</span>
+                        <span class="artifact text-left">acceptance.log</span>
+                        <div class="jira-owner text-left"><i class="fa-brands fa-jira text-left"></i> QA sign-off</div>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">deep sca/sast audit</span>
+                        <span class="agent-name text-left">Security Agent</span>
+                        <span class="artifact text-left">security.sast</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">wiki/readme sync</span>
+                        <span class="agent-name text-left">Documentation Agent</span>
+                        <span class="artifact text-left">readme_sync.md</span>
+                    </div>
+                </div>
+                <div class="mt-auto text-left"><div class="hitl-gate-integrated text-left">HITL 5: Quality Gate & Release Approval</div></div>
+            </div>
+        </div>
+
+        <!-- 5. Deployment -->
+        <div class="column-container">
+            <div class="cluster-box border-t-indigo-600 shadow-sm">
+                <h3 class="font-bold text-indigo-700 text-[10px] mb-5 uppercase tracking-widest text-left">5. DEPLOYMENT</h3>
+                <div class="agent-list space-y-4 text-left">
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">packages release spec</span>
+                        <span class="agent-name text-left">Release Mgmt Agent</span>
+                        <span class="artifact text-left">release_notes.md</span>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">orchestrates live push</span>
+                        <span class="agent-name text-left">Deployment Agent</span>
+                        <span class="artifact text-left">deploy_log.yml</span>
+                        <div class="jira-owner text-left"><i class="fa-brands fa-jira text-left"></i> set epic live</div>
+                    </div>
+                    <div class="agent-card text-left">
+                        <span class="agent-desc text-left">post-live monitoring</span>
+                        <span class="agent-name text-left">Env Monitoring Agent</span>
+                        <span class="artifact text-left">health_hash.txt</span>
+                    </div>
+                </div>
+                <div class="mt-auto text-left"><div class="hitl-gate-integrated final text-left">HITL 6: FINAL LIVE ACTIVATION</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Final Footer -->
+    <div class="mt-auto pt-6 border-t border-slate-100 flex justify-center items-center relative">
+        <p class="text-[10px] text-slate-400 uppercase tracking-[0.3em] font-black text-center">
+            © 2026 aSDLC Framework | Autonomous Engineering Pipeline | Spec Driven Development (SDD)
+        </p>
+        <div class="absolute right-0 flex items-center gap-2 mr-4 text-left">
+            <span class="text-[9px] text-slate-300 font-bold italic">Master Architecture v19.0</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openKB() { document.getElementById('kb-modal').style.display = 'block'; }
+    function closeKB() { document.getElementById('kb-modal').style.display = 'none'; }
+    window.onclick = function(event) {
+        let modal = document.getElementById('kb-modal');
+        if (event.target == modal) { modal.style.display = "none"; }
+    }
+</script>
+
+</body>
+</html>
