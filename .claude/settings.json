@@ -1,0 +1,31 @@
+{
+  "project": {
+    "name": "asdlc-implementation",
+    "version": "0.1.0"
+  },
+  "permissions": {
+    "mode": "default",
+    "allowedTools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    "blockedCommands": ["rm -rf /", "sudo rm", "git push --force"],
+    "allowedPaths": [
+      "/home/claude/asdlc-project/**",
+      "!**/node_modules/**",
+      "!**/.git/objects/**"
+    ]
+  },
+  "context": {
+    "sources": ["project"],
+    "autoLoadSkills": true,
+    "compactThreshold": 80000
+  },
+  "workflow": {
+    "requirePlanningBeforeCode": true,
+    "tddEnforced": true,
+    "commitOnlyOnComplete": true
+  },
+  "subagents": {
+    "enabled": true,
+    "maxConcurrent": 3,
+    "definitions": ".claude/subagents/"
+  }
+}
