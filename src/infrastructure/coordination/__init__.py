@@ -18,6 +18,11 @@ from src.infrastructure.coordination.client import (
     CoordinationClient,
     generate_message_id,
 )
+from src.infrastructure.coordination.factory import (
+    get_coordination_client,
+    get_coordination_client_context,
+    reset_coordination_client,
+)
 
 __all__ = [
     # Types
@@ -35,4 +40,8 @@ __all__ = [
     # Client
     "CoordinationClient",
     "generate_message_id",
+    # Factory
+    "get_coordination_client",
+    "get_coordination_client_context",
+    "reset_coordination_client",
 ]
