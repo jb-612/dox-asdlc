@@ -151,13 +151,13 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 **File:** `src/workers/repo_mapper/mapper.py`
 **Test:** `tests/unit/test_repo_mapper.py`
 
-- [ ] Create `RepoMapper` class
-- [ ] Implement `generate_context_pack()` method
-- [ ] Implement `refresh_ast_context()` method
-- [ ] Implement `save_context_pack()` to write JSON
-- [ ] Load AST context from cache when available
-- [ ] Validate inputs and outputs
-- [ ] Write unit tests
+- [x] Create `RepoMapper` class
+- [x] Implement `generate_context_pack()` method
+- [x] Implement `refresh_ast_context()` method
+- [x] Implement `save_context_pack()` to write JSON
+- [x] Load AST context from cache when available
+- [x] Validate inputs and outputs
+- [x] Write unit tests
 
 **Estimate:** 1.5h
 
@@ -211,8 +211,8 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 ## Progress
 
 - **Started**: 2026-01-22
-- **Tasks Complete**: 8/12
-- **Percentage**: 67%
+- **Tasks Complete**: 9/12
+- **Percentage**: 75%
 - **Status**: IN_PROGRESS
 - **Blockers**: T03 requires tree-sitter (deferred)
 
@@ -228,7 +228,7 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 | T06 | SymbolExtractor | 1.5h | [x] |
 | T07 | TokenCounter | 1h | [x] |
 | T08 | ContextBuilder | 2h | [x] |
-| T09 | RepoMapper main class | 1.5h | [ ] |
+| T09 | RepoMapper main class | 1.5h | [x] |
 | T10 | AST Context Caching | 1h | [ ] |
 | T11 | Integration tests | 2h | [ ] |
 | T12 | Exceptions and configuration | 30min | [x] |
