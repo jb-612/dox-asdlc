@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS Variables */
+:root {
+  --bg-primary: #030303;
+  --bg-secondary: #0a0a0a;
+  --bg-tertiary: #141414;
+  --accent-teal: #1E5160;
+  --accent-teal-light: #2A7A8C;
+  --text-primary: #FBFCFC;
+  --text-secondary: #A09E9D;
+  --text-tertiary: #4A4A4A;
+  --status-success: #22C55E;
+  --status-warning: #F59E0B;
+  --status-error: #EF4444;
+  --status-info: #3B82F6;
+}
+
+/* Base styles */
+@layer base {
+  html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary min-h-screen;
+  }
+
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-secondary;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-bg-tertiary rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-tertiary;
+  }
+}
+
+/* Component utilities */
+@layer components {
+  .card {
+    @apply bg-bg-secondary rounded-xl border border-bg-tertiary;
+  }
+
+  .card-hover {
+    @apply transition-colors hover:bg-bg-tertiary hover:border-accent-teal/30;
+  }
+
+  .btn-primary {
+    @apply bg-accent-teal hover:bg-accent-teal-light text-text-primary px-4 py-2 rounded-lg
+           font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-accent-teal/50;
+  }
+
+  .btn-secondary {
+    @apply bg-bg-tertiary hover:bg-bg-secondary text-text-primary px-4 py-2 rounded-lg
+           font-medium transition-colors border border-bg-tertiary hover:border-text-tertiary
+           focus:outline-none focus:ring-2 focus:ring-bg-tertiary/50;
+  }
+
+  .btn-danger {
+    @apply bg-status-error/10 hover:bg-status-error/20 text-status-error px-4 py-2 rounded-lg
+           font-medium transition-colors border border-status-error/20 hover:border-status-error/40
+           focus:outline-none focus:ring-2 focus:ring-status-error/30;
+  }
+
+  .btn-success {
+    @apply bg-status-success/10 hover:bg-status-success/20 text-status-success px-4 py-2 rounded-lg
+           font-medium transition-colors border border-status-success/20 hover:border-status-success/40
+           focus:outline-none focus:ring-2 focus:ring-status-success/30;
+  }
+
+  .input-field {
+    @apply bg-bg-tertiary border border-bg-tertiary text-text-primary rounded-lg px-4 py-2.5
+           placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-teal/50
+           focus:border-accent-teal transition-colors;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* Utility animations */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}
+
+/* Code/diff viewer styles */
+.diff-viewer {
+  @apply font-mono text-sm;
+}
+
+.diff-add {
+  @apply bg-status-success/10 text-status-success;
+}
+
+.diff-remove {
+  @apply bg-status-error/10 text-status-error;
+}
+
+.diff-context {
+  @apply text-text-secondary;
+}

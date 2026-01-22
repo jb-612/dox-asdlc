@@ -1,8 +1,26 @@
 # aSDLC HITL Web UI Container
 # Container 4: Human-in-the-Loop Web Interface
 # Gate request viewer and evidence explorer
-# Approval pushes responses back to Redis Streams
+# Multi-stage build: Build React app, then serve with Node
 
+# Stage 1: Build the React application
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY docker/hitl-ui/package.json docker/hitl-ui/package-lock.json* ./
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Copy source files
+COPY docker/hitl-ui/ ./
+
+# Build the application
+RUN npm run build
+
+# Stage 2: Production server
 FROM node:20-alpine
 
 # Install health check dependencies
@@ -20,14 +38,18 @@ ENV NODE_ENV=production \
     SERVICE_NAME=hitl-ui \
     SERVICE_PORT=3000
 
-# Copy package files first for better caching
-# Note: In prototype phase, we create a minimal server
-# Full UI will be implemented in P05-F01
-COPY docker/hitl-ui/package.json /app/
-COPY docker/hitl-ui/server.js /app/
+# Copy package files for production dependencies
+COPY docker/hitl-ui/package.json ./
 
-# Install dependencies
-RUN npm install --omit=dev 2>/dev/null || echo "No package.json yet, creating minimal server"
+# Install only express for serving static files
+RUN npm install express@4 --save && \
+    chown -R asdlc:asdlc /app
+
+# Copy built assets from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Copy production server
+COPY docker/hitl-ui/server.js ./
 
 # Set ownership
 RUN chown -R asdlc:asdlc /app
