@@ -1,208 +1,102 @@
-# P03-F01: Agent Worker Pool Framework - Design
+# P03-F01: Agent Worker Pool Framework - Technical Design
 
 ## Overview
 
-This feature implements the stateless agent worker pool that executes domain agents (Discovery, Design, Development, Validation, Deployment). Workers consume tasks from Redis streams, execute Claude Agent SDK queries with role-specific tools and context packs, and publish completion events.
+Implement the worker pool framework that consumes `AGENT_STARTED` events from Redis Streams, executes agents, and publishes completion/error events. This bridges the orchestrator (P02) to domain agents (P04).
 
 ## Architecture
 
-### Component Model
-
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                      Worker Container                         │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
-│  │  Worker 1   │  │  Worker 2   │  │  Worker N   │          │
-│  │             │  │             │  │             │          │
-│  │ EventConsumer│  │ EventConsumer│  │ EventConsumer│         │
-│  │      ↓      │  │      ↓      │  │      ↓      │          │
-│  │ AgentRunner │  │ AgentRunner │  │ AgentRunner │          │
-│  │      ↓      │  │      ↓      │  │      ↓      │          │
-│  │ ToolRegistry│  │ ToolRegistry│  │ ToolRegistry│          │
-│  └─────────────┘  └─────────────┘  └─────────────┘          │
-│                                                              │
-└─────────────────────────────────┬────────────────────────────┘
-                                  │
-                    ┌─────────────┴─────────────┐
-                    ▼                           ▼
-            ┌───────────────┐           ┌───────────────┐
-            │ Redis Streams │           │ KnowledgeStore│
-            │ (Events)      │           │ (RAG)         │
-            └───────────────┘           └───────────────┘
+Orchestrator → AGENT_STARTED → Redis Streams → WorkerPool → AgentDispatcher → Agent → AGENT_COMPLETED
 ```
 
-### Key Components
+## Components
 
-1. **WorkerPool** - Manages multiple concurrent worker instances
-2. **AgentRunner** - Executes Claude Agent SDK queries with isolation
-3. **AgentRole** - Defines role-specific configurations (tools, prompts, constraints)
-4. **ToolRegistry** - Provides role-filtered access to bash tool wrappers
-5. **ContextLoader** - Loads context packs for task execution
+### 1. WorkerPool (`src/workers/pool/worker_pool.py`)
+- Manages concurrent agent execution with asyncio semaphore
+- Handles lifecycle: start(), stop(), graceful shutdown
+- Coordinates event consumption, dispatching, and publishing
+- Tracks metrics (processed, succeeded, failed counts)
 
-## Interfaces
+### 2. EventConsumer (`src/workers/pool/event_consumer.py`)
+- Reads AGENT_STARTED events from Redis Streams consumer group
+- Filters for events relevant to worker pool
+- Supports tenant-aware stream names
+- Handles event acknowledgment
 
-### AgentRole Protocol
+### 3. WorkerIdempotencyTracker (`src/workers/pool/idempotency.py`)
+- Prevents duplicate event processing
+- Uses Redis SET NX for atomic check-and-mark
+- Supports TTL for key expiration
 
-```python
-class AgentRole(Protocol):
-    """Defines an agent role configuration."""
+### 4. AgentDispatcher (`src/workers/agents/dispatcher.py`)
+- Routes events to appropriate agent by type
+- Manages agent registration
+- Calls validation and cleanup hooks if agents implement them
 
-    @property
-    def name(self) -> str:
-        """Role name (e.g., 'coding', 'reviewer')."""
-        ...
+### 5. BaseAgent Protocol (`src/workers/agents/protocols.py`)
+- Defines agent interface: agent_type, execute()
+- AgentResult dataclass for execution results
+- AgentContext dataclass for execution context
 
-    @property
-    def cluster(self) -> AgentCluster:
-        """Cluster this role belongs to."""
-        ...
+### 6. StubAgent (`src/workers/agents/stub_agent.py`)
+- Test agent with configurable behavior
+- Used for framework validation
 
-    @property
-    def system_prompt(self) -> str:
-        """System prompt template for this role."""
-        ...
+### 7. ContextLoader (`src/workers/artifacts/context_loader.py`)
+- Loads context packs from filesystem
+- Validates context pack structure
 
-    @property
-    def allowed_tools(self) -> list[str]:
-        """List of tool names this role can use."""
-        ...
+### 8. ArtifactWriter (`src/workers/artifacts/writer.py`)
+- Writes patches and reports to workspace
+- Manages artifact directory structure
 
-    @property
-    def max_tokens(self) -> int:
-        """Maximum output tokens for this role."""
-        ...
-```
-
-### AgentRunner Interface
-
-```python
-class AgentRunner:
-    """Executes agent queries with Claude Agent SDK."""
-
-    async def run(
-        self,
-        role: AgentRole,
-        task_id: str,
-        context_pack: ContextPack,
-        input_prompt: str,
-    ) -> AgentResult:
-        """Execute agent with role configuration and context."""
-        ...
-```
-
-### WorkerPool Interface
-
-```python
-class WorkerPool:
-    """Manages worker instances consuming from Redis streams."""
-
-    async def start(self, worker_count: int) -> None:
-        """Start specified number of workers."""
-        ...
-
-    async def stop(self) -> None:
-        """Gracefully stop all workers."""
-        ...
-
-    async def scale(self, target_count: int) -> None:
-        """Scale worker count up or down."""
-        ...
-```
-
-## Data Models
-
-### AgentResult
-
-```python
-@dataclass
-class AgentResult:
-    """Result from agent execution."""
-    task_id: str
-    role: str
-    success: bool
-    output: str  # Main output text
-    artifacts: list[ArtifactRef]  # Generated artifacts
-    tool_calls: list[ToolCall]  # Tool execution log
-    usage: TokenUsage  # Token consumption
-    error: str | None = None
-```
-
-### ContextPack
-
-```python
-@dataclass
-class ContextPack:
-    """Context pack for agent execution."""
-    task_id: str
-    role: str
-    files: list[FileContent]
-    symbols: list[SymbolInfo]
-    dependencies: list[DependencyInfo]
-    metadata: dict[str, Any]
-```
-
-### ToolCall
-
-```python
-@dataclass
-class ToolCall:
-    """Record of a tool invocation."""
-    tool_name: str
-    args: dict[str, Any]
-    result: dict[str, Any]
-    duration_ms: int
-    success: bool
-```
+### 9. LLMClient (`src/workers/llm/client.py`)
+- Interface for Claude SDK integration
+- StubLLMClient for testing (full impl in P03-F03)
 
 ## Event Flow
 
-### Input Events (consumed)
-
-| Event Type | Description |
-|------------|-------------|
-| `AGENT_STARTED` | Dispatch from Manager Agent with role and context |
-
-### Output Events (published)
-
-| Event Type | Description |
-|------------|-------------|
-| `AGENT_COMPLETED` | Success with artifacts and results |
-| `AGENT_FAILED` | Failure with error details |
-
-## Dependencies
-
-### Required Components
-
-- P01-F01: Redis client, health checks
-- P02-F01: EventConsumer, EventPublisher
-- P02-F02: Task state integration
-
-### External Dependencies
-
-- `anthropic` - Claude API client
-- `pydantic` - Data validation
+1. WorkerPool.start() begins event loop
+2. EventConsumer reads batch of events from Redis
+3. For each AGENT_STARTED event:
+   a. Check idempotency (skip if duplicate)
+   b. Build AgentContext
+   c. Dispatch to registered agent
+   d. Publish AGENT_COMPLETED or AGENT_ERROR
+   e. Acknowledge original event
+4. Loop continues until stop() is called
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WORKER_COUNT` | `2` | Number of concurrent workers |
-| `CLAUDE_API_KEY` | (required) | Anthropic API key |
-| `CLAUDE_MODEL` | `claude-sonnet-4-20250514` | Default model |
-| `MAX_TOOL_CALLS` | `50` | Max tool calls per execution |
-| `EXECUTION_TIMEOUT` | `300` | Timeout in seconds |
+WorkerConfig dataclass:
+- pool_size: Max concurrent agents (default: 4)
+- batch_size: Events per batch (default: 10)
+- event_timeout_seconds: Agent timeout (default: 300)
+- shutdown_timeout_seconds: Graceful shutdown wait (default: 30)
+- consumer_group: Redis consumer group (default: development-handlers)
+- consumer_name: Unique consumer instance name
 
-## Security Considerations
+## Dependencies
 
-1. Workers have NO Git write access (governance principle)
-2. Tool allowlist enforced per role
-3. No network access from tool execution sandbox
-4. API keys injected via environment only
-5. Isolated execution per task (fresh session)
+### Reuses from existing code:
+- `src/core/events.py` - ASDLCEvent, EventType
+- `src/infrastructure/redis_streams.py` - Stream operations
+- `src/core/tenant.py` - TenantContext for multi-tenancy
+- `src/infrastructure/health.py` - HealthChecker
 
-## Testing Strategy
+### Consumer Group
+Uses `development-handlers` group defined in `src/core/config.py`
 
-- Unit tests: Mock Claude API responses, verify tool dispatch
-- Integration tests: Real tool execution with test fixtures
-- E2E tests: Full event flow from dispatch to completion
+## Error Handling
+
+- Agent exceptions: Caught, logged, AGENT_ERROR published
+- Unknown agent type: AgentNotFoundError, AGENT_ERROR published
+- Redis errors: Logged, retried with backoff
+- Shutdown: Wait for active tasks, timeout with cancellation
+
+## Multi-Tenancy
+
+- Stream names prefixed with tenant ID when enabled
+- Idempotency keys prefixed with tenant ID
+- Context includes tenant_id for agents to use

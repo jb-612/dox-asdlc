@@ -39,17 +39,17 @@ check() {
 
     if eval "$condition"; then
         echo -e "${GREEN}✓${NC} $description"
-        ((PASS++))
+        ((PASS++)) || true
     else
         echo -e "${RED}✗${NC} $description"
-        ((FAIL++))
+        ((FAIL++)) || true
     fi
 }
 
 warn() {
     local description="$1"
     echo -e "${YELLOW}⚠${NC} $description"
-    ((WARN++))
+    ((WARN++)) || true
 }
 
 run_check() {
@@ -59,10 +59,10 @@ run_check() {
     echo "  Running: $command"
     if eval "$command" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} $description"
-        ((PASS++))
+        ((PASS++)) || true
     else
         echo -e "${RED}✗${NC} $description"
-        ((FAIL++))
+        ((FAIL++)) || true
     fi
 }
 
