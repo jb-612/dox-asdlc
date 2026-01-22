@@ -43,6 +43,9 @@ logs/
 .env.local
 .env.*.local
 
+# Claude Code local settings (user-specific permissions)
+.claude/settings.local.json
+
 # Redis data (local dev)
 dump.rdb
 
