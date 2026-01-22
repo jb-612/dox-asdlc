@@ -29,6 +29,12 @@ COORDINATION_DIR="$PROJECT_ROOT/.claude/coordination"
 MESSAGES_DIR="$COORDINATION_DIR/messages"
 PENDING_DIR="$COORDINATION_DIR/pending-acks"
 
+# Load common helper functions for Redis coordination
+# shellcheck source=lib/common.sh
+if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
+    source "$SCRIPT_DIR/lib/common.sh"
+fi
+
 # Valid message types
 VALID_TYPES=(
     "CONTRACT_CHANGE_PROPOSED"
@@ -87,6 +93,110 @@ validate_type() {
         fi
     done
     return 1
+}
+
+# Publish message via Redis backend
+publish_via_redis() {
+    local type="$1"
+    local subject="$2"
+    local description="$3"
+    local target="$4"
+    local requires_ack="$5"
+    local sender="${CLAUDE_INSTANCE_ID:-unknown}"
+
+    # Convert requires_ack to Python boolean
+    local py_requires_ack="True"
+    if [[ "$requires_ack" == "false" ]]; then
+        py_requires_ack="False"
+    fi
+
+    local result
+    result=$(call_python_publish "$type" "$subject" "$description" "$target" "$py_requires_ack")
+
+    local success
+    success=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('success',False))")
+
+    if [[ "$success" == "True" ]]; then
+        local msg_id msg_type from_instance to_instance
+        msg_id=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('message_id',''))")
+        msg_type=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('type',''))")
+        from_instance=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('from',''))")
+        to_instance=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('to',''))")
+
+        echo "Message published:"
+        echo "  ID: $msg_id"
+        echo "  Type: $msg_type"
+        echo "  From: $from_instance -> To: $to_instance"
+        echo "  Subject: $subject"
+        echo "  Backend: Redis"
+
+        if [[ "$requires_ack" == "true" ]]; then
+            echo "  Requires acknowledgment: Yes"
+        fi
+        return 0
+    else
+        local error
+        error=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error','Unknown error'))")
+        echo "Error publishing via Redis: $error" >&2
+        return 1
+    fi
+}
+
+# Publish message via filesystem backend
+publish_via_filesystem() {
+    local type="$1"
+    local subject="$2"
+    local description="$3"
+    local target="$4"
+    local requires_ack="$5"
+    local sender="${CLAUDE_INSTANCE_ID:-unknown}"
+
+    # Generate message ID and timestamp
+    local msg_id
+    local timestamp
+    msg_id="msg-$(generate_uuid)"
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local filename_timestamp
+    filename_timestamp=$(date -u +"%Y-%m-%dT%H-%M-%S")
+
+    # Create message filename (lowercase type for compatibility)
+    local type_lower
+    type_lower=$(echo "$type" | tr '[:upper:]' '[:lower:]')
+    local filename="${filename_timestamp}-${sender}-${type_lower}.json"
+    local filepath="$MESSAGES_DIR/$filename"
+
+    # Create message JSON
+    cat > "$filepath" << EOF
+{
+  "id": "$msg_id",
+  "type": "$type",
+  "from": "$sender",
+  "to": "$target",
+  "timestamp": "$timestamp",
+  "requires_ack": $requires_ack,
+  "acknowledged": false,
+  "payload": {
+    "subject": "$subject",
+    "description": "$description"
+  }
+}
+EOF
+
+    # If requires ack, also create in pending-acks
+    if [[ "$requires_ack" == "true" ]]; then
+        cp "$filepath" "$PENDING_DIR/$filename"
+    fi
+
+    echo "Message published:"
+    echo "  ID: $msg_id"
+    echo "  Type: $type"
+    echo "  From: $sender -> To: $target"
+    echo "  Subject: $subject"
+    echo "  File: $filename"
+
+    if [[ "$requires_ack" == "true" ]]; then
+        echo "  Requires acknowledgment: Yes"
+    fi
 }
 
 main() {
@@ -180,51 +290,16 @@ main() {
         esac
     fi
 
-    # Generate message ID and timestamp
-    local msg_id
-    local timestamp
-    msg_id="msg-$(generate_uuid)"
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    local filename_timestamp
-    filename_timestamp=$(date -u +"%Y-%m-%dT%H-%M-%S")
-
-    # Create message filename (lowercase type for compatibility)
-    local type_lower
-    type_lower=$(echo "$type" | tr '[:upper:]' '[:lower:]')
-    local filename="${filename_timestamp}-${sender}-${type_lower}.json"
-    local filepath="$MESSAGES_DIR/$filename"
-
-    # Create message JSON
-    cat > "$filepath" << EOF
-{
-  "id": "$msg_id",
-  "type": "$type",
-  "from": "$sender",
-  "to": "$target",
-  "timestamp": "$timestamp",
-  "requires_ack": $requires_ack,
-  "acknowledged": false,
-  "payload": {
-    "subject": "$subject",
-    "description": "$description"
-  }
-}
-EOF
-
-    # If requires ack, also create in pending-acks
-    if [[ "$requires_ack" == "true" ]]; then
-        cp "$filepath" "$PENDING_DIR/$filename"
+    # Detect coordination backend and publish
+    local backend="filesystem"
+    if type check_coordination_backend &>/dev/null; then
+        backend=$(check_coordination_backend)
     fi
 
-    echo "Message published:"
-    echo "  ID: $msg_id"
-    echo "  Type: $type"
-    echo "  From: $sender -> To: $target"
-    echo "  Subject: $subject"
-    echo "  File: $filename"
-
-    if [[ "$requires_ack" == "true" ]]; then
-        echo "  Requires acknowledgment: Yes"
+    if [[ "$backend" == "redis" ]]; then
+        publish_via_redis "$type" "$subject" "$description" "$target" "$requires_ack"
+    else
+        publish_via_filesystem "$type" "$subject" "$description" "$target" "$requires_ack"
     fi
 }
 

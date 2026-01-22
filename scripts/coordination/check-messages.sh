@@ -13,6 +13,12 @@ COORDINATION_DIR="$PROJECT_ROOT/.claude/coordination"
 MESSAGES_DIR="$COORDINATION_DIR/messages"
 PENDING_DIR="$COORDINATION_DIR/pending-acks"
 
+# Load common helper functions for Redis coordination
+# shellcheck source=lib/common.sh
+if [[ -f "$SCRIPT_DIR/lib/common.sh" ]]; then
+    source "$SCRIPT_DIR/lib/common.sh"
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -36,6 +42,112 @@ usage() {
     echo "  -h, --help      Show this help"
     echo ""
     echo "Without options, shows unacknowledged messages for the current instance."
+}
+
+# Format a message from JSON data for display
+format_message_from_json() {
+    local json="$1"
+
+    local id type from to timestamp requires_ack acknowledged subject description
+    id=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
+    type=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('type',''))")
+    from=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('from',''))")
+    to=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('to',''))")
+    timestamp=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('timestamp',''))")
+    requires_ack=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('requires_ack',False))")
+    acknowledged=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('acknowledged',False))")
+    subject=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('payload',{}).get('subject',''))")
+    description=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin).get('payload',{}).get('description',''))")
+
+    # Color code by type
+    local type_color="$BLUE"
+    case "$type" in
+        CONTRACT_CHANGE_PROPOSED|CONTRACT_REVIEW_NEEDED|INTERFACE_UPDATE)
+            type_color="$YELLOW"
+            ;;
+        BLOCKING_ISSUE|REVIEW_FAILED|CONTRACT_REJECTED)
+            type_color="$RED"
+            ;;
+        READY_FOR_MERGE|CONTRACT_PUBLISHED|REVIEW_COMPLETE|CONTRACT_APPROVED)
+            type_color="$GREEN"
+            ;;
+        READY_FOR_REVIEW|CONTRACT_FEEDBACK)
+            type_color="$CYAN"
+            ;;
+    esac
+
+    # Status indicator
+    local status_icon
+    if [[ "$acknowledged" == "True" || "$acknowledged" == "true" ]]; then
+        status_icon="${GREEN}[ACK]${NC}"
+    elif [[ "$requires_ack" == "True" || "$requires_ack" == "true" ]]; then
+        status_icon="${YELLOW}[PENDING]${NC}"
+    else
+        status_icon="${CYAN}[INFO]${NC}"
+    fi
+
+    echo -e "$status_icon ${type_color}$type${NC}"
+    echo -e "  ID: ${CYAN}$id${NC}"
+    echo -e "  From: $from -> To: $to"
+    echo -e "  Time: $timestamp"
+    echo -e "  Subject: $subject"
+    echo -e "  Description: $description"
+    echo ""
+}
+
+# Check messages via Redis backend
+check_via_redis() {
+    local to_instance="$1"
+    local from_instance="$2"
+    local msg_type="$3"
+    local pending_only="$4"
+    local limit="$5"
+
+    # Convert pending_only to Python boolean
+    local py_pending="False"
+    if [[ "$pending_only" == "true" ]]; then
+        py_pending="True"
+    fi
+
+    local result
+    result=$(call_python_check "$to_instance" "$from_instance" "$msg_type" "$py_pending" "$limit")
+
+    local success
+    success=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('success',False))")
+
+    if [[ "$success" != "True" ]]; then
+        local error
+        error=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error','Unknown error'))")
+        echo "Error checking messages via Redis: $error" >&2
+        return 1
+    fi
+
+    local count
+    count=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('count',0))")
+
+    if [[ "$count" -eq 0 ]]; then
+        if [[ "$pending_only" == "true" ]]; then
+            echo "  No pending messages."
+        else
+            echo "No messages match the filter criteria."
+        fi
+        return 0
+    fi
+
+    # Iterate over messages and format them
+    local i=0
+    while [[ $i -lt $count ]]; do
+        local msg_json
+        msg_json=$(echo "$result" | python3 -c "import json,sys; msgs=json.load(sys.stdin).get('messages',[]); print(json.dumps(msgs[$i]) if $i < len(msgs) else '{}')")
+        format_message_from_json "$msg_json"
+        ((i++)) || true
+    done
+
+    echo "---"
+    echo "Displayed $count message(s) (backend: Redis)"
+    echo ""
+    echo "To acknowledge a message:"
+    echo "  ./scripts/coordination/ack-message.sh <message-id>"
 }
 
 format_message() {
@@ -157,6 +269,50 @@ main() {
     fi
     echo ""
 
+    # Detect coordination backend
+    local backend="filesystem"
+    if type check_coordination_backend &>/dev/null; then
+        backend=$(check_coordination_backend)
+    fi
+
+    # Use Redis backend if available
+    if [[ "$backend" == "redis" ]]; then
+        local to_filter=""
+        local from_filter=""
+        local type_filter=""
+        local limit_value="100"
+
+        # Set to_filter if not showing all
+        if [[ "$show_all" != "true" && -n "$current_instance" ]]; then
+            to_filter="$current_instance"
+        fi
+
+        # Apply from filter
+        if [[ -n "$filter_from" ]]; then
+            from_filter="$filter_from"
+        fi
+
+        # Apply type filter
+        if [[ -n "$filter_type" ]]; then
+            type_filter="$filter_type"
+        elif [[ "$filter_reviews" == "true" ]]; then
+            # For reviews, we'll filter client-side (Redis doesn't support OR queries)
+            type_filter=""
+        elif [[ "$filter_contracts" == "true" ]]; then
+            # For contracts, we'll filter client-side
+            type_filter=""
+        fi
+
+        if [[ "$pending_only" == "true" ]]; then
+            echo -e "${YELLOW}Messages Pending Acknowledgment:${NC}"
+            echo ""
+        fi
+
+        check_via_redis "$to_filter" "$from_filter" "$type_filter" "$pending_only" "$limit_value"
+        exit 0
+    fi
+
+    # Fallback to filesystem backend
     # Check pending acks first
     if [[ "$pending_only" == "true" ]]; then
         echo -e "${YELLOW}Messages Pending Acknowledgment:${NC}"
