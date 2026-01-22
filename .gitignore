@@ -51,3 +51,7 @@ dump.rdb
 
 # ChromaDB data (local dev)
 chroma_data/
+
+# RepoMapper AST cache (generated during tests/runtime)
+context/packs/.cache/
+context/packs/*.json
