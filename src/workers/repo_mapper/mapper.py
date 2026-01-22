@@ -71,8 +71,9 @@ class RepoMapper:
                         symbol.file_path = relative_path
                     parsed_files[relative_path] = parsed_file
                     dependency_graph.add_file(parsed_file)
-            except Exception:
-                pass
+            except (SyntaxError, IOError, OSError) as e:
+                logger.debug(f"Skipping file {file_path}: {e}")
+                continue
         token_counter = TokenCounter()
         token_estimate = sum(token_counter.count_tokens(pf.raw_content) for pf in parsed_files.values())
         self._ast_context = ASTContext(repo_path=repo_path, git_sha=git_sha, files=parsed_files, dependency_graph=dependency_graph.to_dict(), created_at=datetime.now(), token_estimate=token_estimate)
