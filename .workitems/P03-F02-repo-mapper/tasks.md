@@ -168,12 +168,12 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 **File:** `src/workers/repo_mapper/cache.py`
 **Test:** `tests/unit/test_repo_mapper_cache.py`
 
-- [ ] Create `ASTContextCache` class
-- [ ] Implement `get()` with TTL check
-- [ ] Implement `save()` to persist cache
-- [ ] Implement `invalidate()` on Git SHA change
-- [ ] Support partial invalidation for changed files
-- [ ] Write unit tests
+- [x] Create `ASTContextCache` class
+- [x] Implement `get()` with TTL check
+- [x] Implement `save()` to persist cache
+- [x] Implement `invalidate()` on Git SHA change
+- [x] Support partial invalidation for changed files
+- [x] Write unit tests
 
 **Estimate:** 1h
 
@@ -183,11 +183,11 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 
 **File:** `tests/integration/test_repo_mapper.py`
 
-- [ ] Test parsing this repository's Python files
-- [ ] Test dependency graph for real code
-- [ ] Test context pack generation for sample tasks
-- [ ] Verify token budget enforcement
-- [ ] Test cache invalidation
+- [x] Test parsing this repository's Python files
+- [x] Test dependency graph for real code
+- [x] Test context pack generation for sample tasks
+- [x] Verify token budget enforcement
+- [x] Test cache invalidation
 
 **Estimate:** 2h
 
@@ -211,10 +211,10 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 ## Progress
 
 - **Started**: 2026-01-22
-- **Tasks Complete**: 8/12
-- **Percentage**: 67%
-- **Status**: IN_PROGRESS
-- **Blockers**: T03 requires tree-sitter (deferred)
+- **Tasks Complete**: 11/12
+- **Percentage**: 92%
+- **Status**: COMPLETE (T03 deferred)
+- **Blockers**: None (T03 TypeScript parser deferred to future iteration)
 
 ## Task Summary
 
@@ -228,9 +228,9 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 | T06 | SymbolExtractor | 1.5h | [x] |
 | T07 | TokenCounter | 1h | [x] |
 | T08 | ContextBuilder | 2h | [x] |
-| T09 | RepoMapper main class | 1.5h | [ ] |
-| T10 | AST Context Caching | 1h | [ ] |
-| T11 | Integration tests | 2h | [ ] |
+| T09 | RepoMapper main class | 1.5h | [x] |
+| T10 | AST Context Caching | 1h | [x] |
+| T11 | Integration tests | 2h | [x] |
 | T12 | Exceptions and configuration | 30min | [x] |
 
 **Total Estimated Time**: 16 hours
