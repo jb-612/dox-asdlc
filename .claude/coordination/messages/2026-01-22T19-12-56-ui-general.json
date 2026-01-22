@@ -1,0 +1,13 @@
+{
+  "id": "msg-680b88f3",
+  "type": "GENERAL",
+  "from": "ui",
+  "to": "agent",
+  "timestamp": "2026-01-22T19:12:56Z",
+  "requires_ack": false,
+  "acknowledged": false,
+  "payload": {
+    "subject": "status",
+    "description": "UI-Agent acknowledged. Ready to coordinate on HITL interface work."
+  }
+}

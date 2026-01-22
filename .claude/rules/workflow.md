@@ -1,18 +1,32 @@
 # Development Workflow Rules
 
-## Rule 1: Planning Gate
+## Rule 1: Planning Gate (BLOCKING)
 
-**BEFORE any code is written for a feature:**
+**THIS RULE IS BLOCKING. DO NOT PROCEED IF NOT MET.**
 
-1. Verify the work item folder exists: `.workitems/Pnn-Fnn-{description}/`
-2. Confirm all three planning files are complete:
+BEFORE any code is written for a feature:
+
+1. Verify work item folder exists **IN GIT** (not just on disk): `.workitems/Pnn-Fnn-{description}/`
+2. All three planning files are **COMPLETE and COMMITTED**:
    - `design.md` — Technical approach, interfaces, dependencies
    - `user_stories.md` — Success criteria and acceptance tests
    - `tasks.md` — Atomic task breakdown with estimates
 3. Check that tasks are properly scoped (each task < 2 hours of work)
 4. Validate dependencies are documented and available
 
-**If planning is incomplete, STOP and complete planning first.**
+**Verification command:**
+```bash
+./scripts/check-compliance.sh Pnn-Fnn-{description}
+```
+
+**If ANY of the above is false: STOP IMMEDIATELY.**
+
+**VIOLATION OF THIS RULE INVALIDATES ALL SUBSEQUENT WORK.**
+
+Do NOT write any implementation code until:
+- Planning artifacts exist in the repository
+- Planning artifacts are committed to git
+- Compliance check passes
 
 ## Rule 2: TDD Execution
 

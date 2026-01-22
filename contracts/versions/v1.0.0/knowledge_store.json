@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "owner": "agent",
+  "consumers": ["ui", "workers"],
+  "description": "KnowledgeStore interface contract for RAG operations",
+  "definitions": {
+    "Document": {
+      "type": "object",
+      "required": ["doc_id", "content"],
+      "properties": {
+        "doc_id": {
+          "type": "string",
+          "description": "Unique document identifier"
+        },
+        "content": {
+          "type": "string",
+          "description": "Document content text"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "default": {},
+          "description": "Optional metadata key-value pairs"
+        },
+        "embedding": {
+          "type": ["array", "null"],
+          "items": {"type": "number"},
+          "description": "Optional pre-computed embedding vector"
+        }
+      }
+    },
+    "SearchResult": {
+      "type": "object",
+      "required": ["doc_id", "content", "score"],
+      "properties": {
+        "doc_id": {"type": "string"},
+        "content": {"type": "string"},
+        "score": {
+          "type": "number",
+          "description": "Relevance score (higher is more relevant)"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "HealthStatus": {
+      "type": "object",
+      "required": ["status", "backend"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["healthy", "unhealthy"]
+        },
+        "backend": {
+          "type": "string",
+          "description": "Name of the backend (e.g., chromadb)"
+        },
+        "collection_count": {"type": "integer"},
+        "document_count": {"type": "integer"}
+      }
+    }
+  },
+  "operations": {
+    "index_document": {
+      "description": "Index a document in the knowledge store. Updates if doc_id exists.",
+      "input": {"$ref": "#/definitions/Document"},
+      "output": {
+        "type": "string",
+        "description": "The doc_id of the indexed document"
+      },
+      "errors": ["IndexingError", "EmbeddingError", "BackendConnectionError"]
+    },
+    "search": {
+      "description": "Search for documents similar to the query",
+      "input": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {"type": "string"},
+          "top_k": {"type": "integer", "default": 10},
+          "filters": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          }
+        }
+      },
+      "output": {
+        "type": "array",
+        "items": {"$ref": "#/definitions/SearchResult"}
+      },
+      "errors": ["SearchError", "EmbeddingError", "BackendConnectionError"]
+    },
+    "get_by_id": {
+      "description": "Retrieve a document by its ID",
+      "input": {
+        "type": "object",
+        "required": ["doc_id"],
+        "properties": {
+          "doc_id": {"type": "string"}
+        }
+      },
+      "output": {
+        "oneOf": [
+          {"$ref": "#/definitions/Document"},
+          {"type": "null"}
+        ]
+      },
+      "errors": ["BackendConnectionError"]
+    },
+    "delete": {
+      "description": "Delete a document from the knowledge store",
+      "input": {
+        "type": "object",
+        "required": ["doc_id"],
+        "properties": {
+          "doc_id": {"type": "string"}
+        }
+      },
+      "output": {
+        "type": "boolean",
+        "description": "True if deleted, False if not found"
+      },
+      "errors": ["BackendConnectionError"]
+    },
+    "health_check": {
+      "description": "Check the health of the knowledge store backend",
+      "input": {},
+      "output": {"$ref": "#/definitions/HealthStatus"},
+      "errors": ["BackendConnectionError"]
+    }
+  }
+}

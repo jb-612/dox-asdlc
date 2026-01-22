@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "owner": "agent",
+  "consumers": ["ui"],
+  "description": "HITL Web UI API contract for human-in-the-loop governance",
+  "basePath": "/api",
+  "definitions": {
+    "GateStatus": {
+      "type": "string",
+      "enum": ["pending", "approved", "rejected", "expired"]
+    },
+    "GateType": {
+      "type": "string",
+      "enum": [
+        "prd_review",
+        "design_review",
+        "code_review",
+        "test_review",
+        "deployment_approval"
+      ]
+    },
+    "GateRequest": {
+      "type": "object",
+      "required": ["id", "type", "session_id", "status", "created_at"],
+      "properties": {
+        "id": {"type": "string"},
+        "type": {"$ref": "#/definitions/GateType"},
+        "session_id": {"type": "string"},
+        "task_id": {"type": ["string", "null"]},
+        "status": {"$ref": "#/definitions/GateStatus"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": ["string", "null"], "format": "date-time"},
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/Artifact"}
+        },
+        "summary": {"type": "string"},
+        "context": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "Artifact": {
+      "type": "object",
+      "required": ["path", "type"],
+      "properties": {
+        "path": {"type": "string"},
+        "type": {"type": "string", "enum": ["file", "diff", "log", "report"]},
+        "size_bytes": {"type": "integer"},
+        "preview": {"type": ["string", "null"]}
+      }
+    },
+    "GateDecision": {
+      "type": "object",
+      "required": ["gate_id", "decision", "decided_by"],
+      "properties": {
+        "gate_id": {"type": "string"},
+        "decision": {"type": "string", "enum": ["approve", "reject"]},
+        "decided_by": {"type": "string"},
+        "reason": {"type": ["string", "null"]},
+        "feedback": {"type": ["string", "null"]}
+      }
+    },
+    "AgentStatus": {
+      "type": "object",
+      "required": ["agent_id", "status"],
+      "properties": {
+        "agent_id": {"type": "string"},
+        "agent_type": {"type": "string"},
+        "status": {"type": "string", "enum": ["idle", "running", "error", "stopped"]},
+        "current_task": {"type": ["string", "null"]},
+        "session_id": {"type": ["string", "null"]},
+        "started_at": {"type": ["string", "null"], "format": "date-time"},
+        "last_heartbeat": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "WorkerPoolStatus": {
+      "type": "object",
+      "required": ["total", "active", "idle", "workers"],
+      "properties": {
+        "total": {"type": "integer"},
+        "active": {"type": "integer"},
+        "idle": {"type": "integer"},
+        "workers": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/AgentStatus"}
+        }
+      }
+    },
+    "SessionSummary": {
+      "type": "object",
+      "required": ["session_id", "status", "created_at"],
+      "properties": {
+        "session_id": {"type": "string"},
+        "tenant_id": {"type": ["string", "null"]},
+        "status": {"type": "string", "enum": ["active", "completed", "failed", "cancelled"]},
+        "epic_id": {"type": ["string", "null"]},
+        "created_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": ["string", "null"], "format": "date-time"},
+        "pending_gates": {"type": "integer"},
+        "completed_tasks": {"type": "integer"},
+        "total_tasks": {"type": "integer"}
+      }
+    }
+  },
+  "endpoints": {
+    "GET /gates/pending": {
+      "description": "List all pending gate requests requiring human review",
+      "queryParams": {
+        "session_id": {"type": "string", "required": false},
+        "type": {"$ref": "#/definitions/GateType", "required": false},
+        "limit": {"type": "integer", "default": 50}
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "gates": {
+            "type": "array",
+            "items": {"$ref": "#/definitions/GateRequest"}
+          },
+          "total": {"type": "integer"}
+        }
+      }
+    },
+    "GET /gates/{gate_id}": {
+      "description": "Get details for a specific gate request",
+      "pathParams": {
+        "gate_id": {"type": "string", "required": true}
+      },
+      "response": {"$ref": "#/definitions/GateRequest"}
+    },
+    "POST /gates/{gate_id}/decide": {
+      "description": "Submit a decision for a gate request",
+      "pathParams": {
+        "gate_id": {"type": "string", "required": true}
+      },
+      "requestBody": {"$ref": "#/definitions/GateDecision"},
+      "response": {
+        "type": "object",
+        "properties": {
+          "success": {"type": "boolean"},
+          "event_id": {"type": "string"}
+        }
+      }
+    },
+    "GET /workers/status": {
+      "description": "Get current status of the worker pool",
+      "response": {"$ref": "#/definitions/WorkerPoolStatus"}
+    },
+    "GET /sessions": {
+      "description": "List active and recent sessions",
+      "queryParams": {
+        "status": {"type": "string", "enum": ["active", "completed", "all"], "default": "active"},
+        "tenant_id": {"type": "string", "required": false},
+        "limit": {"type": "integer", "default": 20}
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {"$ref": "#/definitions/SessionSummary"}
+          }
+        }
+      }
+    },
+    "GET /sessions/{session_id}": {
+      "description": "Get details for a specific session",
+      "pathParams": {
+        "session_id": {"type": "string", "required": true}
+      },
+      "response": {"$ref": "#/definitions/SessionSummary"}
+    },
+    "GET /artifacts/{path}": {
+      "description": "Retrieve artifact content by path",
+      "pathParams": {
+        "path": {"type": "string", "required": true}
+      },
+      "response": {
+        "type": "object",
+        "properties": {
+          "content": {"type": "string"},
+          "content_type": {"type": "string"},
+          "size_bytes": {"type": "integer"}
+        }
+      }
+    }
+  }
+}

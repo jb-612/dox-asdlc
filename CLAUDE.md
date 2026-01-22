@@ -27,7 +27,17 @@ This project follows a **Spec Driven Development** workflow. No coding begins un
 │   ├── settings.json            # Claude Code settings
 │   ├── rules/                   # Development rules
 │   ├── skills/                  # Custom skills
-│   └── subagents/               # Subagent definitions
+│   ├── subagents/               # Subagent definitions
+│   └── coordination/            # Parallel CLI coordination
+│       ├── status.json          # Instance status
+│       ├── messages/            # Coordination messages
+│       ├── pending-acks/        # Awaiting acknowledgment
+│       └── locks/               # Soft file locks
+├── contracts/                   # API contracts
+│   ├── current/                 # Active contracts (symlinks)
+│   ├── versions/                # Version snapshots
+│   ├── proposed/                # Pending changes
+│   └── CHANGELOG.md
 ├── .workitems/                  # Feature planning folders
 │   └── Pnn-Fnn-{description}/   # Per-feature planning
 │       ├── design.md            # Technical design
@@ -133,6 +143,41 @@ kubectl get services -n dox-asdlc
 ./scripts/k8s/teardown.sh
 ```
 
+## Compliance Verification
+
+**CRITICAL: Run before ANY coding session**
+
+Compliance failures are **BLOCKING**. Do not write code until resolved.
+
+```bash
+# Check SDD compliance for a feature
+./scripts/check-compliance.sh P03-F01-agent-worker-pool
+
+# Check session start requirements (parallel work)
+./scripts/check-compliance.sh --session-start
+
+# Full pre-commit check
+./scripts/check-compliance.sh --pre-commit P03-F01-agent-worker-pool
+```
+
+### What the Compliance Check Verifies
+
+**Feature check (`./scripts/check-compliance.sh FEATURE_ID`):**
+- Work item folder exists: `.workitems/FEATURE_ID/`
+- `design.md`, `user_stories.md`, `tasks.md` exist and are non-empty
+- Planning artifacts are committed to git (not just on disk)
+
+**Session start check (`--session-start`):**
+- `CLAUDE_INSTANCE_ID` environment variable is set
+- Current branch matches instance's branch prefix
+- No pending coordination messages require acknowledgment
+
+**Pre-commit check (`--pre-commit FEATURE_ID`):**
+- All feature checks pass
+- All tests pass (`./tools/test.sh`)
+- Linter passes (`./tools/lint.sh`)
+- `tasks.md` shows 100% progress
+
 ## Phase Overview
 
 ### Phase 1: Infrastructure Foundation
@@ -193,3 +238,111 @@ When resuming work, check:
 - Feature Requirements: `docs/Main_Features.md`
 - User Stories: `docs/User_Stories.md`
 - Blueprint BRD: `docs/BRD_HTML_Diagram.md`
+
+## Parallel Claude CLI Coordination
+
+This project supports multiple Claude CLI instances working simultaneously on different features.
+
+### Instance Setup
+
+Before starting a Claude CLI session for parallel work:
+
+```bash
+# For HITL Web UI development (P05-F01)
+source scripts/cli-identity.sh ui
+
+# For Agent Workers development (P03)
+source scripts/cli-identity.sh agent
+
+# Check coordination status
+source scripts/cli-identity.sh status
+
+# Deactivate when done
+source scripts/cli-identity.sh deactivate
+```
+
+### Branch Strategy
+
+```
+main                              # Protected - human merge only
+├── ui/P05-F01-hitl-ui            # UI-CLI feature branch
+├── agent/P03-F01-worker-pool     # Agent-CLI feature branch
+└── contracts/vX.Y                # Shared contract updates
+```
+
+**Branch Rules:**
+- UI-CLI commits only to `ui/*` branches
+- Agent-CLI commits only to `agent/*` branches
+- Neither commits directly to `main`
+- `contracts/*` branches require coordination message first
+
+### File Ownership Boundaries
+
+| Instance | Owns (Read/Write) | Can Read | Cannot Touch |
+|----------|-------------------|----------|--------------|
+| UI-CLI | `src/hitl_ui/`, `docker/hitl-ui/` | `contracts/`, `src/core/` | `src/workers/`, `src/orchestrator/` |
+| Agent-CLI | `src/workers/`, `src/orchestrator/` | `contracts/`, `src/core/` | `src/hitl_ui/` |
+
+**Shared (both read, coordinate writes):**
+- `contracts/`
+- `src/core/interfaces.py`
+- `src/core/events.py`
+
+### Contract Management
+
+Contracts define the interfaces between components:
+
+```
+contracts/
+├── current/                 # Active contracts (symlinks)
+│   ├── events.json          # Event schemas
+│   ├── hitl_api.json        # HITL API endpoints
+│   └── knowledge_store.json # RAG interface
+├── versions/v1.0.0/         # Version snapshots
+├── proposed/                # Pending changes
+└── CHANGELOG.md
+```
+
+**Contract Change Protocol:**
+1. Proposer creates change in `contracts/proposed/`
+2. Proposer writes coordination message in `.claude/coordination/messages/`
+3. Consumer acknowledges or requests discussion
+4. After ACK: move to `contracts/versions/vX.Y.Z/`, update `current/` symlinks
+5. Update `contracts/CHANGELOG.md`
+
+### Coordination Protocol
+
+Instances communicate via files in `.claude/coordination/`:
+
+```
+.claude/coordination/
+├── status.json              # Instance status (active, branch, task)
+├── messages/                # Timestamped coordination messages
+├── pending-acks/            # Messages awaiting acknowledgment
+└── locks/                   # Soft file locks for shared resources
+```
+
+**Coordination Scripts:**
+```bash
+# Publish a coordination message
+./scripts/coordination/publish-message.sh CONTRACT_CHANGE_PROPOSED hitl_api "Added endpoint"
+
+# Check for messages requiring attention
+./scripts/coordination/check-messages.sh
+
+# Acknowledge a message
+./scripts/coordination/ack-message.sh <message-id>
+```
+
+### Merge Strategy
+
+Human-in-the-loop merge order:
+1. Merge `contracts/*` changes first
+2. Merge `agent/*` branch (provides backend)
+3. Merge `ui/*` branch (consumes backend)
+4. Run integration tests: `./tools/e2e.sh`
+
+Use the merge helper for guidance:
+```bash
+./scripts/merge-helper.sh ui/P05-F01-hitl-ui agent/P03-F01-worker-pool
+```

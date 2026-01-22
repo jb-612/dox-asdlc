@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "owner": "agent",
+  "consumers": ["ui", "orchestrator"],
+  "description": "Event schemas for aSDLC Redis Streams coordination",
+  "definitions": {
+    "EventType": {
+      "type": "string",
+      "enum": [
+        "session_started",
+        "session_completed",
+        "task_created",
+        "task_dispatched",
+        "task_completed",
+        "task_failed",
+        "gate_requested",
+        "gate_approved",
+        "gate_rejected",
+        "gate_expired",
+        "agent_started",
+        "agent_completed",
+        "agent_error",
+        "patch_created",
+        "patch_applied",
+        "patch_rejected"
+      ],
+      "description": "All event types in the aSDLC workflow"
+    },
+    "ASDLCEvent": {
+      "type": "object",
+      "required": ["event_type", "session_id", "timestamp"],
+      "properties": {
+        "event_id": {
+          "type": ["string", "null"],
+          "description": "Assigned by Redis stream"
+        },
+        "event_type": {
+          "$ref": "#/definitions/EventType"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Session identifier, required and non-empty"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp with timezone"
+        },
+        "epic_id": {
+          "type": ["string", "null"]
+        },
+        "task_id": {
+          "type": ["string", "null"]
+        },
+        "git_sha": {
+          "type": ["string", "null"]
+        },
+        "artifact_paths": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": []
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["normal", "rlm"],
+          "default": "normal"
+        },
+        "tenant_id": {
+          "type": ["string", "null"]
+        },
+        "idempotency_key": {
+          "type": ["string", "null"],
+          "description": "32-char hex key for deduplication"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "default": {}
+        }
+      }
+    },
+    "HandlerResult": {
+      "type": "object",
+      "required": ["success"],
+      "properties": {
+        "success": {"type": "boolean"},
+        "should_retry": {"type": "boolean", "default": false},
+        "error_message": {"type": ["string", "null"]},
+        "artifact_paths": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": []
+        }
+      }
+    }
+  }
+}

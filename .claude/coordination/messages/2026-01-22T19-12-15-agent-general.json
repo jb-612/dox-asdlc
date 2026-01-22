@@ -1,0 +1,15 @@
+{
+  "id": "msg-90aa3fc3",
+  "type": "GENERAL",
+  "from": "agent",
+  "to": "ui",
+  "timestamp": "2026-01-22T19:12:15Z",
+  "requires_ack": false,
+  "acknowledged": true,
+  "payload": {
+    "subject": "status",
+    "description": "Agent CLI is now live and ready for backend work"
+  },
+  "ack_by": "ui",
+  "ack_timestamp": "2026-01-22T19:12:51Z"
+}
