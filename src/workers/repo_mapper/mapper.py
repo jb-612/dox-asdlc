@@ -1,99 +1,334 @@
-"""Main Repo Mapper class for context pack generation."""
+"""RepoMapper - Main interface for context pack generation.
 
-from __future__ import annotations
+The RepoMapper orchestrates all components to generate context packs for agent tasks.
+"""
 
-import json
 import logging
 import subprocess
-from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from src.core.exceptions import RepoMapperError
-from src.workers.repo_mapper.config import RepoMapperConfig
+from src.core.models import AgentRole, ContextPack, FileContent
+from src.workers.repo_mapper.cache import ASTContextCache
+from src.workers.repo_mapper.config import get_repo_mapper_config
 from src.workers.repo_mapper.context_builder import ContextBuilder
 from src.workers.repo_mapper.dependency_graph import DependencyGraph
-from src.workers.repo_mapper.models import ASTContext, ContextPack, FileContent
-from src.workers.repo_mapper.parsers import ParserRegistry, get_parser_for_file
+from src.workers.repo_mapper.models import ASTContext
+from src.workers.repo_mapper.parsers import ParserRegistry
+from src.workers.repo_mapper.symbol_extractor import SymbolExtractor
 from src.workers.repo_mapper.token_counter import TokenCounter
 
 logger = logging.getLogger(__name__)
 
 
 class RepoMapper:
-    """Main class for generating context packs from repository structure."""
+    """Generates context packs for agent tasks.
 
-    DEFAULT_EXCLUDE_PATTERNS = ["*.pyc", "__pycache__/*", ".git/*", "node_modules/*", ".venv/*", "venv/*", "*.egg-info/*", ".pytest_cache/*"]
-    DEFAULT_MAX_FILE_SIZE_KB = 1024
+    Attributes:
+        repo_path: Path to the repository root
+        cache_dir: Directory for caching AST contexts
+        config: RepoMapper configuration
+        cache: AST context cache instance
+        token_counter: Token counting utility
+        symbol_extractor: Symbol extraction utility
+    """
 
-    def __init__(self, repo_path: str, config: RepoMapperConfig | None = None, exclude_patterns: list[str] | None = None, max_file_size_kb: int | None = None) -> None:
-        self.repo_path = repo_path
-        self.config = config or RepoMapperConfig.from_env()
-        self.exclude_patterns = exclude_patterns or self.DEFAULT_EXCLUDE_PATTERNS
-        self.max_file_size_kb = max_file_size_kb or self.DEFAULT_MAX_FILE_SIZE_KB
-        self._parser_registry = ParserRegistry.default()
-        self._ast_context: ASTContext | None = None
+    def __init__(
+        self,
+        repo_path: str,
+        cache_dir: Optional[str] = None,
+    ):
+        """Initialize RepoMapper.
 
-    async def generate_context_pack(self, task_id: str, task_description: str, target_files: list[str], role: str, token_budget: int = 100_000) -> ContextPack:
-        """Generate a context pack for the given task."""
-        if self._ast_context is None:
-            self._ast_context = await self.refresh_ast_context(self.repo_path)
-        context_builder = ContextBuilder.with_defaults()
-        for parsed_file in self._ast_context.files.values():
-            context_builder.add_parsed_file(parsed_file)
-        selected_files = context_builder.build_context(task_description=task_description, target_files=target_files, token_budget=token_budget, role=role)
-        relevance_scores = context_builder.get_relevance_scores(target_files=target_files, task_description=task_description)
-        files, symbols, token_counter, total_tokens = [], [], TokenCounter(), 0
-        for file_path, parsed_file in selected_files.items():
-            files.append(FileContent(path=file_path, content=parsed_file.raw_content, language=parsed_file.language))
-            symbols.extend(parsed_file.symbols)
-            total_tokens += token_counter.count_tokens(parsed_file.raw_content)
-        return ContextPack(task_id=task_id, role=role, git_sha=self._ast_context.git_sha, files=files, symbols=symbols, dependencies=[], metadata={"task_description": task_description, "target_files": target_files, "repo_path": self.repo_path, "generated_at": datetime.now().isoformat()}, token_count=total_tokens, relevance_scores={fp: relevance_scores.get(fp, 0.0) for fp in selected_files.keys()})
+        Args:
+            repo_path: Path to the repository root
+            cache_dir: Optional cache directory (defaults to config value)
+        """
+        self.repo_path = Path(repo_path).resolve()
+        self.config = get_repo_mapper_config()
 
-    async def refresh_ast_context(self, repo_path: str) -> ASTContext:
-        """Refresh the cached AST context for a repository."""
-        repo = Path(repo_path)
-        if not repo.exists():
+        if not self.repo_path.exists():
             raise RepoMapperError(f"Repository path does not exist: {repo_path}")
-        git_sha = await self._get_git_sha(repo_path)
-        parsed_files, dependency_graph = {}, DependencyGraph()
-        for file_path in repo.rglob("*"):
-            if not file_path.is_file() or file_path.suffix not in self._parser_registry.list_supported_extensions():
-                continue
-            if self._is_excluded(file_path) or file_path.stat().st_size / 1024 > self.max_file_size_kb:
-                continue
-            try:
-                parser = get_parser_for_file(file_path)
-                if parser:
-                    relative_path = str(file_path.relative_to(repo))
-                    parsed_file = parser.parse_file(str(file_path))
-                    parsed_file.path = relative_path
-                    for symbol in parsed_file.symbols:
-                        symbol.file_path = relative_path
-                    parsed_files[relative_path] = parsed_file
-                    dependency_graph.add_file(parsed_file)
-            except (SyntaxError, IOError, OSError) as e:
-                logger.debug(f"Skipping file {file_path}: {e}")
-                continue
-        token_counter = TokenCounter()
-        token_estimate = sum(token_counter.count_tokens(pf.raw_content) for pf in parsed_files.values())
-        self._ast_context = ASTContext(repo_path=repo_path, git_sha=git_sha, files=parsed_files, dependency_graph=dependency_graph.to_dict(), created_at=datetime.now(), token_estimate=token_estimate)
-        return self._ast_context
 
-    async def save_context_pack(self, context_pack: ContextPack, output_path: str) -> None:
-        """Save a context pack to a JSON file."""
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with open(output, "w") as f:
-            json.dump(context_pack.to_dict(), f, indent=2)
+        # Initialize components
+        cache_path = cache_dir or str(self.config.context_pack_dir / ".cache")
+        self.cache = ASTContextCache(
+            cache_dir=cache_path,
+            ttl_hours=self.config.ast_cache_ttl // 3600,  # Convert seconds to hours
+        )
+        self.token_counter = TokenCounter()
+        self.symbol_extractor = SymbolExtractor()
 
-    async def _get_git_sha(self, repo_path: str) -> str:
-        """Get the current Git SHA for a repository."""
+        logger.info(f"RepoMapper initialized for {self.repo_path}")
+
+    def generate_context_pack(
+        self,
+        task_description: str,
+        target_files: Optional[list[str]] = None,
+        role: AgentRole = AgentRole.CODING,
+        token_budget: int = 100_000,
+        include_dependencies: bool = True,
+        dependency_depth: int = 2,
+    ) -> ContextPack:
+        """Generate a context pack for the given task.
+
+        Args:
+            task_description: Natural language description of the task
+            target_files: Files directly relevant to the task (optional)
+            role: Agent role for role-specific context selection
+            token_budget: Maximum tokens for context pack
+            include_dependencies: Whether to include file dependencies
+            dependency_depth: Maximum depth for dependency traversal
+
+        Returns:
+            ContextPack with relevant code and symbols
+
+        Raises:
+            RepoMapperError: If context generation fails
+        """
+        logger.info(f"Generating context pack for task: {task_description[:100]}")
+
         try:
-            result = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_path, capture_output=True, text=True, check=True)
+            # Get or build AST context
+            ast_context = self._get_or_build_ast_context()
+
+            # Build dependency graph
+            dep_graph = DependencyGraph.from_dict(ast_context.dependency_graph)
+
+            # Create context builder
+            builder = ContextBuilder(
+                dependency_graph=dep_graph,
+                symbol_extractor=self.symbol_extractor,
+                token_counter=self.token_counter,
+            )
+
+            # Add all parsed files to builder
+            for parsed_file in ast_context.files.values():
+                builder.add_parsed_file(parsed_file)
+
+            # Select relevant files
+            if target_files:
+                # Convert to absolute paths
+                target_paths = [
+                    str((self.repo_path / f).resolve()) for f in target_files
+                ]
+            else:
+                target_paths = []
+
+            # Build context (returns dict[str, ParsedFile])
+            selected_files = builder.build_context(
+                target_files=target_paths,
+                task_description=task_description,
+                token_budget=token_budget,
+                role=role.value if isinstance(role, AgentRole) else role,
+            )
+
+            # Get relevance scores
+            relevance_scores = builder.get_relevance_scores(
+                target_paths, task_description
+            )
+
+            # Convert to FileContent objects
+            file_contents = []
+            for file_path, parsed_file in selected_files.items():
+                score = relevance_scores.get(file_path, 0.5)
+                file_content = FileContent(
+                    file_path=file_path,
+                    content=parsed_file.raw_content,
+                    relevance_score=score,
+                    symbols=[s.name for s in parsed_file.symbols],
+                )
+                file_contents.append(file_content)
+
+            # Calculate actual token count
+            total_tokens = sum(
+                self.token_counter.count_tokens(fc.content) for fc in file_contents
+            )
+
+            # Get current Git SHA
+            git_sha = self._get_git_sha()
+
+            # Create context pack
+            context_pack = ContextPack(
+                task_description=task_description,
+                files=file_contents,
+                role=role,
+                token_count=total_tokens,
+                token_budget=token_budget,
+                metadata={
+                    "repo_path": str(self.repo_path),
+                    "git_sha": git_sha,
+                    "generated_at": ast_context.created_at.isoformat(),
+                    "dependency_depth": dependency_depth,
+                    "include_dependencies": include_dependencies,
+                },
+            )
+
+            logger.info(
+                f"Context pack generated: {len(file_contents)} files, "
+                f"{total_tokens} tokens"
+            )
+
+            return context_pack
+
+        except Exception as e:
+            logger.error(f"Failed to generate context pack: {e}")
+            raise RepoMapperError(f"Context generation failed: {e}") from e
+
+    def refresh_ast_context(self) -> ASTContext:
+        """Refresh the cached AST context for the repository.
+
+        Called when repository content changes significantly.
+
+        Returns:
+            Newly generated ASTContext
+
+        Raises:
+            RepoMapperError: If refresh fails
+        """
+        logger.info(f"Refreshing AST context for {self.repo_path}")
+
+        try:
+            # Invalidate existing cache
+            self.cache.invalidate(str(self.repo_path))
+
+            # Build new context
+            ast_context = self._build_ast_context()
+
+            # Cache it
+            self.cache.save(ast_context)
+
+            logger.info("AST context refreshed successfully")
+            return ast_context
+
+        except Exception as e:
+            logger.error(f"Failed to refresh AST context: {e}")
+            raise RepoMapperError(f"AST context refresh failed: {e}") from e
+
+    def save_context_pack(self, context_pack: ContextPack, output_path: str) -> None:
+        """Save a context pack to a JSON file.
+
+        Args:
+            context_pack: Context pack to save
+            output_path: Path to output file
+
+        Raises:
+            RepoMapperError: If save fails
+        """
+        try:
+            import json
+
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_file, "w") as f:
+                json.dump(context_pack.to_dict(), f, indent=2, default=str)
+
+            logger.info(f"Context pack saved to {output_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save context pack: {e}")
+            raise RepoMapperError(f"Save failed: {e}") from e
+
+    def _get_or_build_ast_context(self) -> ASTContext:
+        """Get AST context from cache or build if not cached.
+
+        Returns:
+            ASTContext instance
+        """
+        # Try to get from cache
+        cached = self.cache.get(str(self.repo_path), validate_sha=False)
+
+        if cached is not None:
+            logger.debug("Using cached AST context")
+            return cached
+
+        logger.debug("Building new AST context")
+        ast_context = self._build_ast_context()
+
+        # Save to cache
+        self.cache.save(ast_context)
+
+        return ast_context
+
+    def _build_ast_context(self) -> ASTContext:
+        """Build AST context by parsing repository files.
+
+        Returns:
+            ASTContext with parsed files and dependency graph
+        """
+        from datetime import datetime
+
+        registry = ParserRegistry.default()
+        parsed_files = {}
+        dep_graph = DependencyGraph()
+
+        # Find all supported files
+        supported_extensions = set(registry.list_supported_extensions())
+
+        files_to_parse = []
+        for ext in supported_extensions:
+            files_to_parse.extend(self.repo_path.rglob(f"*{ext}"))
+
+        logger.info(f"Parsing {len(files_to_parse)} files")
+
+        # Parse each file
+        for file_path in files_to_parse:
+            parser = registry.get_parser_for_file(str(file_path))
+            if parser is None:
+                continue
+
+            try:
+                parsed = parser.parse_file(str(file_path))
+                parsed_files[str(file_path)] = parsed
+                dep_graph.add_file(parsed)
+
+            except (SyntaxError, IOError, OSError) as e:
+                logger.debug(f"Skipping {file_path}: {e}")
+                continue
+
+        # Estimate total tokens
+        token_estimate = sum(
+            self.token_counter.count_parsed_file(pf)
+            for pf in parsed_files.values()
+        )
+
+        # Get Git SHA
+        git_sha = self._get_git_sha()
+
+        # Create AST context
+        ast_context = ASTContext(
+            repo_path=str(self.repo_path),
+            git_sha=git_sha,
+            files=parsed_files,
+            dependency_graph=dep_graph.to_dict(),
+            created_at=datetime.now(),
+            token_estimate=token_estimate,
+        )
+
+        logger.info(
+            f"AST context built: {len(parsed_files)} files, "
+            f"{token_estimate} estimated tokens"
+        )
+
+        return ast_context
+
+    def _get_git_sha(self) -> str:
+        """Get the current Git SHA for the repository.
+
+        Returns:
+            Git commit SHA or 'unknown' if not a git repo
+        """
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             return result.stdout.strip()
         except subprocess.CalledProcessError:
+            logger.warning("Not a git repository or git not available")
             return "unknown"
-
-    def _is_excluded(self, file_path: Path) -> bool:
-        """Check if a file should be excluded."""
-        return any(file_path.match(pattern) for pattern in self.exclude_patterns)

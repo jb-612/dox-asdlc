@@ -48,9 +48,9 @@ class TokenCounter:
             self._cache_hits += 1
             return self._cache[cache_key]
 
-        # Count tokens
+        # Count tokens (allow special tokens in source code)
         self._cache_misses += 1
-        tokens = self._encoding.encode(text)
+        tokens = self._encoding.encode(text, disallowed_special=())
         count = len(tokens)
 
         # Cache the result
