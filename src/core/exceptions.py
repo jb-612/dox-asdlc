@@ -108,3 +108,41 @@ class HealthCheckError(ASDLCError):
 
 class DependencyHealthError(HealthCheckError):
     """Raised when a dependency health check fails."""
+
+
+# KnowledgeStore errors
+class KnowledgeStoreError(ASDLCError):
+    """Base error for knowledge store operations."""
+
+
+class DocumentNotFoundError(KnowledgeStoreError):
+    """Raised when a document is not found in the knowledge store."""
+
+
+class IndexingError(KnowledgeStoreError):
+    """Raised when document indexing fails."""
+
+
+class SearchError(KnowledgeStoreError):
+    """Raised when a search operation fails."""
+
+
+class EmbeddingError(KnowledgeStoreError):
+    """Raised when embedding generation fails."""
+
+
+class BackendConnectionError(KnowledgeStoreError):
+    """Raised when connection to the knowledge store backend fails."""
+
+
+# Multi-tenancy errors
+class TenantError(ASDLCError):
+    """Base error for tenant-related failures."""
+
+
+class TenantNotSetError(TenantError):
+    """Raised when tenant context is required but not set."""
+
+
+class TenantNotAllowedError(TenantError):
+    """Raised when the requested tenant is not in the allowlist."""
