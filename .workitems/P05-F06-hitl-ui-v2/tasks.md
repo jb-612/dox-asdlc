@@ -3,8 +3,8 @@
 ## Progress
 
 - Started: 2026-01-23
-- Tasks Complete: 1/68
-- Percentage: 1%
+- Tasks Complete: 2/68
+- Percentage: 3%
 - Status: IN_PROGRESS
 - Blockers: None
 
@@ -21,13 +21,15 @@
 - **Tests:** `npm install` succeeds, no peer dependency warnings
 - **Completed:** 2026-01-23
 
-### TASK-002: Create new Zustand stores
-- [ ] Create `sessionStore.ts` (environment, repo, epic, git state)
-- [ ] Create `studioStore.ts` (chat messages, working outline, artifacts)
-- [ ] Create `eventStore.ts` (WebSocket events, connection state)
-- [ ] Write unit tests for all store actions
+### TASK-002: Create new Zustand stores ✓
+- [x] Create `sessionStore.ts` (environment, repo, epic, git state)
+- [x] Create `studioStore.ts` (chat messages, working outline, artifacts)
+- [x] Create `eventStore.ts` (WebSocket events, connection state)
+- [x] Write unit tests for all store actions
 - **Estimate:** 1h
 - **Tests:** Store actions update state correctly
+- **Completed:** 2026-01-23
+- **Test Results:** 12 tests passed (sessionStore: 4, studioStore: 4, eventStore: 4)
 
 ### TASK-003: Implement WebSocket client utility
 - [ ] Create `utils/websocket.ts` with connection management
