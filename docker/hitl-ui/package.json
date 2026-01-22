@@ -20,11 +20,18 @@
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",
     "@tanstack/react-query": "^5.8.0",
+    "@tanstack/react-query-devtools": "^5.8.0",
     "axios": "^1.6.0",
     "zustand": "^4.4.7",
     "recharts": "^2.10.0",
     "clsx": "^2.0.0",
-    "date-fns": "^2.30.0"
+    "date-fns": "^2.30.0",
+    "prismjs": "^1.29.0",
+    "react-markdown": "^9.0.0",
+    "remark-gfm": "^4.0.0",
+    "diff": "^5.1.0",
+    "socket.io-client": "^4.6.0",
+    "react-d3-tree": "^3.6.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
@@ -43,7 +50,9 @@
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.4"
+    "eslint-plugin-react-refresh": "^0.4.4",
+    "@types/prismjs": "^1.26.0",
+    "@types/diff": "^5.0.8"
   },
   "engines": {
     "node": ">=20.0.0"

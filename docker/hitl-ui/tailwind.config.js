@@ -33,6 +33,20 @@ export default {
         'gate-code': '#22C55E',      // Green - Code Review
         'gate-test': '#06B6D4',      // Cyan - Test Review
         'gate-deploy': '#EF4444',    // Red - Deployment
+        'gate-rule': '#F97316',      // Orange - Rule Proposal (Meta-HITL)
+
+        // Additional status colors for learning/feedback
+        'learning-effective': '#10B981',     // Emerald - Rule is effective
+        'learning-ineffective': '#EF4444',   // Red - Rule is ineffective
+        'learning-pending': '#F59E0B',       // Amber - Rule pending review
+        'learning-stabilizing': '#3B82F6',   // Blue - Rule stabilizing
+
+        // Artifact type colors
+        'artifact-prd': '#3B82F6',           // Blue
+        'artifact-design': '#8B5CF6',        // Purple
+        'artifact-code': '#22C55E',          // Green
+        'artifact-test': '#06B6D4',          // Cyan
+        'artifact-report': '#F59E0B',        // Amber
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
