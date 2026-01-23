@@ -74,63 +74,84 @@ export function formatSessionId(sessionId: string): string {
 }
 
 /**
- * Format token count with K/M suffixes
+ * Format token count with K/M suffix
  */
 export function formatTokens(tokens: number): string {
-  if (tokens < 1000) return tokens.toString();
-  if (tokens < 1_000_000) return `${(tokens / 1000).toFixed(1)}K`;
-  return `${(tokens / 1_000_000).toFixed(2)}M`;
+  if (tokens >= 1000000) {
+    return `${(tokens / 1000000).toFixed(2)}M`;
+  }
+  if (tokens >= 1000) {
+    return `${(tokens / 1000).toFixed(1)}K`;
+  }
+  return tokens.toString();
 }
 
 /**
- * Format cost in USD
+ * Format cost as currency
  */
 export function formatCost(cost: number): string {
-  if (cost < 0.01) return `$${cost.toFixed(4)}`;
-  if (cost < 1) return `$${cost.toFixed(3)}`;
-  if (cost < 100) return `$${cost.toFixed(2)}`;
-  return `$${cost.toFixed(0)}`;
+  if (cost >= 100) {
+    return `$${Math.round(cost)}`;
+  }
+  if (cost >= 1) {
+    return `$${cost.toFixed(2)}`;
+  }
+  if (cost >= 0.01) {
+    return `$${cost.toFixed(3)}`;
+  }
+  return `$${cost.toFixed(4)}`;
 }
 
 /**
- * Format duration in human-readable form
+ * Format duration in ms to human readable
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3600000) {
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  if (ms < 1000) {
+    return `${ms}ms`;
   }
-  const hours = Math.floor(ms / 3600000);
-  const mins = Math.floor((ms % 3600000) / 60000);
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.round((ms % 60000) / 1000);
+  if (ms >= 3600000) {
+    const hours = Math.floor(ms / 3600000);
+    const mins = Math.floor((ms % 3600000) / 60000);
+    if (mins === 0) {
+      return `${hours}h`;
+    }
+    return `${hours}h ${mins}m`;
+  }
+  if (seconds === 0) {
+    return `${minutes}m`;
+  }
+  return `${minutes}m ${seconds}s`;
 }
 
 /**
- * Format a number with comma separators
+ * Format number with commas
  */
 export function formatNumber(num: number): string {
   return num.toLocaleString('en-US');
 }
 
 /**
- * Format a git SHA (first 7 characters)
+ * Format git SHA (first 7 chars)
  */
 export function formatGitSha(sha: string): string {
+  if (sha.length <= 7) return sha;
   return sha.slice(0, 7);
 }
 
 /**
- * Format an epic ID for display
+ * Format epic ID (uppercase)
  */
 export function formatEpicId(epicId: string): string {
   return epicId.toUpperCase();
 }
 
 /**
- * Format a run ID for display (shortened)
+ * Format run ID for display (truncate to 8 chars if long)
  */
 export function formatRunId(runId: string): string {
   if (runId.length <= 8) return runId;

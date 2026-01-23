@@ -49,7 +49,7 @@ export interface CodeBlock {
 }
 
 export function extractCodeBlocks(markdown: string): CodeBlock[] {
-  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+  const codeBlockRegex = /\`\`\`(\w*)\n([\s\S]*?)\`\`\`/g;
   const blocks: CodeBlock[] = [];
   let match;
   let lineNumber = 1;
@@ -78,9 +78,9 @@ export function extractCodeBlocks(markdown: string): CodeBlock[] {
  */
 export function countWords(markdown: string): number {
   // Remove code blocks
-  const withoutCode = markdown.replace(/```[\s\S]*?```/g, '');
+  const withoutCode = markdown.replace(/\`\`\`[\s\S]*?\`\`\`/g, '');
   // Remove inline code
-  const withoutInlineCode = withoutCode.replace(/`[^`]+`/g, '');
+  const withoutInlineCode = withoutCode.replace(/\`[^\`]+\`/g, '');
   // Remove markdown syntax
   const plainText = withoutInlineCode
     .replace(/[#*_\[\]()!]/g, '')
@@ -108,7 +108,7 @@ export function isMarkdown(content: string): boolean {
     /\*\*[^*]+\*\*/, // Bold
     /\*[^*]+\*/, // Italic
     /\[.+\]\(.+\)/, // Links
-    /```[\s\S]*?```/, // Code blocks
+    /\`\`\`[\s\S]*?\`\`\`/, // Code blocks
     /^\s*[-*+]\s/m, // Unordered lists
     /^\s*\d+\.\s/m, // Ordered lists
     /^\s*>\s/m, // Blockquotes
@@ -123,9 +123,9 @@ export function isMarkdown(content: string): boolean {
 export function stripMarkdown(markdown: string): string {
   return markdown
     // Remove code blocks
-    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\`\`\`[\s\S]*?\`\`\`/g, '')
     // Remove inline code
-    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\`([^\`]+)\`/g, '$1')
     // Remove images
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
     // Remove links but keep text
