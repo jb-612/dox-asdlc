@@ -7,13 +7,23 @@
 # instance and displays notifications as they arrive. Use Ctrl+C to exit.
 #
 # Requires:
-#   - CLAUDE_INSTANCE_ID environment variable set
+#   - Identity file at .claude/instance-identity.json (created by launcher scripts)
 #   - Redis available on REDIS_HOST:REDIS_PORT
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Read instance ID from identity file
+get_instance_id() {
+    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
+    if [[ ! -f "$identity_file" ]]; then
+        echo ""
+        return
+    fi
+    python3 -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo ""
+}
 
 # Redis configuration
 REDIS_HOST="${REDIS_HOST:-localhost}"
@@ -38,8 +48,13 @@ usage() {
     echo ""
     echo "Watches for real-time notifications on the current instance's channel."
     echo ""
-    echo "Environment variables:"
-    echo "  CLAUDE_INSTANCE_ID  - Required: your instance ID (backend, frontend, orchestrator)"
+    echo "Prerequisites:"
+    echo "  Start a Claude Code session with a launcher script:"
+    echo "    ./start-backend.sh      # For backend development"
+    echo "    ./start-frontend.sh     # For frontend development"
+    echo "    ./start-orchestrator.sh # For review/merge operations"
+    echo ""
+    echo "Environment variables (optional):"
     echo "  REDIS_HOST          - Redis host (default: localhost)"
     echo "  REDIS_PORT          - Redis port (default: 6379)"
     echo ""
@@ -92,13 +107,6 @@ PYEOF
 }
 
 main() {
-    # Check for required environment variable
-    if [[ -z "${CLAUDE_INSTANCE_ID:-}" ]]; then
-        echo "Error: CLAUDE_INSTANCE_ID not set." >&2
-        echo "Run 'source scripts/cli-identity.sh <instance>' first." >&2
-        exit 1
-    fi
-
     # Parse arguments
     case "${1:-}" in
         -h|--help)
@@ -107,10 +115,23 @@ main() {
             ;;
     esac
 
+    # Get instance ID from identity file
+    local instance_id
+    instance_id=$(get_instance_id)
+
+    if [[ -z "$instance_id" ]]; then
+        echo "Error: Identity file not found or invalid." >&2
+        echo "Start Claude Code using a launcher script first:" >&2
+        echo "  ./start-backend.sh      # For backend development" >&2
+        echo "  ./start-frontend.sh     # For frontend development" >&2
+        echo "  ./start-orchestrator.sh # For review/merge operations" >&2
+        exit 1
+    fi
+
     # Check Redis availability
     check_redis
 
-    local channel="${KEY_PREFIX}:notify:${CLAUDE_INSTANCE_ID}"
+    local channel="${KEY_PREFIX}:notify:${instance_id}"
 
     echo -e "${YELLOW}Watching for notifications on channel: $channel${NC}"
     echo "Press Ctrl+C to stop..."

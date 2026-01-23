@@ -22,6 +22,23 @@ else
 fi
 
 # =============================================================================
+# Instance Identity (read from identity file, not env vars)
+# =============================================================================
+
+# Get instance ID from the identity file (canonical source of truth)
+get_instance_id() {
+    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
+    if [[ -f "$identity_file" ]]; then
+        $PYTHON_CMD -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Cache the instance ID for the session
+COORD_INSTANCE_ID="${COORD_INSTANCE_ID:-$(get_instance_id)}"
+
+# =============================================================================
 # Redis Connectivity
 # =============================================================================
 
@@ -64,12 +81,12 @@ async def main():
         config = CoordinationConfig.from_env()
         r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
 
-        client = CoordinationClient(redis_client=r, config=config, instance_id="${CLAUDE_INSTANCE_ID:-unknown}")
+        client = CoordinationClient(redis_client=r, config=config, instance_id="${COORD_INSTANCE_ID:-unknown}")
         msg = await client.publish_message(
             msg_type=MessageType("$msg_type"),
             subject="$subject",
             description="""$description""",
-            from_instance="${CLAUDE_INSTANCE_ID:-unknown}",
+            from_instance="${COORD_INSTANCE_ID:-unknown}",
             to_instance="$to_instance",
             requires_ack=$requires_ack,
         )
@@ -122,7 +139,7 @@ async def main():
             limit=$limit,
         )
 
-        client = CoordinationClient(redis_client=r, config=config, instance_id="${CLAUDE_INSTANCE_ID:-unknown}")
+        client = CoordinationClient(redis_client=r, config=config, instance_id="${COORD_INSTANCE_ID:-unknown}")
         messages = await client.get_messages(query)
 
         print(json.dumps({
@@ -159,11 +176,11 @@ async def main():
         config = CoordinationConfig.from_env()
         r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
 
-        client = CoordinationClient(redis_client=r, config=config, instance_id="${CLAUDE_INSTANCE_ID:-unknown}")
+        client = CoordinationClient(redis_client=r, config=config, instance_id="${COORD_INSTANCE_ID:-unknown}")
         comment = """$comment""" if """$comment""" else None
         result = await client.acknowledge_message(
             message_id="$message_id",
-            ack_by="${CLAUDE_INSTANCE_ID:-unknown}",
+            ack_by="${COORD_INSTANCE_ID:-unknown}",
             comment=comment,
         )
 
@@ -171,7 +188,7 @@ async def main():
             print(json.dumps({
                 "success": True,
                 "message_id": "$message_id",
-                "acknowledged_by": "${CLAUDE_INSTANCE_ID:-unknown}",
+                "acknowledged_by": "${COORD_INSTANCE_ID:-unknown}",
             }))
         else:
             print(json.dumps({"success": False, "error": "Message not found: $message_id"}))
@@ -204,9 +221,9 @@ async def main():
         config = CoordinationConfig.from_env()
         r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
 
-        client = CoordinationClient(redis_client=r, config=config, instance_id="${CLAUDE_INSTANCE_ID:-unknown}")
+        client = CoordinationClient(redis_client=r, config=config, instance_id="${COORD_INSTANCE_ID:-unknown}")
         notifications = await client.pop_notifications(
-            instance_id="${CLAUDE_INSTANCE_ID:-unknown}",
+            instance_id="${COORD_INSTANCE_ID:-unknown}",
             limit=$limit,
         )
 
@@ -236,7 +253,7 @@ acquire_lock() {
     local port="${REDIS_PORT:-6379}"
 
     local result
-    result=$(redis-cli -h "$host" -p "$port" SET "$lock_key" "${CLAUDE_INSTANCE_ID:-unknown}" NX EX "$expire" 2>/dev/null)
+    result=$(redis-cli -h "$host" -p "$port" SET "$lock_key" "${COORD_INSTANCE_ID:-unknown}" NX EX "$expire" 2>/dev/null)
 
     if [[ "$result" == "OK" ]]; then
         redis-cli -h "$host" -p "$port" SADD "asdlc:coord:locks" "$lock_name" > /dev/null 2>&1

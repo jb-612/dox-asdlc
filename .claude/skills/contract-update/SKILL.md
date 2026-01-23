@@ -15,9 +15,9 @@ Use this skill when you need to:
 
 ## Prerequisites
 
-1. Verify your instance identity is set:
+1. Verify your session was started with a launcher script:
    ```bash
-   echo $CLAUDE_INSTANCE_ID
+   cat .claude/instance-identity.json | python3 -c "import json,sys; print(json.load(sys.stdin).get('instance_id', 'NOT SET'))"
    ```
 
 2. Confirm you are the owner or have coordinated with the owner of the contract you're modifying.

@@ -4,8 +4,7 @@ UserPromptSubmit hook for CLI Agent Identity Enforcement.
 
 This hook runs before each user prompt is processed to:
 1. Verify an identity file exists (launcher was used)
-2. Verify the current branch matches the expected prefix
-3. BLOCK the prompt if either check fails
+2. BLOCK the prompt if no identity is found
 
 Blocking mechanism:
   - Output JSON: {"decision": "block", "reason": "..."}
@@ -16,8 +15,6 @@ Exit codes:
 """
 
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -29,20 +26,6 @@ def get_project_root() -> Path:
         if (path / ".claude").is_dir():
             return path
     return cwd
-
-
-def get_current_branch() -> str:
-    """Get the current git branch name."""
-    try:
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        return result.stdout.strip()
-    except Exception:
-        return ""
 
 
 def block(reason: str):
@@ -61,7 +44,7 @@ def main():
     project_root = get_project_root()
     identity_file = project_root / ".claude" / "instance-identity.json"
 
-    # Check 1: Identity file must exist
+    # Check: Identity file must exist
     if not identity_file.exists():
         block(
             "NO LAUNCHER USED\n\n"
@@ -72,37 +55,14 @@ def main():
             "Please exit and restart using the appropriate launcher."
         )
 
-    # Load identity configuration
+    # Load identity configuration (validate file is readable)
     try:
         with open(identity_file) as f:
             identity = json.load(f)
     except (json.JSONDecodeError, IOError) as e:
         block(f"IDENTITY FILE CORRUPT\n\nCould not read identity file: {e}\n\nRestart using a launcher script.")
 
-    instance_id = identity.get("instance_id", "unknown")
-    branch_prefix = identity.get("branch_prefix", "")
-
-    # Check 2: Branch must match expected prefix (for non-orchestrator)
-    if branch_prefix:
-        current_branch = get_current_branch()
-
-        if not current_branch:
-            # Detached HEAD or git error - allow but warn
-            allow()
-
-        if not current_branch.startswith(branch_prefix):
-            block(
-                f"WRONG BRANCH\n\n"
-                f"Instance: {instance_id}\n"
-                f"Expected branch prefix: {branch_prefix}\n"
-                f"Current branch: {current_branch}\n\n"
-                f"Switch to the correct branch before continuing:\n"
-                f"  git checkout -b {branch_prefix}<feature-name>\n"
-                f"  git checkout {branch_prefix}<existing-branch>\n\n"
-                f"Or restart with a different launcher if this is the wrong role."
-            )
-
-    # All checks passed
+    # Identity file exists and is valid - allow prompt
     allow()
 
 

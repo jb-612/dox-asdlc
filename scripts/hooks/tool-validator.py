@@ -4,7 +4,7 @@ PreToolUse hook for CLI Agent Identity Enforcement.
 
 This hook runs before Edit, Write, and Bash (git) operations to:
 1. Verify the operation doesn't touch forbidden paths
-2. Verify git operations respect branch restrictions
+2. Block git merge/push to main for non-orchestrator instances
 3. BLOCK operations that violate the identity rules
 
 Receives tool call information via stdin as JSON:
@@ -23,12 +23,10 @@ Exit codes:
 """
 
 import json
-import os
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def get_project_root() -> Path:
@@ -103,19 +101,6 @@ def is_path_forbidden(path: str, forbidden_paths: list) -> bool:
     return False
 
 
-def is_git_commit_command(command: str) -> bool:
-    """Check if a bash command is a git commit."""
-    # Look for git commit patterns
-    patterns = [
-        r'\bgit\s+commit\b',
-        r'\bgit\s+.*\bcommit\b',
-    ]
-    for pattern in patterns:
-        if re.search(pattern, command):
-            return True
-    return False
-
-
 def is_git_push_command(command: str) -> bool:
     """Check if a bash command is a git push."""
     return bool(re.search(r'\bgit\s+push\b', command))
@@ -143,7 +128,6 @@ def main():
         allow()
 
     instance_id = identity.get("instance_id", "unknown")
-    branch_prefix = identity.get("branch_prefix", "")
     forbidden_paths = identity.get("forbidden_paths", [])
     can_merge = identity.get("can_merge", False)
 
@@ -184,16 +168,6 @@ def main():
 
         current_branch = get_current_branch()
 
-        # Check git commit on wrong branch
-        if is_git_commit_command(command):
-            if branch_prefix and current_branch and not current_branch.startswith(branch_prefix):
-                block(
-                    f"BRANCH VIOLATION - GIT COMMIT BLOCKED\n"
-                    f"Instance '{instance_id}' can only commit to {branch_prefix}* branches.\n"
-                    f"Current branch: {current_branch}\n"
-                    f"Switch to a correct branch first."
-                )
-
         # Check git merge (only orchestrator can merge to main)
         if is_git_merge_command(command):
             if not can_merge and current_branch == "main":
@@ -204,9 +178,8 @@ def main():
                     f"Submit a READY_FOR_REVIEW message instead."
                 )
 
-        # Check git push to main
+        # Check git push to main (only orchestrator can push to main)
         if is_git_push_command(command):
-            # Check if pushing to main
             if "main" in command or "master" in command:
                 if not can_merge:
                     block(
@@ -214,15 +187,6 @@ def main():
                         f"Instance '{instance_id}' cannot push to main.\n"
                         f"Only the orchestrator can push to main."
                     )
-
-            # Check if on wrong branch
-            if branch_prefix and current_branch and not current_branch.startswith(branch_prefix):
-                block(
-                    f"PUSH BLOCKED - WRONG BRANCH\n"
-                    f"Instance '{instance_id}' is on branch '{current_branch}'.\n"
-                    f"Expected branch prefix: {branch_prefix}\n"
-                    f"Switch to the correct branch first."
-                )
 
         allow()
 

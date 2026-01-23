@@ -5,7 +5,6 @@ SessionStart hook for CLI Agent Identity Enforcement.
 This hook runs at the start of each Claude Code session to:
 1. Check for the presence of an identity file
 2. Inject context about the current role into the session
-3. Warn if the current branch doesn't match the expected prefix
 
 The identity file is created by the launcher scripts (start-backend.sh, etc.)
 and persists across bash sessions within the Claude Code process.
@@ -16,7 +15,6 @@ Exit codes:
 """
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -82,20 +80,11 @@ def main():
         sys.exit(0)
 
     instance_id = identity.get("instance_id", "unknown")
-    branch_prefix = identity.get("branch_prefix", "")
     can_merge = identity.get("can_merge", False)
     can_modify_meta = identity.get("can_modify_meta", False)
 
     # Get current branch
     current_branch = get_current_branch()
-
-    # Check branch compliance
-    branch_ok = True
-    if branch_prefix and current_branch:
-        branch_ok = current_branch.startswith(branch_prefix)
-    elif instance_id == "orchestrator":
-        # Orchestrator can work on any branch, but main is expected
-        branch_ok = True
 
     # Print session context
     print("=" * 50)
@@ -105,12 +94,10 @@ def main():
 
     if instance_id == "backend":
         print("Role: Backend Developer")
-        print("Branch prefix: agent/")
         print("Allowed: src/workers/, src/orchestrator/, src/infrastructure/")
         print("Forbidden: src/hitl_ui/, CLAUDE.md, docs/, contracts/")
     elif instance_id == "frontend":
         print("Role: Frontend Developer")
-        print("Branch prefix: ui/")
         print("Allowed: src/hitl_ui/, .workitems/P05-*")
         print("Forbidden: src/workers/, CLAUDE.md, docs/, contracts/")
     elif instance_id == "orchestrator":
@@ -121,18 +108,6 @@ def main():
 
     print("")
     print(f"Current branch: {current_branch or '(detached HEAD)'}")
-
-    if not branch_ok:
-        print("")
-        print("!" * 50)
-        print("  BRANCH MISMATCH WARNING")
-        print("!" * 50)
-        print(f"Expected branch prefix: {branch_prefix}")
-        print(f"Current branch: {current_branch}")
-        print("")
-        print("Switch to a correct branch before making changes:")
-        print(f"  git checkout -b {branch_prefix}<feature-name>")
-        print("!" * 50)
 
     print("")
     print("=" * 50)

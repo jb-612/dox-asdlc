@@ -147,14 +147,16 @@ kubectl get services -n dox-asdlc
 
 ### CLI Coordination (Multi-Agent)
 ```bash
-# Initialize CLI identity (required at session start)
-source scripts/cli-identity.sh <orchestrator|backend|frontend>
+# Start session with launcher (required - creates identity file)
+./start-backend.sh      # For backend development
+./start-frontend.sh     # For frontend development
+./start-orchestrator.sh # For review/merge operations
 
 # Check for pending messages
 ./scripts/coordination/check-messages.sh --pending
 
 # Request review (feature CLIs)
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<branch>" "<description>" --to orchestrator
+./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<feature-id>" "<description>" --to orchestrator
 
 # Acknowledge message
 ./scripts/coordination/ack-message.sh <message-id>

@@ -32,7 +32,7 @@ usage() {
     echo "Usage: $0 <branch-name> [--dry-run]"
     echo ""
     echo "Arguments:"
-    echo "  branch-name    The feature branch to review (e.g., agent/P03-F01-context-pack)"
+    echo "  branch-name    The feature branch to review (any branch name)"
     echo ""
     echo "Options:"
     echo "  --dry-run      Run checks without modifying anything"
@@ -59,14 +59,28 @@ log_warn() {
 
 # Check orchestrator identity
 check_identity() {
-    if [[ "${CLAUDE_INSTANCE_ID:-}" != "orchestrator" ]]; then
-        echo -e "${RED}Error: This script must be run by the orchestrator CLI.${NC}"
-        echo "Run: source scripts/cli-identity.sh orchestrator"
+    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
+
+    if [[ ! -f "$identity_file" ]]; then
+        echo -e "${RED}Error: Identity file not found. Use ./start-orchestrator.sh${NC}"
         exit 2
     fi
 
-    if [[ "${CLAUDE_CAN_MERGE:-}" != "true" ]]; then
-        echo -e "${RED}Error: CLAUDE_CAN_MERGE is not set to true.${NC}"
+    local instance_id
+    instance_id=$(python3 -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo "")
+
+    if [[ "$instance_id" != "orchestrator" ]]; then
+        echo -e "${RED}Error: This script must be run by the orchestrator CLI.${NC}"
+        echo "Current identity: $instance_id"
+        echo "Use: ./start-orchestrator.sh"
+        exit 2
+    fi
+
+    local can_merge
+    can_merge=$(python3 -c "import json; print(json.load(open('$identity_file')).get('can_merge', False))" 2>/dev/null || echo "false")
+
+    if [[ "$can_merge" != "True" ]]; then
+        echo -e "${RED}Error: Orchestrator identity does not have merge permission.${NC}"
         exit 2
     fi
 }
@@ -74,8 +88,12 @@ check_identity() {
 # Extract feature ID from branch name
 extract_feature_id() {
     local branch="$1"
-    # Pattern: agent/P03-F01-description or ui/P05-F01-description
-    echo "$branch" | sed -E 's#^(agent|ui)/##' | sed -E 's/-[a-z].*$//' | tr '[:lower:]' '[:upper:]'
+    # Pattern: P03-F01 or similar at start of branch name (with optional prefix)
+    # Remove any prefix (agent/, ui/, feature/, etc)
+    local cleaned
+    cleaned=$(echo "$branch" | sed -E 's#^[a-z]+/##')
+    # Extract P##-F## pattern
+    echo "$cleaned" | grep -oE 'P[0-9]+-F[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]'
 }
 
 main() {
@@ -168,7 +186,7 @@ EOF
     feature_id=$(extract_feature_id "$branch")
     echo "  Feature ID: $feature_id"
 
-    if [[ -d "$PROJECT_ROOT/.workitems/$feature_id"* ]]; then
+    if [[ -n "$feature_id" && -d "$PROJECT_ROOT/.workitems/$feature_id"* ]]; then
         log_pass "Work item folder exists"
         echo "- [x] Work item folder exists" >> "$report_file"
 
@@ -200,6 +218,10 @@ EOF
                 warnings+=("Progress not at 100%: ${progress}%")
             fi
         fi
+    elif [[ -z "$feature_id" ]]; then
+        log_warn "Could not extract feature ID from branch name"
+        echo "- [ ] Work item folder - **COULD NOT DETERMINE**" >> "$report_file"
+        warnings+=("Could not extract feature ID from branch name")
     else
         log_fail "Work item folder not found for: $feature_id"
         echo "- [ ] Work item folder exists - **NOT FOUND**" >> "$report_file"

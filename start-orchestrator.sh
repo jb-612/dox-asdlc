@@ -6,10 +6,11 @@ set -euo pipefail
 # Usage: ./start-orchestrator.sh
 #
 # This script:
-# 1. Sets orchestrator identity environment variables
-# 2. Ensures we're on main branch
-# 3. Runs compliance check
-# 4. Launches Claude Code
+# 1. Creates orchestrator identity file (full access)
+# 2. Sets git author for commit attribution
+# 3. Suggests working on main branch
+# 4. Runs compliance check
+# 5. Launches Claude Code
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -23,30 +24,42 @@ NC='\033[0m'
 
 echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║     Starting as ORCHESTRATOR           ║${NC}"
-echo -e "${CYAN}║     (Master Agent - main branch)       ║${NC}"
+echo -e "${CYAN}║     (Master Agent)                     ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# Set identity
-export CLAUDE_INSTANCE_ID="orchestrator"
-export CLAUDE_BRANCH_PREFIX=""
-export CLAUDE_CAN_MERGE="true"
-export CLAUDE_CAN_MODIFY_META="true"
+# Set git author for commit attribution
+git config user.name "Claude Orchestrator"
+git config user.email "claude-orchestrator@asdlc.local"
+echo -e "${GREEN}✓${NC} Git author: Claude Orchestrator <claude-orchestrator@asdlc.local>"
 
-echo -e "${GREEN}✓${NC} Identity: $CLAUDE_INSTANCE_ID"
-echo -e "${GREEN}✓${NC} Can merge to main: $CLAUDE_CAN_MERGE"
-echo -e "${GREEN}✓${NC} Can modify meta files: $CLAUDE_CAN_MODIFY_META"
+# Create identity file for hooks
+mkdir -p .claude
+cat > .claude/instance-identity.json << 'EOF'
+{
+  "instance_id": "orchestrator",
+  "allowed_paths": [],
+  "forbidden_paths": [],
+  "can_merge": true,
+  "can_modify_meta": true,
+  "launcher": "start-orchestrator.sh"
+}
+EOF
+echo -e "${GREEN}✓${NC} Identity file created: .claude/instance-identity.json"
+echo -e "${GREEN}✓${NC} Can merge to main: true"
+echo -e "${GREEN}✓${NC} Can modify meta files: true"
 echo ""
 
-# Check current branch
-CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
+# Check current branch - suggest main but don't require it
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "(detached HEAD)")
 if [[ "$CURRENT_BRANCH" != "main" ]]; then
     echo -e "${YELLOW}⚠${NC}  Current branch: $CURRENT_BRANCH"
-    echo -e "${YELLOW}   Orchestrator should work on main branch${NC}"
+    echo -e "${YELLOW}   Orchestrator typically works on main branch${NC}"
     read -p "Switch to main? [Y/n] " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         git checkout main
+        CURRENT_BRANCH="main"
         echo -e "${GREEN}✓${NC} Switched to main"
     fi
 else
@@ -73,6 +86,14 @@ fi
 echo ""
 
 echo -e "${GREEN}Ready to start Claude Code as Orchestrator${NC}"
+echo ""
+echo "Exclusive ownership:"
+echo "  - CLAUDE.md, docs/, contracts/, .claude/rules/"
+echo ""
+echo "Responsibilities:"
+echo "  - Review and merge feature work"
+echo "  - Maintain project documentation"
+echo "  - Coordinate contract changes"
 echo ""
 echo "Launch with:  claude"
 echo ""

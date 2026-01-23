@@ -9,7 +9,6 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 ```
 ┌─────────────────┐     ┌─────────────────┐
 │  Backend-CLI    │     │  Frontend-CLI   │
-│  (agent/)       │     │  (ui/)          │
 │                 │     │                 │
 │  - Workers      │     │  - HITL UI      │
 │  - Orchestrator │     │  - Components   │
@@ -21,7 +20,6 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
                      ▼
          ┌─────────────────────┐
          │  Orchestrator-CLI   │
-         │  (main)             │
          │                     │
          │  - Code Review      │
          │  - E2E Tests        │
@@ -32,11 +30,11 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 
 ### Instance Roles
 
-| Instance | ID | Branch Prefix | Primary Responsibility |
-|----------|-----|---------------|------------------------|
-| Backend-CLI | `backend` | `agent/` | Workers, orchestrator, infrastructure |
-| Frontend-CLI | `frontend` | `ui/` | HITL Web UI, frontend components |
-| Orchestrator-CLI | `orchestrator` | (none) | Review, E2E tests, merge to main |
+| Instance | ID | Primary Responsibility |
+|----------|-----|------------------------|
+| Backend-CLI | `backend` | Workers, orchestrator, infrastructure |
+| Frontend-CLI | `frontend` | HITL Web UI, frontend components |
+| Orchestrator-CLI | `orchestrator` | Review, E2E tests, merge to main |
 
 ---
 
@@ -56,9 +54,9 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 ```
 
 **Why launchers are required:**
-- They create `.claude/instance-identity.json` with role-specific permissions
-- They set git user.name/email for commit attribution
-- Claude Code hooks read this file to enforce branch and path restrictions
+- They create `.claude/instance-identity.json` with role-specific path permissions
+- They set git user.name/email for commit attribution (audit trail)
+- Claude Code hooks read this file to enforce path restrictions
 - Environment variables don't persist across Claude bash sessions, but the identity file does
 
 **If you start Claude without a launcher:**
@@ -67,8 +65,8 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 - Exit and restart using the correct launcher
 
 **The launcher script automatically:**
-- Verifies you are on the correct branch (warns if not)
-- Displays your role permissions
+- Sets git author for commit attribution
+- Displays your role permissions and path restrictions
 - Configures identity for all enforcement layers
 
 ---
@@ -118,55 +116,34 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 ```
 
 The identity file at `.claude/instance-identity.json` determines:
-- Which files you can modify
-- Which branches you can commit to
+- Which files you can modify (path restrictions)
 - Whether you can merge to main
 
 **Enforcement layers:**
-1. `SessionStart` hook - displays role and warns on branch mismatch
-2. `UserPromptSubmit` hook - **BLOCKS** if no identity or wrong branch
-3. `PreToolUse` hook - **BLOCKS** forbidden file edits and git operations
-4. `pre-commit` hook - **BLOCKS** commits to wrong branches
+1. `SessionStart` hook - displays role and permissions
+2. `UserPromptSubmit` hook - **BLOCKS** if no identity file
+3. `PreToolUse` hook - **BLOCKS** forbidden file edits and merge/push to main
+4. `pre-commit` hook - **WARNS** on git author mismatch
 
-## Rule 2: Branch Discipline
+## Rule 2: File Boundaries (Path-Based Access Control)
 
-**Each instance commits ONLY to its designated branch prefix:**
-
-| Instance | Branch Prefix | Example |
-|----------|--------------|---------|
-| Backend-CLI | `agent/` | `agent/P03-F01-worker-pool` |
-| Frontend-CLI | `ui/` | `ui/P05-F01-hitl-ui` |
-| Orchestrator-CLI | (none) | Works directly on `main` |
-
-**Feature CLIs (Backend, Frontend) NEVER commit directly to:**
-- `main` branch (only Orchestrator can)
-- Another instance's branch prefix
-- `contracts/*` without coordination
-
-**Before committing, verify:**
-```bash
-git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
-```
-
-## Rule 3: File Boundaries
-
-**Backend-CLI (CLAUDE_INSTANCE_ID=backend):**
+**Backend-CLI (instance_id=backend):**
 - CAN modify: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `docker/workers/`, `docker/orchestrator/`
 - CAN modify: `.workitems/P01-*`, `.workitems/P02-*`, `.workitems/P03-*`, `.workitems/P06-*` (planning & tasks)
 - CAN read: `contracts/`, `src/core/`, `docs/`
-- CANNOT touch: `src/hitl_ui/`, `docker/hitl-ui/`, `main` branch, meta files
+- CANNOT touch: `src/hitl_ui/`, `docker/hitl-ui/`, meta files
 
-**Frontend-CLI (CLAUDE_INSTANCE_ID=frontend):**
+**Frontend-CLI (instance_id=frontend):**
 - CAN modify: `src/hitl_ui/`, `docker/hitl-ui/`, `tests/unit/hitl_ui/`
 - CAN modify: `.workitems/P05-*` (planning & tasks)
 - CAN read: `contracts/`, `src/core/`, `docs/`
-- CANNOT touch: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `main` branch, meta files
+- CANNOT touch: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, meta files
 
-**Orchestrator-CLI (CLAUDE_INSTANCE_ID=orchestrator) — Master Agent:**
+**Orchestrator-CLI (instance_id=orchestrator) — Master Agent:**
 - EXCLUSIVE ownership of meta files (see below)
 - CAN read: All files (for review purposes)
-- CAN modify: `main` branch (via merge)
-- CAN manage: All project configuration and documentation
+- CAN modify: Any file (no path restrictions)
+- CAN merge to main: **Yes** (only instance with this permission)
 - Primary role: Review, merge, and maintain project integrity
 
 **Meta Files (Orchestrator EXCLUSIVE ownership):**
@@ -182,7 +159,7 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
 
 **Note:** `.workitems/` is NOT in the exclusive list — feature CLIs manage their own planning artifacts.
 
-**Feature CLIs CANNOT modify other meta files directly.** To request changes:
+**Feature CLIs CANNOT modify meta files directly.** To request changes:
 ```bash
 ./scripts/coordination/publish-message.sh META_CHANGE_REQUEST "<file>" "<description>" --to orchestrator
 ```
@@ -190,6 +167,22 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
 **Shared source files (require coordination):**
 - `src/core/interfaces.py` — Coordinate via messages
 - `src/core/events.py` — Coordinate via messages
+
+## Rule 3: Merge and Push Restrictions
+
+**Only the Orchestrator can:**
+- Merge branches to main
+- Push to main
+
+**Feature CLIs (Backend, Frontend):**
+- Can commit to any branch
+- Can push to any branch except main
+- Must request review for merging to main
+
+**This ensures:**
+- All changes to main go through orchestrator review
+- Audit trail via git author identity
+- Quality gates (tests, linting) are enforced
 
 ## Rule 4: Feature Development Workflow
 
@@ -202,11 +195,10 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
    ./start-frontend.sh  # For frontend development
    ```
 
-2. **Work on Feature Branch (inside Claude Code):**
+2. **Develop Feature:**
    ```bash
-   git checkout -b agent/P03-F01-feature-name  # Backend: agent/*
-   # OR
-   git checkout -b ui/P05-F01-feature-name     # Frontend: ui/*
+   # Work on any branch (branch choice is informational, not enforced)
+   git checkout -b P03-F01-feature-name
 
    # Develop feature with TDD
    # Run local tests: ./tools/test.sh
@@ -215,8 +207,8 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
 
 3. **Request Review:**
    ```bash
-   # When feature complete
-   ./scripts/coordination/publish-message.sh READY_FOR_REVIEW "agent/P03-F01-feature-name" "Feature complete" --to orchestrator
+   # When feature complete, include the commit hash or branch name
+   ./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P03-F01-feature-name" "Feature complete" --to orchestrator
    ```
 
 4. **Wait for Response:**
@@ -273,7 +265,7 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
 
 | Type | Direction | Purpose |
 |------|-----------|---------|
-| `READY_FOR_REVIEW` | Feature → Orchestrator | Request branch review and merge |
+| `READY_FOR_REVIEW` | Feature → Orchestrator | Request code review and merge |
 | `REVIEW_COMPLETE` | Orchestrator → Feature | Review passed, merged to main |
 | `REVIEW_FAILED` | Orchestrator → Feature | Review failed, lists issues |
 | `CONTRACT_CHANGE_PROPOSED` | Feature → Orchestrator | Propose contract change |
@@ -294,10 +286,6 @@ git branch --show-current | grep "^${CLAUDE_BRANCH_PREFIX}"
 - Encountering a blocking issue
 - Ending your session
 
-**Status file location:** `.claude/coordination/status.json`
-
-The status is automatically updated by `cli-identity.sh` when activating/deactivating.
-
 ## Rule 8: Review Process (Feature CLIs)
 
 **Before requesting review, ensure:**
@@ -306,11 +294,10 @@ The status is automatically updated by `cli-identity.sh` when activating/deactiv
 2. Linter passes: `./tools/lint.sh`
 3. Planning artifacts complete: `tasks.md` shows 100%
 4. No unresolved coordination messages
-5. Branch is up to date with main
 
 **Request review:**
 ```bash
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<branch>" "Feature complete" --to orchestrator
+./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<feature-id>" "Feature complete" --to orchestrator
 ```
 
 **After receiving REVIEW_FAILED:**
@@ -336,25 +323,11 @@ def mock_pending_gates() -> list[GateRequest]:
 
 When Backend-CLI delivers real implementation, mocks are swapped seamlessly.
 
-## Rule 10: Conflict Prevention
-
-**If you need to modify a shared file:**
-
-1. Check `.claude/coordination/locks/` for existing lock
-2. Create lock file: `echo "$CLAUDE_INSTANCE_ID" > .claude/coordination/locks/<filename>.lock`
-3. Publish message notifying other instances
-4. Make changes
-5. Commit
-6. Remove lock file
-7. Publish unlock message
-
-**If a lock exists, wait or coordinate with the locking instance.**
-
-## Rule 11: Session End Protocol
+## Rule 10: Session End Protocol
 
 **Before ending your session:**
 
-1. Commit all completed work to your branch
+1. Commit all completed work
 2. Update task progress in `.workitems/`
 3. Check for any unanswered coordination messages
 4. Leave clear notes in `tasks.md` for resumption
@@ -371,10 +344,10 @@ When Backend-CLI delivers real implementation, mocks are swapped seamlessly.
 ./start-backend.sh
 
 # Inside Claude Code session:
-git checkout -b agent/P03-F01-feature-name
+git checkout -b P03-F01-feature-name
 # ... develop feature ...
 ./tools/test.sh && ./tools/lint.sh
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "agent/P03-F01" "Complete"
+./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P03-F01-feature-name" "Complete" --to orchestrator
 # Wait for REVIEW_COMPLETE or REVIEW_FAILED
 ```
 
@@ -384,10 +357,10 @@ git checkout -b agent/P03-F01-feature-name
 ./start-frontend.sh
 
 # Inside Claude Code session:
-git checkout -b ui/P05-F01-feature-name
+git checkout -b P05-F01-feature-name
 # ... develop feature ...
 ./tools/test.sh && ./tools/lint.sh
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "ui/P05-F01" "Complete"
+./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P05-F01-feature-name" "Complete" --to orchestrator
 # Wait for REVIEW_COMPLETE or REVIEW_FAILED
 ```
 
@@ -397,11 +370,11 @@ git checkout -b ui/P05-F01-feature-name
 ./start-orchestrator.sh
 
 # Inside Claude Code session:
-./scripts/coordination/check-messages.sh --reviews
-./scripts/orchestrator/review-branch.sh agent/P03-F01
+./scripts/coordination/check-messages.sh --pending
+./scripts/orchestrator/review-branch.sh P03-F01-feature-name
 # If review passes:
-./scripts/orchestrator/merge-branch.sh agent/P03-F01
-./scripts/coordination/publish-message.sh REVIEW_COMPLETE "agent/P03-F01" "Merged as abc123" --to backend
+./scripts/orchestrator/merge-branch.sh P03-F01-feature-name
+./scripts/coordination/publish-message.sh REVIEW_COMPLETE "P03-F01" "Merged as abc123" --to backend
 ```
 
 ---
@@ -410,9 +383,9 @@ git checkout -b ui/P05-F01-feature-name
 
 | Layer | Hook/Script | What It Does | Blocking? |
 |-------|-------------|--------------|-----------|
-| 1 | `SessionStart` | Displays role, warns on branch mismatch | No (warning only) |
-| 2 | `UserPromptSubmit` | Checks identity file and branch | **Yes** |
-| 3 | `PreToolUse` | Checks path permissions and git ops | **Yes** |
-| 4 | `pre-commit` | Final branch validation before commit | **Yes** |
+| 1 | `SessionStart` | Displays role and permissions | No (informational) |
+| 2 | `UserPromptSubmit` | Checks identity file exists | **Yes** |
+| 3 | `PreToolUse` | Checks path permissions, blocks merge/push to main | **Yes** |
+| 4 | `pre-commit` | Warns on git author mismatch | No (warning only) |
 
 See `.claude/coordination/README.md` for detailed troubleshooting.

@@ -97,9 +97,9 @@ main() {
         exit 1
     fi
 
-    # Get sender instance
-    local sender="${CLAUDE_INSTANCE_ID:-unknown}"
-    [[ "$sender" == "unknown" ]] && echo "Warning: CLAUDE_INSTANCE_ID not set"
+    # Get sender instance from identity file (via common.sh)
+    local sender="${COORD_INSTANCE_ID:-unknown}"
+    [[ "$sender" == "unknown" ]] && echo "Warning: Identity file not found at .claude/instance-identity.json"
 
     # Determine target if not specified
     if [[ -z "$target" ]]; then

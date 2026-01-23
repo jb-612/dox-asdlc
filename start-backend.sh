@@ -3,11 +3,11 @@ set -euo pipefail
 
 # Start Claude Code as Backend-CLI
 #
-# Usage: ./start-backend.sh [feature-branch]
+# Usage: ./start-backend.sh
 #
 # This script:
-# 1. Sets backend identity environment variables
-# 2. Ensures we're on an agent/* branch
+# 1. Creates backend identity file with path restrictions
+# 2. Sets git author for commit attribution
 # 3. Runs compliance check
 # 4. Launches Claude Code
 
@@ -21,59 +21,63 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-FEATURE_BRANCH="${1:-}"
-
 echo -e "${CYAN}╔════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║     Starting as BACKEND-CLI            ║${NC}"
-echo -e "${CYAN}║     (agent/* branches)                 ║${NC}"
 echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
 echo ""
 
-# Set identity
-export CLAUDE_INSTANCE_ID="backend"
-export CLAUDE_BRANCH_PREFIX="agent/"
-export CLAUDE_CAN_MERGE="false"
-export CLAUDE_CAN_MODIFY_META="false"
+# Set git author for commit attribution
+git config user.name "Claude Backend"
+git config user.email "claude-backend@asdlc.local"
+echo -e "${GREEN}✓${NC} Git author: Claude Backend <claude-backend@asdlc.local>"
 
-echo -e "${GREEN}✓${NC} Identity: $CLAUDE_INSTANCE_ID"
-echo -e "${GREEN}✓${NC} Branch prefix: $CLAUDE_BRANCH_PREFIX"
-echo -e "${GREEN}✓${NC} Can merge to main: $CLAUDE_CAN_MERGE"
+# Create identity file for hooks
+mkdir -p .claude
+cat > .claude/instance-identity.json << 'EOF'
+{
+  "instance_id": "backend",
+  "allowed_paths": [
+    "src/workers/",
+    "src/orchestrator/",
+    "src/infrastructure/",
+    "src/core/",
+    "docker/workers/",
+    "docker/orchestrator/",
+    "docker/infrastructure/",
+    "tests/unit/workers/",
+    "tests/unit/orchestrator/",
+    "tests/unit/infrastructure/",
+    "tests/integration/",
+    "tools/",
+    "scripts/",
+    ".workitems/P01-",
+    ".workitems/P02-",
+    ".workitems/P03-",
+    ".workitems/P06-"
+  ],
+  "forbidden_paths": [
+    "src/hitl_ui/",
+    "docker/hitl-ui/",
+    "tests/unit/hitl_ui/",
+    "CLAUDE.md",
+    "README.md",
+    "docs/",
+    "contracts/",
+    ".claude/rules/",
+    ".claude/skills/",
+    ".workitems/P05-"
+  ],
+  "can_merge": false,
+  "can_modify_meta": false,
+  "launcher": "start-backend.sh"
+}
+EOF
+echo -e "${GREEN}✓${NC} Identity file created: .claude/instance-identity.json"
 echo ""
 
-# Check current branch
-CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
-
-if [[ -n "$FEATURE_BRANCH" ]]; then
-    # User specified a branch
-    if [[ "$FEATURE_BRANCH" != agent/* ]]; then
-        FEATURE_BRANCH="agent/$FEATURE_BRANCH"
-    fi
-    echo "Switching to branch: $FEATURE_BRANCH"
-    if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
-        git checkout "$FEATURE_BRANCH"
-    else
-        echo -e "${YELLOW}Branch doesn't exist. Create it?${NC}"
-        read -p "Create $FEATURE_BRANCH from main? [Y/n] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            git checkout -b "$FEATURE_BRANCH" main
-            echo -e "${GREEN}✓${NC} Created and switched to $FEATURE_BRANCH"
-        fi
-    fi
-elif [[ "$CURRENT_BRANCH" != agent/* ]]; then
-    echo -e "${RED}✗${NC} Current branch '$CURRENT_BRANCH' doesn't match agent/* prefix"
-    echo ""
-    echo "Available agent branches:"
-    git branch --list 'agent/*' 2>/dev/null | head -10 || echo "  (none)"
-    echo ""
-    echo "Options:"
-    echo "  1. Specify branch: ./start-backend.sh agent/P03-F01-feature"
-    echo "  2. Create new:     ./start-backend.sh P03-F01-new-feature"
-    echo ""
-    exit 1
-else
-    echo -e "${GREEN}✓${NC} On branch: $CURRENT_BRANCH"
-fi
+# Show current branch info (informational only)
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "(detached HEAD)")
+echo -e "Current branch: ${CYAN}$CURRENT_BRANCH${NC}"
 echo ""
 
 # Run compliance check
@@ -96,8 +100,12 @@ echo ""
 
 echo -e "${GREEN}Ready to start Claude Code as Backend-CLI${NC}"
 echo ""
-echo "Scope: src/workers/, src/orchestrator/, src/infrastructure/"
-echo "       .workitems/P01-*, P02-*, P03-*, P06-*"
+echo "Allowed paths:"
+echo "  - src/workers/, src/orchestrator/, src/infrastructure/"
+echo "  - .workitems/P01-*, P02-*, P03-*, P06-*"
+echo ""
+echo "Forbidden paths:"
+echo "  - src/hitl_ui/, CLAUDE.md, docs/, contracts/"
 echo ""
 echo "Launch with:  claude"
 echo ""

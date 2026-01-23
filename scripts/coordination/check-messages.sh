@@ -144,11 +144,12 @@ main() {
         esac
     done
 
-    local current_instance="${CLAUDE_INSTANCE_ID:-}"
+    # Get instance from identity file (via common.sh)
+    local current_instance="${COORD_INSTANCE_ID:-}"
 
     echo ""
     echo "=== Coordination Messages ==="
-    [[ -n "$current_instance" ]] && echo "Instance: $current_instance" || echo "Note: CLAUDE_INSTANCE_ID not set"
+    [[ -n "$current_instance" ]] && echo "Instance: $current_instance" || echo "Note: Identity file not found"
     echo ""
 
     # Check Redis availability

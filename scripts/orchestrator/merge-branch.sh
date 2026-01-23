@@ -33,7 +33,7 @@ usage() {
     echo "Usage: $0 <branch-name> [--no-push]"
     echo ""
     echo "Arguments:"
-    echo "  branch-name    The feature branch to merge (e.g., agent/P03-F01-context-pack)"
+    echo "  branch-name    The feature branch to merge (any branch name)"
     echo ""
     echo "Options:"
     echo "  --no-push      Skip pushing to remote after merge"
@@ -58,14 +58,28 @@ log_fail() {
 
 # Check orchestrator identity
 check_identity() {
-    if [[ "${CLAUDE_INSTANCE_ID:-}" != "orchestrator" ]]; then
-        echo -e "${RED}Error: This script must be run by the orchestrator CLI.${NC}"
-        echo "Run: source scripts/cli-identity.sh orchestrator"
+    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
+
+    if [[ ! -f "$identity_file" ]]; then
+        echo -e "${RED}Error: Identity file not found. Use ./start-orchestrator.sh${NC}"
         return 1
     fi
 
-    if [[ "${CLAUDE_CAN_MERGE:-}" != "true" ]]; then
-        echo -e "${RED}Error: CLAUDE_CAN_MERGE is not set to true.${NC}"
+    local instance_id
+    instance_id=$(python3 -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo "")
+
+    if [[ "$instance_id" != "orchestrator" ]]; then
+        echo -e "${RED}Error: This script must be run by the orchestrator CLI.${NC}"
+        echo "Current identity: $instance_id"
+        echo "Use: ./start-orchestrator.sh"
+        return 1
+    fi
+
+    local can_merge
+    can_merge=$(python3 -c "import json; print(json.load(open('$identity_file')).get('can_merge', False))" 2>/dev/null || echo "false")
+
+    if [[ "$can_merge" != "True" ]]; then
+        echo -e "${RED}Error: Orchestrator identity does not have merge permission.${NC}"
         return 1
     fi
 
@@ -93,18 +107,6 @@ find_review() {
     fi
 
     return 1
-}
-
-# Determine which CLI submitted this branch
-get_source_cli() {
-    local branch="$1"
-    if [[ "$branch" == agent/* ]]; then
-        echo "backend"
-    elif [[ "$branch" == ui/* ]]; then
-        echo "frontend"
-    else
-        echo "unknown"
-    fi
 }
 
 main() {
@@ -162,10 +164,10 @@ main() {
     # Step 2: Check for passing review
     log_step "Checking for passing review"
 
+    local review_file=""
     if [[ "$force_merge" == "true" ]]; then
         echo -e "  ${YELLOW}[WARN]${NC} Skipping review check (--force used)"
     else
-        local review_file
         if review_file=$(find_review "$branch"); then
             log_pass "Found passing review: $(basename "$review_file")"
         else
@@ -295,9 +297,6 @@ Review: $(basename "${review_file:-manual-merge}")"
     fi
 
     # Step 9: Send success notification
-    local source_cli
-    source_cli=$(get_source_cli "$branch")
-
     echo ""
     echo -e "${GREEN}=============================================="
     echo "  MERGE SUCCESSFUL"
@@ -308,7 +307,7 @@ Review: $(basename "${review_file:-manual-merge}")"
     echo "Commit: $merge_commit"
     echo ""
     echo "Notify the feature CLI:"
-    echo "  ./scripts/coordination/publish-message.sh REVIEW_COMPLETE \"$branch\" \"Merged as ${merge_commit:0:7}\" --to $source_cli"
+    echo "  ./scripts/coordination/publish-message.sh REVIEW_COMPLETE \"$branch\" \"Merged as ${merge_commit:0:7}\""
 
     exit 0
 }

@@ -52,11 +52,11 @@ kubectl get pods -n dox-asdlc
 
 This project uses three specialized Claude CLI instances working in parallel:
 
-| Agent | Branch Prefix | Responsibility |
-|-------|---------------|----------------|
-| Orchestrator | `main` | Reviews, merges, meta files, docs |
-| Backend | `agent/` | Workers, orchestrator, infrastructure |
-| Frontend | `ui/` | HITL Web UI, frontend components |
+| Agent | Path Access | Responsibility |
+|-------|-------------|----------------|
+| Orchestrator | All paths, exclusive meta files | Reviews, merges, meta files, docs |
+| Backend | `src/workers/`, `src/orchestrator/`, `src/infrastructure/` | Workers, orchestrator, infrastructure |
+| Frontend | `src/hitl_ui/`, `docker/hitl-ui/` | HITL Web UI, frontend components |
 
 Coordination happens via Redis messaging. See `.claude/rules/parallel-coordination.md`.
 
@@ -106,8 +106,10 @@ dox-asdlc/
 ## CLI Coordination
 
 ```bash
-# Initialize session identity
-source scripts/cli-identity.sh <orchestrator|backend|frontend>
+# Start session with a launcher script (creates identity file)
+./start-backend.sh      # For backend development
+./start-frontend.sh     # For frontend development
+./start-orchestrator.sh # For review/merge operations
 
 # Check coordination messages
 ./scripts/coordination/check-messages.sh
