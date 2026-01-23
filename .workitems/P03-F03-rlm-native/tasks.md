@@ -108,31 +108,33 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ### T06: Implement REPLToolSurface - LLM Query
 
 **File:** `src/workers/rlm/tools/llm_query.py`
-**Test:** `tests/unit/test_rlm_llm_query.py`
+**Test:** `tests/unit/rlm/test_llm_query.py`
 
-- [ ] Implement `llm_query()` invoking Haiku model
-- [ ] Enforce token limit per query
-- [ ] Integrate with SubCallBudgetManager
-- [ ] Integrate with SubCallCache
-- [ ] Handle API errors
-- [ ] Write unit tests with mocked Anthropic client
+- [x] Implement `llm_query()` invoking Haiku model
+- [x] Enforce token limit per query
+- [x] Integrate with SubCallBudgetManager
+- [x] Integrate with SubCallCache
+- [x] Handle API errors
+- [x] Write unit tests with mocked Anthropic client (36 tests)
 
 **Estimate:** 1.5h
+**Status:** COMPLETE
 
 ---
 
 ### T07: Implement REPLToolSurface Registry
 
-**File:** `src/workers/rlm/tools/__init__.py`
-**Test:** `tests/unit/test_repl_tool_surface.py`
+**File:** `src/workers/rlm/tools/registry.py`
+**Test:** `tests/unit/rlm/test_repl_tool_surface.py`
 
-- [ ] Create `REPLToolSurface` class aggregating all tools
-- [ ] Implement tool dispatch by name
-- [ ] Enforce tool allowlist
-- [ ] Log all tool invocations
-- [ ] Write unit tests
+- [x] Create `REPLToolSurface` class aggregating all tools
+- [x] Implement tool dispatch by name
+- [x] Enforce tool allowlist
+- [x] Log all tool invocations
+- [x] Write unit tests (35 tests)
 
 **Estimate:** 30min
+**Status:** COMPLETE
 
 ---
 
@@ -256,11 +258,11 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ## Progress
 
 - **Started**: 2026-01-23
-- **Tasks Complete**: 6/14
-- **Percentage**: 43%
+- **Tasks Complete**: 8/14
+- **Percentage**: 57%
 - **Status**: IN_PROGRESS
 - **Blockers**: None (P03-F01 and P03-F02 complete)
-- **Tests Passing**: 172 tests
+- **Tests Passing**: 243 tests (208 + 35 new)
 
 ## Task Summary
 
@@ -271,8 +273,8 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 | T03 | SubCallCache | 1h | [x] |
 | T04 | File operation tools | 1.5h | [x] |
 | T05 | Symbol operation tools | 1h | [x] |
-| T06 | LLM query tool | 1.5h | [ ] |
-| T07 | REPLToolSurface registry | 30min | [ ] |
+| T06 | LLM query tool | 1.5h | [x] |
+| T07 | REPLToolSurface registry | 30min | [x] |
 | T08 | RLMAgent | 2h | [ ] |
 | T09 | RLMOrchestrator | 2h | [ ] |
 | T10 | Audit trail generation | 1h | [ ] |

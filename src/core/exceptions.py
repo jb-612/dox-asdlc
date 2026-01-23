@@ -180,3 +180,60 @@ class AcknowledgeError(CoordinationError):
 
 class PresenceError(CoordinationError):
     """Raised when presence operations fail."""
+
+
+# RLM (Recursive LLM) errors
+class RLMError(ASDLCError):
+    """Base error for RLM operations."""
+
+
+class BudgetExceededError(RLMError):
+    """Raised when RLM sub-call budget is exhausted.
+
+    Attributes:
+        budget_limit: Maximum sub-calls allowed
+        subcalls_used: Number of sub-calls already made
+    """
+
+    def __init__(
+        self,
+        message: str = "Sub-call budget exceeded",
+        budget_limit: int = 0,
+        subcalls_used: int = 0,
+    ) -> None:
+        super().__init__(
+            message,
+            details={"budget_limit": budget_limit, "subcalls_used": subcalls_used},
+        )
+        self.budget_limit = budget_limit
+        self.subcalls_used = subcalls_used
+
+
+class RLMTimeoutError(RLMError):
+    """Raised when RLM exploration exceeds time limit.
+
+    Attributes:
+        timeout_seconds: Configured timeout value
+        elapsed_seconds: Actual elapsed time
+    """
+
+    def __init__(
+        self,
+        message: str = "RLM exploration timeout",
+        timeout_seconds: float = 0,
+        elapsed_seconds: float = 0,
+    ) -> None:
+        super().__init__(
+            message,
+            details={"timeout_seconds": timeout_seconds, "elapsed_seconds": elapsed_seconds},
+        )
+        self.timeout_seconds = timeout_seconds
+        self.elapsed_seconds = elapsed_seconds
+
+
+class RLMToolError(RLMError):
+    """Raised when an RLM tool execution fails."""
+
+
+class RLMCacheError(RLMError):
+    """Raised when RLM cache operations fail."""
