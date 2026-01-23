@@ -3,8 +3,8 @@
 ## Progress
 
 - Started: 2026-01-23
-- Tasks Complete: 6/68
-- Percentage: 9%
+- Tasks Complete: 7/68
+- Percentage: 10%
 - Status: IN_PROGRESS
 - Blockers: None
 
@@ -105,13 +105,19 @@
 - **Estimate:** 1.5h
 - **Tests:** Mock responses match contract schemas
 
-### TASK-008: Update routing in App.tsx
-- [ ] Add routes for new pages (/docs, /cockpit, /studio/*, /artifacts)
-- [ ] Implement lazy loading for route components
-- [ ] Add 404 page
-- [ ] Test route navigation
+### TASK-008: Update routing in App.tsx ✓
+- [x] Add routes for new pages (/docs, /cockpit, /studio/*, /artifacts)
+- [x] Implement lazy loading for route components
+- [x] Add 404 page
+- [x] Test route navigation
 - **Estimate:** 45min
 - **Tests:** All routes load, lazy loading works
+- **Completed:** 2026-01-23
+- **Implementation Notes:**
+  - Created placeholder pages: DocsPage, CockpitPage, RunDetailPage, StudioDiscoveryPage, ArtifactsPage, ArtifactDetailPage, NotFoundPage
+  - Implemented lazy loading with React.lazy() and Suspense
+  - Dashboard loaded eagerly for fast initial render
+  - Added PageLoader component for loading states
 
 ---
 
