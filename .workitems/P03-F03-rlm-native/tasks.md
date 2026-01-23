@@ -196,17 +196,19 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ### T11: Implement RLM Trigger Detection
 
 **File:** `src/workers/rlm/trigger.py`
-**Test:** `tests/unit/test_rlm_trigger.py`
+**Test:** `tests/unit/rlm/test_rlm_trigger.py`
 
-- [ ] Create `RLMTriggerDetector` class
-- [ ] Check context size > 100K tokens
-- [ ] Check multi-file dependency requirement
-- [ ] Check fail_count > 4 for Debugger
-- [ ] Check explicit RLM mode request
-- [ ] Return trigger reason
-- [ ] Write unit tests
+- [x] Create `RLMTriggerDetector` class
+- [x] Check context size > configurable threshold
+- [x] Check multi-file dependency requirement
+- [x] Check fail_count > threshold for Debugger
+- [x] Check explicit RLM mode request
+- [x] Check complex query keywords
+- [x] Return trigger reason with confidence
+- [x] Write unit tests (30 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
@@ -261,11 +263,11 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ## Progress
 
 - **Started**: 2026-01-23
-- **Tasks Complete**: 11/14
-- **Percentage**: 79%
+- **Tasks Complete**: 12/14
+- **Percentage**: 86%
 - **Status**: IN_PROGRESS
 - **Blockers**: None (P03-F01 and P03-F02 complete)
-- **Tests Passing**: 319 tests (293 + 26 new)
+- **Tests Passing**: 349 tests (319 + 30 new)
 
 ## Task Summary
 
@@ -281,6 +283,7 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 | T08 | RLMAgent | 2h | [x] |
 | T09 | RLMOrchestrator | 2h | [x] |
 | T10 | Audit trail generation | 1h | [x] |
+| T11 | Trigger detection | 1h | [x] |
 | T08 | RLMAgent | 2h | [ ] |
 | T09 | RLMOrchestrator | 2h | [ ] |
 | T10 | Audit trail generation | 1h | [ ] |
