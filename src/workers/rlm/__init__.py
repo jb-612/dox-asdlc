@@ -7,6 +7,7 @@ using a sub-call budget and REPL-style tool surface.
 from __future__ import annotations
 
 from src.workers.rlm.agent import AgentIteration, RLMAgent
+from src.workers.rlm.audit import AuditEntry, RLMAuditor
 from src.workers.rlm.budget_manager import BudgetSnapshot, SubCallBudgetManager
 from src.workers.rlm.cache import CacheEntry, CacheStats, SubCallCache
 from src.workers.rlm.config import RLMConfig
@@ -26,6 +27,9 @@ __all__ = [
     # Agent
     "AgentIteration",
     "RLMAgent",
+    # Audit
+    "AuditEntry",
+    "RLMAuditor",
     # Budget
     "BudgetSnapshot",
     "SubCallBudgetManager",

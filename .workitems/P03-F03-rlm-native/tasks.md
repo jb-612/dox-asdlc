@@ -178,17 +178,18 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ### T10: Implement Audit Trail Generation
 
 **File:** `src/workers/rlm/audit.py`
-**Test:** `tests/unit/test_rlm_audit.py`
+**Test:** `tests/unit/rlm/test_rlm_audit.py`
 
-- [ ] Create `RLMAuditor` class
-- [ ] Implement `save_trajectory()` to telemetry/rlm/
-- [ ] Include full exploration steps
-- [ ] Include usage metrics
-- [ ] Include citations
-- [ ] Implement `load_trajectory()` for replay
-- [ ] Write unit tests
+- [x] Create `RLMAuditor` class
+- [x] Implement `save_trajectory()` to configurable audit_dir
+- [x] Include full exploration steps with save_result()
+- [x] Include usage metrics (via RLMResult)
+- [x] Include citations (via RLMResult)
+- [x] Implement `load_trajectory()` for replay
+- [x] Write unit tests (26 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
@@ -260,11 +261,11 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ## Progress
 
 - **Started**: 2026-01-23
-- **Tasks Complete**: 10/14
-- **Percentage**: 71%
+- **Tasks Complete**: 11/14
+- **Percentage**: 79%
 - **Status**: IN_PROGRESS
 - **Blockers**: None (P03-F01 and P03-F02 complete)
-- **Tests Passing**: 293 tests (271 + 22 new)
+- **Tests Passing**: 319 tests (293 + 26 new)
 
 ## Task Summary
 
@@ -279,6 +280,7 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 | T07 | REPLToolSurface registry | 30min | [x] |
 | T08 | RLMAgent | 2h | [x] |
 | T09 | RLMOrchestrator | 2h | [x] |
+| T10 | Audit trail generation | 1h | [x] |
 | T08 | RLMAgent | 2h | [ ] |
 | T09 | RLMOrchestrator | 2h | [ ] |
 | T10 | Audit trail generation | 1h | [ ] |
