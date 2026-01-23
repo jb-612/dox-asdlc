@@ -48,6 +48,18 @@ docker compose -f docker/docker-compose.yml up -d
 kubectl get pods -n dox-asdlc
 ```
 
+## Multi-Agent CLI Architecture
+
+This project uses three specialized Claude CLI instances working in parallel:
+
+| Agent | Branch Prefix | Responsibility |
+|-------|---------------|----------------|
+| Orchestrator | `main` | Reviews, merges, meta files, docs |
+| Backend | `agent/` | Workers, orchestrator, infrastructure |
+| Frontend | `ui/` | HITL Web UI, frontend components |
+
+Coordination happens via Redis messaging. See `.claude/rules/parallel-coordination.md`.
+
 ## Project Structure
 
 ```text
@@ -62,13 +74,25 @@ dox-asdlc/
 │   └── Pnn-Fnn-{name}/    # Per-feature folders
 ├── docs/                  # Solution documentation
 ├── src/                   # Source code
+│   ├── orchestrator/      # Governance container
+│   ├── workers/           # Agent workers
+│   │   ├── agents/        # Domain agents (discovery, design, dev)
+│   │   ├── repo_mapper/   # Context pack generation
+│   │   ├── rlm/           # Recursive LLM exploration
+│   │   └── pool/          # Worker pool framework
+│   ├── infrastructure/    # Redis, RAG backends
+│   └── core/              # Shared models, exceptions
 ├── tests/                 # Test suites
 ├── tools/                 # Bash tool wrappers
 ├── docker/                # Container definitions
+│   └── hitl-ui/           # HITL Web UI (React SPA)
 ├── helm/                  # Kubernetes Helm charts
 │   └── dox-asdlc/         # Umbrella chart
 │       └── charts/        # Sub-charts (redis, chromadb, etc.)
 └── scripts/               # Development scripts
+    ├── coordination/      # CLI coordination (Redis messaging)
+    ├── k8s/               # Kubernetes scripts
+    └── orchestrator/      # Orchestrator review scripts
 ```
 
 ## Development Workflow
@@ -78,6 +102,22 @@ dox-asdlc/
 3. **Implement**: Execute tasks using TDD (Red-Green-Refactor)
 4. **Complete**: Run `check-completion.sh` to verify all criteria met
 5. **Commit**: Commit only when feature is 100% complete
+
+## CLI Coordination
+
+```bash
+# Initialize session identity
+source scripts/cli-identity.sh <orchestrator|backend|frontend>
+
+# Check coordination messages
+./scripts/coordination/check-messages.sh
+
+# Publish a message
+./scripts/coordination/publish-message.sh <type> <subject> <description> --to <target>
+
+# Acknowledge a message
+./scripts/coordination/ack-message.sh <message-id>
+```
 
 ## Kubernetes Deployment
 

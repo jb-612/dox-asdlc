@@ -41,14 +41,22 @@ This project follows a **Spec Driven Development** workflow. No coding begins un
 ├── src/                         # Source code
 │   ├── orchestrator/            # Container 1: Governance
 │   ├── workers/                 # Container 2: Agent workers
+│   │   ├── agents/              # Domain agents (discovery, design, dev)
+│   │   ├── repo_mapper/         # Context pack generation
+│   │   ├── rlm/                 # Recursive LLM exploration
+│   │   └── pool/                # Worker pool framework
 │   ├── infrastructure/          # Container 3: Redis, RAG
-│   └── hitl_ui/                 # Container 4: HITL Web UI
+│   └── core/                    # Shared models, exceptions
 ├── tools/                       # Bash tool wrappers
 ├── tests/                       # Test suites
 │   ├── unit/
 │   ├── integration/
 │   └── e2e/
 ├── docker/                      # Container definitions
+│   ├── hitl-ui/                 # HITL Web UI (React SPA)
+│   ├── orchestrator/
+│   ├── workers/
+│   └── infrastructure/
 ├── helm/                        # Kubernetes Helm charts
 │   └── dox-asdlc/               # Umbrella chart
 │       ├── Chart.yaml
@@ -60,7 +68,11 @@ This project follows a **Spec Driven Development** workflow. No coding begins un
 │           ├── orchestrator/
 │           ├── workers/
 │           └── hitl-ui/
-└── scripts/                     # Development scripts
+├── scripts/                     # Development scripts
+│   ├── coordination/            # CLI coordination scripts
+│   ├── k8s/                     # Kubernetes scripts
+│   └── orchestrator/            # Orchestrator review scripts
+└── contracts/                   # API contracts between components
 ```
 
 ## Work Item Naming Convention
@@ -133,12 +145,29 @@ kubectl get services -n dox-asdlc
 ./scripts/k8s/teardown.sh
 ```
 
+### CLI Coordination (Multi-Agent)
+```bash
+# Initialize CLI identity (required at session start)
+source scripts/cli-identity.sh <orchestrator|backend|frontend>
+
+# Check for pending messages
+./scripts/coordination/check-messages.sh --pending
+
+# Request review (feature CLIs)
+./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<branch>" "<description>" --to orchestrator
+
+# Acknowledge message
+./scripts/coordination/ack-message.sh <message-id>
+```
+
 ## Phase Overview
 
 ### Phase 1: Infrastructure Foundation
 - P01-F01: Infrastructure setup (Docker, Redis, directory structure)
 - P01-F02: Bash tool abstraction layer
 - P01-F03: KnowledgeStore interface and ChromaDB backend
+- P01-F04: CLI coordination with Redis backend
+- P01-F05: A2A push notifications
 
 ### Phase 2: Orchestration Core
 - P02-F01: Redis event streams and consumer groups
@@ -161,6 +190,8 @@ kubectl get services -n dox-asdlc
 - P05-F02: End-to-end workflow integration
 - P05-F03: Observability and metrics
 - P05-F04: Adaptive Feedback Learning (Evaluator Agent)
+- P05-F05: CLI interface
+- P05-F06: HITL UI v2 (Full SPA with React)
 
 ### Phase 6: Kubernetes Platform Migration
 - P06-F01: Kubernetes base infrastructure (minikube, Helm)
@@ -168,6 +199,17 @@ kubectl get services -n dox-asdlc
 - P06-F03: ChromaDB StatefulSet deployment (RAG service)
 - P06-F04: Stateless services deployment (orchestrator, workers, HITL-UI)
 - P06-F05: Multi-tenancy support
+
+## Current Implementation Status
+
+| Phase | Status | Features Complete |
+|-------|--------|-------------------|
+| P01: Infrastructure | ✅ Complete | F01-F05 |
+| P02: Orchestration | ✅ Complete | F01-F03 |
+| P03: Agent Workers | ✅ Complete | F01-F03 |
+| P04: Domain Agents | 🔄 In Progress | F01 in development |
+| P05: HITL & Integration | 🔄 In Progress | F01 ✅, F06 in progress |
+| P06: Kubernetes | 🔄 In Progress | F01-F04 ✅, F05 90% |
 
 ## Key Principles
 
