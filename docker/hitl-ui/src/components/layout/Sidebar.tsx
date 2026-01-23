@@ -1,18 +1,101 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  HomeIcon,
-  ShieldCheckIcon,
-  CpuChipIcon,
   DocumentTextIcon,
+  CpuChipIcon,
+  ChatBubbleLeftRightIcon,
+  ShieldCheckIcon,
+  FolderIcon,
+  CurrencyDollarIcon,
+  Cog6ToothIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Gates', href: '/gates', icon: ShieldCheckIcon },
-  { name: 'Workers', href: '/workers', icon: CpuChipIcon },
-  { name: 'Sessions', href: '/sessions', icon: DocumentTextIcon },
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  disabled?: boolean;
+}
+
+interface NavSection {
+  title: string;
+  items: NavItem[];
+  defaultCollapsed?: boolean;
+}
+
+const navigationSections: NavSection[] = [
+  {
+    title: 'Workflow',
+    items: [
+      { name: 'Documentation', href: '/docs', icon: DocumentTextIcon },
+      { name: 'Agent Cockpit', href: '/cockpit', icon: CpuChipIcon },
+      { name: 'Discovery Studio', href: '/studio/discovery', icon: ChatBubbleLeftRightIcon },
+      { name: 'HITL Gates', href: '/gates', icon: ShieldCheckIcon },
+      { name: 'Artifacts', href: '/artifacts', icon: FolderIcon },
+    ],
+  },
+  {
+    title: 'Operations',
+    defaultCollapsed: true,
+    items: [
+      { name: 'Budget', href: '/budget', icon: CurrencyDollarIcon, disabled: true },
+      { name: 'Admin', href: '/admin', icon: Cog6ToothIcon, disabled: true },
+    ],
+  },
 ];
+
+interface CollapsibleSectionProps {
+  section: NavSection;
+}
+
+function CollapsibleSection({ section }: CollapsibleSectionProps) {
+  const [collapsed, setCollapsed] = useState(section.defaultCollapsed ?? false);
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted hover:text-text-secondary transition-colors"
+      >
+        <span>{section.title}</span>
+        {collapsed ? (
+          <ChevronRightIcon className="h-4 w-4" />
+        ) : (
+          <ChevronDownIcon className="h-4 w-4" />
+        )}
+      </button>
+      {!collapsed && (
+        <div className="mt-1 space-y-1">
+          {section.items.map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.disabled ? '#' : item.href}
+              onClick={(e) => item.disabled && e.preventDefault()}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  item.disabled && 'opacity-50 cursor-not-allowed',
+                  isActive && !item.disabled
+                    ? 'bg-accent-teal text-text-primary'
+                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                )
+              }
+            >
+              <item.icon className="h-5 w-5" />
+              {item.name}
+              {item.disabled && (
+                <span className="ml-auto text-xs text-text-muted">Soon</span>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Sidebar() {
   return (
@@ -24,28 +107,14 @@ export default function Sidebar() {
         </div>
         <div>
           <h1 className="text-lg font-semibold text-text-primary">aSDLC</h1>
-          <p className="text-xs text-text-secondary">HITL Dashboard</p>
+          <p className="text-xs text-text-secondary">Development Console</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            className={({ isActive }) =>
-              clsx(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-accent-teal text-text-primary'
-                  : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-              )
-            }
-          >
-            <item.icon className="h-5 w-5" />
-            {item.name}
-          </NavLink>
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {navigationSections.map((section) => (
+          <CollapsibleSection key={section.title} section={section} />
         ))}
       </nav>
 

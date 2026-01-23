@@ -1,25 +1,171 @@
 import { useState } from 'react';
-import { Menu } from '@headlessui/react';
+import { useLocation } from 'react-router-dom';
+import { Menu, Listbox } from '@headlessui/react';
 import {
   ChevronDownIcon,
   UserCircleIcon,
   Cog6ToothIcon,
+  ServerIcon,
+  FolderOpenIcon,
+  DocumentIcon,
 } from '@heroicons/react/24/outline';
 import { useTenantStore } from '@/stores/tenantStore';
+import { useSessionStore } from '@/stores/sessionStore';
 import clsx from 'clsx';
 
+const environments = ['dev', 'staging', 'prod'] as const;
+const mockRepos = ['dox-asdlc', 'frontend-app', 'api-service'];
+const mockEpics = ['EPIC-001', 'EPIC-002', 'EPIC-003'];
+
+const pageTitle: Record<string, string> = {
+  '/': 'Dashboard',
+  '/docs': 'Documentation',
+  '/cockpit': 'Agent Cockpit',
+  '/studio/discovery': 'Discovery Studio',
+  '/gates': 'HITL Gates',
+  '/artifacts': 'Artifacts',
+  '/budget': 'Budget',
+  '/admin': 'Admin',
+  '/workers': 'Workers',
+  '/sessions': 'Sessions',
+};
+
 export default function Header() {
+  const location = useLocation();
   const { currentTenant, setTenant, availableTenants, multiTenancyEnabled } =
     useTenantStore();
+  const { environment, setEnvironment, repo, setRepo, epicId, setEpic } =
+    useSessionStore();
   const [userName] = useState('Operator');
+
+  const currentPageTitle = pageTitle[location.pathname] || 'aSDLC';
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-bg-tertiary bg-bg-secondary px-6">
-      {/* Left side - Breadcrumb area (can be extended) */}
-      <div className="flex items-center gap-4">
+      {/* Left side - Page title and session selectors */}
+      <div className="flex items-center gap-6">
         <h2 className="text-lg font-medium text-text-primary">
-          Governance Dashboard
+          {currentPageTitle}
         </h2>
+
+        {/* Session Selectors */}
+        <div className="flex items-center gap-3">
+          {/* Environment Selector */}
+          <Listbox value={environment} onChange={(v) => setEnvironment(v as 'dev' | 'staging' | 'prod')}>
+            <div className="relative">
+              <Listbox.Button className="flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-tertiary/80 transition-colors">
+                <ServerIcon className="h-4 w-4 text-text-secondary" />
+                <span className={clsx(
+                  'font-medium',
+                  environment === 'prod' && 'text-status-error',
+                  environment === 'staging' && 'text-status-warning',
+                  environment === 'dev' && 'text-accent-teal'
+                )}>
+                  {environment}
+                </span>
+                <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
+              </Listbox.Button>
+
+              <Listbox.Options className="absolute left-0 mt-2 w-36 origin-top-left rounded-lg bg-bg-secondary border border-bg-tertiary shadow-lg focus:outline-none z-50">
+                <div className="p-1">
+                  {environments.map((env) => (
+                    <Listbox.Option
+                      key={env}
+                      value={env}
+                      className={({ active, selected }) =>
+                        clsx(
+                          'cursor-pointer rounded-md px-3 py-2 text-sm',
+                          active ? 'bg-bg-tertiary' : '',
+                          selected ? 'text-text-primary font-medium' : 'text-text-secondary'
+                        )
+                      }
+                    >
+                      {env}
+                    </Listbox.Option>
+                  ))}
+                </div>
+              </Listbox.Options>
+            </div>
+          </Listbox>
+
+          {/* Repo Selector */}
+          <Listbox value={repo || ''} onChange={setRepo}>
+            <div className="relative">
+              <Listbox.Button className="flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-tertiary/80 transition-colors">
+                <FolderOpenIcon className="h-4 w-4 text-text-secondary" />
+                <span className="font-medium max-w-[120px] truncate">
+                  {repo || 'Select repo'}
+                </span>
+                <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
+              </Listbox.Button>
+
+              <Listbox.Options className="absolute left-0 mt-2 w-48 origin-top-left rounded-lg bg-bg-secondary border border-bg-tertiary shadow-lg focus:outline-none z-50">
+                <div className="p-1">
+                  {mockRepos.map((r) => (
+                    <Listbox.Option
+                      key={r}
+                      value={r}
+                      className={({ active, selected }) =>
+                        clsx(
+                          'cursor-pointer rounded-md px-3 py-2 text-sm',
+                          active ? 'bg-bg-tertiary' : '',
+                          selected ? 'text-text-primary font-medium' : 'text-text-secondary'
+                        )
+                      }
+                    >
+                      {r}
+                    </Listbox.Option>
+                  ))}
+                </div>
+              </Listbox.Options>
+            </div>
+          </Listbox>
+
+          {/* Epic Selector */}
+          <Listbox value={epicId || ''} onChange={setEpic}>
+            <div className="relative">
+              <Listbox.Button className="flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary hover:bg-bg-tertiary/80 transition-colors">
+                <DocumentIcon className="h-4 w-4 text-text-secondary" />
+                <span className="font-medium max-w-[100px] truncate">
+                  {epicId || 'All epics'}
+                </span>
+                <ChevronDownIcon className="h-4 w-4 text-text-secondary" />
+              </Listbox.Button>
+
+              <Listbox.Options className="absolute left-0 mt-2 w-40 origin-top-left rounded-lg bg-bg-secondary border border-bg-tertiary shadow-lg focus:outline-none z-50">
+                <div className="p-1">
+                  <Listbox.Option
+                    value=""
+                    className={({ active }) =>
+                      clsx(
+                        'cursor-pointer rounded-md px-3 py-2 text-sm',
+                        active ? 'bg-bg-tertiary' : '',
+                        !epicId ? 'text-text-primary font-medium' : 'text-text-secondary'
+                      )
+                    }
+                  >
+                    All epics
+                  </Listbox.Option>
+                  {mockEpics.map((epic) => (
+                    <Listbox.Option
+                      key={epic}
+                      value={epic}
+                      className={({ active, selected }) =>
+                        clsx(
+                          'cursor-pointer rounded-md px-3 py-2 text-sm',
+                          active ? 'bg-bg-tertiary' : '',
+                          selected ? 'text-text-primary font-medium' : 'text-text-secondary'
+                        )
+                      }
+                    >
+                      {epic}
+                    </Listbox.Option>
+                  ))}
+                </div>
+              </Listbox.Options>
+            </div>
+          </Listbox>
+        </div>
       </div>
 
       {/* Right side - Tenant selector and user menu */}

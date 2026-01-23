@@ -3,8 +3,8 @@
 ## Progress
 
 - Started: 2026-01-23
-- Tasks Complete: 4/68
-- Percentage: 6%
+- Tasks Complete: 5/68
+- Percentage: 7%
 - Status: IN_PROGRESS
 - Blockers: None
 
@@ -67,14 +67,21 @@
   - API modules wrap axios client with typed responses
   - WebSocket API wrapper provides convenient interface with EventTypes constants
 
-### TASK-005: Update layout components
-- [ ] Update `Sidebar.tsx` with new navigation items
-- [ ] Update `Header.tsx` with session selector
-- [ ] Create `RightPanel.tsx` (evidence drawer + live event feed)
-- [ ] Create `StatusBar.tsx` (bottom status bar)
-- [ ] Write Vitest tests for layout components
+### TASK-005: Update layout components ✓
+- [x] Update `Sidebar.tsx` with new navigation items
+- [x] Update `Header.tsx` with session selector
+- [x] Create `RightPanel.tsx` (evidence drawer + live event feed)
+- [x] Create `StatusBar.tsx` (bottom status bar)
+- [x] Write Vitest tests for layout components
 - **Estimate:** 2h
-- **Tests:** Navigation renders, clicks navigate to correct routes
+- **Tests:** 54 tests passed (Sidebar: 7, Header: 11, RightPanel: 14, StatusBar: 13, Layout: 9)
+- **Completed:** 2026-01-23
+- **Implementation Notes:**
+  - Sidebar: Collapsible navigation sections, Workflow + Operations categories
+  - Header: Environment/Repo/Epic selectors with sessionStore integration
+  - RightPanel: Live event feed with filtering, auto-scroll, connection status
+  - StatusBar: Git info, worker count, pending gates, system health indicator
+  - Layout: Updated to include RightPanel and StatusBar with toggle state
 
 ### TASK-006: Implement base utilities
 - [ ] Create `utils/markdown.ts` (markdown parsing helpers)
