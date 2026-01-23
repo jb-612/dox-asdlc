@@ -73,6 +73,16 @@ This feature migrates the CLI coordination system from filesystem-based JSON fil
 - **Sorted Sets/Sets**: Indexes for fast queries
 - **Pub/Sub**: Real-time notifications (ephemeral)
 
+**Note: RedisJSON Module Not Required**
+
+This design intentionally uses standard Redis Hashes (`HSET`/`HGETALL`) instead of the RedisJSON module (`JSON.SET`/`JSON.GET`). Benefits:
+- Compatible with standard Redis deployments without optional modules
+- Field-level access without JSON parsing overhead
+- Native Redis pipeline/transaction support
+- Simpler deployment (no module compilation required)
+
+Verified 2026-01-23: Production Redis (8.4.0) does not have RedisJSON loaded; this design works correctly.
+
 ### Redis Schema Design
 
 #### Core Data Structures
