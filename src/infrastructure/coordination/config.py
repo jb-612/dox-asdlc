@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar
 
 
@@ -39,6 +39,9 @@ class CoordinationConfig:
     # Pub/sub channel patterns
     CHANNEL_INSTANCE: ClassVar[str] = "{prefix}:notify:{instance}"
     CHANNEL_BROADCAST: ClassVar[str] = "{prefix}:notify:all"
+
+    # Notification queue pattern (for offline instances)
+    KEY_NOTIFICATION_QUEUE: ClassVar[str] = "{prefix}:notifications:{instance}"
 
     @classmethod
     def from_env(cls) -> CoordinationConfig:
@@ -135,6 +138,19 @@ class CoordinationConfig:
             Channel name string
         """
         return self.CHANNEL_BROADCAST.format(prefix=self.key_prefix)
+
+    def notification_queue_key(self, instance_id: str) -> str:
+        """Get Redis key for instance notification queue.
+
+        Args:
+            instance_id: CLI instance identifier
+
+        Returns:
+            Redis key string
+        """
+        return self.KEY_NOTIFICATION_QUEUE.format(
+            prefix=self.key_prefix, instance=instance_id
+        )
 
 
 # Global config instance (lazy-loaded)

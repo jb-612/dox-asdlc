@@ -8,9 +8,14 @@
 #   source scripts/coordination/lib/common.sh
 #
 
-# Project root detection
-COMMON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$COMMON_SCRIPT_DIR/../../.." && pwd)"
+# Project root detection - use git if available, fallback to path-based detection
+if git rev-parse --show-toplevel &>/dev/null; then
+    PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+else
+    # Fallback: resolve from script location
+    COMMON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+    PROJECT_ROOT="$(cd "$COMMON_SCRIPT_DIR/../../.." && pwd)"
+fi
 
 # Python executable detection - prefer venv if available
 if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
@@ -228,6 +233,51 @@ async def main():
                 "error": "Message not found: $message_id",
             }))
             sys.exit(1)
+        await r.aclose()
+    except Exception as e:
+        print(json.dumps({
+            "success": False,
+            "error": str(e),
+        }))
+        sys.exit(1)
+
+asyncio.run(main())
+PYEOF
+}
+
+# Call Python coordination module for pop notifications
+# Args: [limit]
+call_python_pop_notifications() {
+    local limit="${1:-100}"
+
+    export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+
+    $PYTHON_CMD << PYEOF
+import asyncio
+import json
+import sys
+
+async def main():
+    import redis.asyncio as redis
+    from src.infrastructure.coordination.client import CoordinationClient
+    from src.infrastructure.coordination.config import CoordinationConfig
+
+    try:
+        # Create Redis client directly (bypass factory to avoid asyncio.Lock issues)
+        config = CoordinationConfig.from_env()
+        r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
+
+        client = CoordinationClient(redis_client=r, config=config, instance_id="$CLAUDE_INSTANCE_ID")
+        notifications = await client.pop_notifications(
+            instance_id="$CLAUDE_INSTANCE_ID",
+            limit=$limit,
+        )
+
+        print(json.dumps({
+            "success": True,
+            "count": len(notifications),
+            "notifications": [n.to_dict() for n in notifications],
+        }))
         await r.aclose()
     except Exception as e:
         print(json.dumps({

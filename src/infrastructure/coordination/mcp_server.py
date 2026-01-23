@@ -12,10 +12,9 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Any
 
-from src.core.redis_client import get_redis_client, close_redis_client
+from src.core.redis_client import close_redis_client, get_redis_client
 from src.infrastructure.coordination.client import CoordinationClient
 from src.infrastructure.coordination.config import CoordinationConfig
 from src.infrastructure.coordination.types import MessageQuery, MessageType
@@ -280,6 +279,56 @@ class CoordinationMCPServer:
                 "error": str(e),
             }
 
+    async def coord_get_notifications(self, limit: int = 100) -> dict[str, Any]:
+        """Get and clear pending notifications for the current instance.
+
+        This tool retrieves all queued notifications that were sent while
+        the instance was offline. The notifications are returned and removed
+        from the queue.
+
+        Args:
+            limit: Maximum number of notifications to retrieve (default: 100)
+
+        Returns:
+            Dict with success status and list of notifications
+
+        Example response:
+            {
+                "success": true,
+                "count": 2,
+                "notifications": [
+                    {
+                        "event": "message_published",
+                        "message_id": "msg-abc123",
+                        "type": "READY_FOR_REVIEW",
+                        "from": "backend",
+                        "to": "orchestrator",
+                        "requires_ack": true,
+                        "timestamp": "2026-01-23T12:00:00Z"
+                    }
+                ]
+            }
+        """
+        try:
+            client = await self._get_client()
+            notifications = await client.pop_notifications(
+                instance_id=self._instance_id,
+                limit=min(limit, 1000),
+            )
+
+            return {
+                "success": True,
+                "count": len(notifications),
+                "notifications": [n.to_dict() for n in notifications],
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get notifications: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
     def get_tool_schemas(self) -> list[dict[str, Any]]:
         """Get MCP tool schema definitions.
 
@@ -378,6 +427,20 @@ class CoordinationMCPServer:
                     "properties": {},
                 },
             },
+            {
+                "name": "coord_get_notifications",
+                "description": "Get and clear pending notifications for this instance",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of notifications to retrieve",
+                            "default": 100,
+                        },
+                    },
+                },
+            },
         ]
 
     async def handle_request(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -431,6 +494,8 @@ class CoordinationMCPServer:
                     result = await self.coord_ack_message(**arguments)
                 elif tool_name == "coord_get_presence":
                     result = await self.coord_get_presence()
+                elif tool_name == "coord_get_notifications":
+                    result = await self.coord_get_notifications(**arguments)
                 else:
                     return {
                         "jsonrpc": "2.0",

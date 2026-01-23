@@ -284,6 +284,62 @@ class TestNotificationEvent:
         parsed = json.loads(json_str)
         assert parsed["message_id"] == "msg-test"
 
+    def test_notification_from_json_valid(self) -> None:
+        """Test deserializing notification from valid JSON."""
+        json_str = json.dumps({
+            "event": "message_published",
+            "message_id": "msg-fromjson",
+            "type": "READY_FOR_REVIEW",
+            "from": "backend",
+            "to": "orchestrator",
+            "requires_ack": True,
+            "timestamp": "2026-01-23T12:00:00Z",
+        })
+
+        event = NotificationEvent.from_json(json_str)
+
+        assert event.event == "message_published"
+        assert event.message_id == "msg-fromjson"
+        assert event.msg_type == MessageType.READY_FOR_REVIEW
+        assert event.from_instance == "backend"
+        assert event.to_instance == "orchestrator"
+        assert event.requires_ack is True
+        assert event.timestamp.year == 2026
+
+    def test_notification_from_json_invalid_json(self) -> None:
+        """Test that invalid JSON raises ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            NotificationEvent.from_json("not valid json {")
+        assert "Invalid JSON" in str(exc_info.value)
+
+    def test_notification_from_json_missing_fields(self) -> None:
+        """Test that missing required fields raises error."""
+        json_str = json.dumps({"event": "message_published"})
+        with pytest.raises((KeyError, ValueError)):
+            NotificationEvent.from_json(json_str)
+
+    def test_notification_json_round_trip(self) -> None:
+        """Test notification survives to_json -> from_json round-trip."""
+        original = NotificationEvent(
+            event="message_published",
+            message_id="msg-roundtrip",
+            msg_type=MessageType.CONTRACT_APPROVED,
+            from_instance="orchestrator",
+            to_instance="all",
+            requires_ack=False,
+            timestamp=datetime(2026, 1, 23, 15, 30, 45, tzinfo=timezone.utc),
+        )
+
+        json_str = original.to_json()
+        restored = NotificationEvent.from_json(json_str)
+
+        assert restored.event == original.event
+        assert restored.message_id == original.message_id
+        assert restored.msg_type == original.msg_type
+        assert restored.from_instance == original.from_instance
+        assert restored.to_instance == original.to_instance
+        assert restored.requires_ack == original.requires_ack
+
 
 class TestPresenceInfo:
     """Tests for PresenceInfo model."""

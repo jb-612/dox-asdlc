@@ -10,18 +10,17 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional
+from collections.abc import Callable, Coroutine
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
 
 from src.core.exceptions import (
     AcknowledgeError,
     CoordinationError,
-    MessageNotFoundError,
     PresenceError,
     PublishError,
-    RedisConnectionError,
 )
 from src.infrastructure.coordination.config import (
     CoordinationConfig,
@@ -38,7 +37,7 @@ from src.infrastructure.coordination.types import (
 )
 
 if TYPE_CHECKING:
-    from redis.asyncio.client import Pipeline
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -197,10 +196,10 @@ class CoordinationClient:
             >>> if health["connected"]:
             ...     print(f"Connected with {health['latency_ms']}ms latency")
         """
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         try:
             pong = await self._redis.ping()
-            end = datetime.now(timezone.utc)
+            end = datetime.now(UTC)
             latency_ms = (end - start).total_seconds() * 1000
 
             if pong:
@@ -304,7 +303,7 @@ class CoordinationClient:
         msg_id = message_id or generate_message_id()
 
         # Create timestamp
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         timestamp_unix = timestamp.timestamp()
 
         # Build the message
@@ -397,6 +396,10 @@ class CoordinationClient:
                 # Execute all commands atomically
                 await pipe.execute()
 
+            # Queue notification for offline instances (skip for broadcasts)
+            if to_instance != "all":
+                await self._queue_if_offline(to_instance, notification)
+
             logger.info(
                 f"Published message {msg_id}: {msg_type.value} from {from_instance} to {to_instance}"
             )
@@ -428,6 +431,37 @@ class CoordinationClient:
         """
         msg_key = self._config.message_key(message_id)
         return bool(await self._redis.exists(msg_key))
+
+    async def _queue_if_offline(
+        self,
+        instance_id: str,
+        notification: NotificationEvent,
+    ) -> None:
+        """Queue notification for instance if it appears offline.
+
+        Checks instance presence and queues the notification if the instance
+        is not currently active. This is a best-effort operation - failures
+        are logged but don't affect message publishing.
+
+        Args:
+            instance_id: Target instance ID
+            notification: Notification to potentially queue
+        """
+        try:
+            presence = await self.get_presence()
+            instance_info = presence.get(instance_id)
+
+            # Queue if instance is not registered or not active
+            if instance_info is None or not instance_info.active:
+                await self.queue_notification(instance_id, notification)
+                logger.debug(
+                    f"Queued notification for offline instance {instance_id}"
+                )
+        except Exception as e:
+            # Best-effort: log but don't fail the publish
+            logger.warning(
+                f"Failed to check/queue notification for {instance_id}: {e}"
+            )
 
     async def get_message(self, message_id: str) -> CoordinationMessage | None:
         """Get a single message by ID.
@@ -644,7 +678,7 @@ class CoordinationClient:
         """
         msg_key = self._config.message_key(message_id)
         pending_key = self._config.pending_key()
-        ack_timestamp = datetime.now(timezone.utc)
+        ack_timestamp = datetime.now(UTC)
 
         self._log_operation(
             "acknowledge_message",
@@ -795,7 +829,7 @@ class CoordinationClient:
             PresenceError: If registration fails
         """
         presence_key = self._config.presence_key()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         presence_data = {
             f"{instance_id}.active": "1",
@@ -830,7 +864,7 @@ class CoordinationClient:
             PresenceError: If heartbeat fails
         """
         presence_key = self._config.presence_key()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         try:
             await self._redis.hset(
@@ -902,9 +936,10 @@ class CoordinationClient:
             presence_data = await self._redis.hgetall(presence_key)
 
             # Group fields by instance
+            # Use rsplit to handle instance IDs that contain dots (e.g., timestamps)
             instances: dict[str, dict[str, str]] = {}
             for key, value in presence_data.items():
-                parts = key.split(".", 1)
+                parts = key.rsplit(".", 1)  # Split from right to handle dots in instance IDs
                 if len(parts) == 2:
                     instance_id, field = parts
                     if instance_id not in instances:
@@ -920,7 +955,7 @@ class CoordinationClient:
                         last_hb_str.replace("Z", "+00:00")
                     )
                 else:
-                    last_hb = datetime.now(timezone.utc)
+                    last_hb = datetime.now(UTC)
 
                 presence = PresenceInfo(
                     instance_id=instance_id,
@@ -997,4 +1032,114 @@ class CoordinationClient:
             raise CoordinationError(
                 f"Failed to get stats: {e}",
                 details={"error": str(e)},
+            ) from e
+
+    async def queue_notification(
+        self,
+        instance_id: str,
+        notification: NotificationEvent,
+    ) -> bool:
+        """Queue a notification for an offline instance.
+
+        Uses a Redis LIST to store notifications for instances that are
+        not currently online. When the instance starts, it can retrieve
+        these notifications using pop_notifications().
+
+        Args:
+            instance_id: Target instance ID to queue notification for
+            notification: NotificationEvent to queue
+
+        Returns:
+            True if notification was queued successfully
+
+        Raises:
+            CoordinationError: If queuing fails
+        """
+        queue_key = self._config.notification_queue_key(instance_id)
+
+        self._log_operation(
+            "queue_notification",
+            instance_id=instance_id,
+            message_id=notification.message_id,
+        )
+
+        try:
+            async with self._redis.pipeline(transaction=True) as pipe:
+                # Push to left of list (newest first)
+                pipe.lpush(queue_key, notification.to_json())
+                # Set TTL matching message TTL
+                pipe.expire(queue_key, self._config.message_ttl_seconds)
+                await pipe.execute()
+
+            logger.debug(
+                f"Queued notification for {instance_id}: {notification.message_id}"
+            )
+            return True
+
+        except redis.RedisError as e:
+            logger.error(f"Failed to queue notification for {instance_id}: {e}")
+            raise CoordinationError(
+                f"Failed to queue notification: {e}",
+                details={"instance_id": instance_id, "error": str(e)},
+            ) from e
+
+    async def pop_notifications(
+        self,
+        instance_id: str,
+        limit: int = 100,
+    ) -> list[NotificationEvent]:
+        """Pop pending notifications for an instance.
+
+        Retrieves and removes all pending notifications from the queue.
+        This is an atomic operation using LRANGE + DELETE.
+
+        Args:
+            instance_id: Instance ID to get notifications for
+            limit: Maximum number of notifications to retrieve
+
+        Returns:
+            List of NotificationEvent objects (newest first)
+
+        Raises:
+            CoordinationError: If retrieval fails
+        """
+        queue_key = self._config.notification_queue_key(instance_id)
+
+        self._log_operation(
+            "pop_notifications",
+            instance_id=instance_id,
+            limit=limit,
+        )
+
+        try:
+            # Use pipeline for atomic read and delete
+            async with self._redis.pipeline(transaction=True) as pipe:
+                # Get all notifications (up to limit)
+                pipe.lrange(queue_key, 0, limit - 1)
+                # Delete the entire queue
+                pipe.delete(queue_key)
+                results = await pipe.execute()
+
+            notification_jsons = results[0] or []
+
+            # Parse notifications
+            notifications: list[NotificationEvent] = []
+            for json_str in notification_jsons:
+                try:
+                    notification = NotificationEvent.from_json(json_str)
+                    notifications.append(notification)
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Failed to parse notification: {e}")
+                    continue
+
+            logger.debug(
+                f"Popped {len(notifications)} notifications for {instance_id}"
+            )
+            return notifications
+
+        except redis.RedisError as e:
+            logger.error(f"Failed to pop notifications for {instance_id}: {e}")
+            raise CoordinationError(
+                f"Failed to pop notifications: {e}",
+                details={"instance_id": instance_id, "error": str(e)},
             ) from e

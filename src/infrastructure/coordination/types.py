@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -65,9 +65,9 @@ class CoordinationMessage(BaseModel):
     payload: MessagePayload = Field(..., description="Message content")
 
     # Acknowledgment fields (optional, set when acknowledged)
-    ack_by: Optional[str] = Field(default=None, description="Instance that acknowledged")
-    ack_timestamp: Optional[datetime] = Field(default=None, description="When acknowledged")
-    ack_comment: Optional[str] = Field(default=None, description="Optional ack comment")
+    ack_by: str | None = Field(default=None, description="Instance that acknowledged")
+    ack_timestamp: datetime | None = Field(default=None, description="When acknowledged")
+    ack_comment: str | None = Field(default=None, description="Optional ack comment")
 
     model_config = {
         "populate_by_name": True,  # Allow both 'from' and 'from_instance'
@@ -78,7 +78,7 @@ class CoordinationMessage(BaseModel):
 
     @field_validator("timestamp", "ack_timestamp", mode="before")
     @classmethod
-    def parse_timestamp(cls, v: Any) -> Optional[datetime]:
+    def parse_timestamp(cls, v: Any) -> datetime | None:
         """Parse timestamp from ISO format string."""
         if v is None:
             return None
@@ -136,16 +136,16 @@ class CoordinationMessage(BaseModel):
 class MessageQuery(BaseModel):
     """Query parameters for filtering coordination messages."""
 
-    to_instance: Optional[str] = Field(default=None, description="Filter by target instance")
-    from_instance: Optional[str] = Field(default=None, description="Filter by sender instance")
-    msg_type: Optional[MessageType] = Field(default=None, description="Filter by message type")
+    to_instance: str | None = Field(default=None, description="Filter by target instance")
+    from_instance: str | None = Field(default=None, description="Filter by sender instance")
+    msg_type: MessageType | None = Field(default=None, description="Filter by message type")
     pending_only: bool = Field(default=False, description="Only unacknowledged messages")
-    since: Optional[datetime] = Field(default=None, description="Messages after this timestamp")
+    since: datetime | None = Field(default=None, description="Messages after this timestamp")
     limit: int = Field(default=100, ge=1, le=1000, description="Maximum results")
 
     @field_validator("since", mode="before")
     @classmethod
-    def parse_since(cls, v: Any) -> Optional[datetime]:
+    def parse_since(cls, v: Any) -> datetime | None:
         """Parse since timestamp."""
         if v is None:
             return None
@@ -200,6 +200,42 @@ class NotificationEvent(BaseModel):
             timestamp=msg.timestamp,
         )
 
+    @classmethod
+    def from_json(cls, json_str: str) -> NotificationEvent:
+        """Create notification event from JSON string.
+
+        Args:
+            json_str: JSON string representation of a notification event
+
+        Returns:
+            NotificationEvent instance
+
+        Raises:
+            ValueError: If JSON is invalid or missing required fields
+        """
+        import json
+
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}") from e
+
+        # Parse timestamp
+        timestamp_str = data.get("timestamp", "")
+        if timestamp_str.endswith("Z"):
+            timestamp_str = timestamp_str[:-1] + "+00:00"
+        timestamp = datetime.fromisoformat(timestamp_str)
+
+        return cls(
+            event=data.get("event", "message_published"),
+            message_id=data["message_id"],
+            msg_type=MessageType(data["type"]),
+            from_instance=data["from"],
+            to_instance=data["to"],
+            requires_ack=data["requires_ack"],
+            timestamp=timestamp,
+        )
+
 
 class PresenceInfo(BaseModel):
     """Instance presence information."""
@@ -207,7 +243,7 @@ class PresenceInfo(BaseModel):
     instance_id: str = Field(..., description="CLI instance identifier")
     active: bool = Field(default=True, description="Whether instance is active")
     last_heartbeat: datetime = Field(..., description="Last heartbeat timestamp")
-    session_id: Optional[str] = Field(default=None, description="Current session ID")
+    session_id: str | None = Field(default=None, description="Current session ID")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -220,13 +256,12 @@ class PresenceInfo(BaseModel):
 
     def is_stale(self, timeout_minutes: int = 5) -> bool:
         """Check if presence is stale (no heartbeat within timeout)."""
-        from datetime import timezone
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Make last_heartbeat timezone-aware if it isn't
         last_hb = self.last_heartbeat
         if last_hb.tzinfo is None:
-            last_hb = last_hb.replace(tzinfo=timezone.utc)
+            last_hb = last_hb.replace(tzinfo=UTC)
         delta = now - last_hb
         return delta.total_seconds() > timeout_minutes * 60
 

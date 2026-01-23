@@ -232,12 +232,13 @@ class TestCoordinationMCPServerSchemas:
         """Test that tool schemas are valid."""
         schemas = server.get_tool_schemas()
 
-        assert len(schemas) == 4
+        assert len(schemas) == 5
         tool_names = [s["name"] for s in schemas]
         assert "coord_publish_message" in tool_names
         assert "coord_check_messages" in tool_names
         assert "coord_ack_message" in tool_names
         assert "coord_get_presence" in tool_names
+        assert "coord_get_notifications" in tool_names
 
     def test_publish_schema_has_required_fields(
         self,
@@ -303,7 +304,7 @@ class TestCoordinationMCPServerRequestHandling:
 
         assert response["id"] == 2
         assert "result" in response
-        assert len(response["result"]["tools"]) == 4
+        assert len(response["result"]["tools"]) == 5
 
     @pytest.mark.asyncio
     async def test_handle_tools_call_publish(

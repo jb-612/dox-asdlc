@@ -18,7 +18,7 @@ from src.infrastructure.coordination.client import (
     generate_message_id,
 )
 from src.infrastructure.coordination.config import CoordinationConfig
-from src.infrastructure.coordination.types import MessageType
+from src.infrastructure.coordination.types import MessageType, NotificationEvent
 
 
 class TestGenerateMessageId:
@@ -1594,3 +1594,329 @@ class TestCoordinationClientStats:
             await client.get_stats()
 
         assert "Failed to get stats" in str(exc_info.value)
+
+
+class TestCoordinationClientQueueNotification:
+    """Tests for notification queuing functionality."""
+
+    @pytest.fixture
+    def config(self) -> CoordinationConfig:
+        """Create test configuration."""
+        return CoordinationConfig(key_prefix="test")
+
+    @pytest.fixture
+    def sample_notification(self) -> NotificationEvent:
+        """Create sample notification event."""
+        return NotificationEvent(
+            event="message_published",
+            message_id="msg-test123",
+            msg_type=MessageType.READY_FOR_REVIEW,
+            from_instance="backend",
+            to_instance="orchestrator",
+            requires_ack=True,
+            timestamp=datetime(2026, 1, 23, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+    @pytest.mark.asyncio
+    async def test_queue_notification_success(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test successful notification queuing."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lpush = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[1, True])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        result = await client.queue_notification("orchestrator", sample_notification)
+
+        assert result is True
+        mock_pipeline.lpush.assert_called_once()
+        mock_pipeline.expire.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_queue_notification_uses_correct_key(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test that queue_notification uses the correct Redis key."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lpush = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[1, True])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        await client.queue_notification("frontend", sample_notification)
+
+        # Check that lpush was called with correct key
+        lpush_call = mock_pipeline.lpush.call_args
+        assert lpush_call[0][0] == "test:notifications:frontend"
+
+    @pytest.mark.asyncio
+    async def test_queue_notification_redis_error(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test queue_notification handles Redis errors."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lpush = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(
+            side_effect=redis.RedisError("Connection lost")
+        )
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        with pytest.raises(CoordinationError) as exc_info:
+            await client.queue_notification("orchestrator", sample_notification)
+
+        assert "Failed to queue notification" in str(exc_info.value)
+
+
+class TestCoordinationClientPopNotifications:
+    """Tests for notification pop functionality."""
+
+    @pytest.fixture
+    def config(self) -> CoordinationConfig:
+        """Create test configuration."""
+        return CoordinationConfig(key_prefix="test")
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_success(
+        self,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test successful notification pop."""
+        import json
+
+        notification_json = json.dumps({
+            "event": "message_published",
+            "message_id": "msg-abc123",
+            "type": "READY_FOR_REVIEW",
+            "from": "backend",
+            "to": "orchestrator",
+            "requires_ack": True,
+            "timestamp": "2026-01-23T12:00:00Z",
+        })
+
+        mock_redis = AsyncMock(spec=redis.Redis)
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lrange = MagicMock()
+        mock_pipeline.delete = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[[notification_json], 1])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        notifications = await client.pop_notifications("orchestrator")
+
+        assert len(notifications) == 1
+        assert notifications[0].message_id == "msg-abc123"
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_empty_queue(
+        self,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test pop_notifications with empty queue."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lrange = MagicMock()
+        mock_pipeline.delete = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[[], 0])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        notifications = await client.pop_notifications("orchestrator")
+
+        assert len(notifications) == 0
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_with_parse_error(
+        self,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test that pop_notifications handles parse errors gracefully."""
+        import json
+
+        valid_notification = json.dumps({
+            "event": "message_published",
+            "message_id": "msg-valid",
+            "type": "GENERAL",
+            "from": "backend",
+            "to": "orchestrator",
+            "requires_ack": False,
+            "timestamp": "2026-01-23T12:00:00Z",
+        })
+
+        mock_redis = AsyncMock(spec=redis.Redis)
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lrange = MagicMock()
+        mock_pipeline.delete = MagicMock()
+        # Return one valid and one invalid JSON
+        mock_pipeline.execute = AsyncMock(return_value=[
+            [valid_notification, "invalid json {"],
+            1
+        ])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        # Should not raise, just skip invalid entries
+        notifications = await client.pop_notifications("orchestrator")
+
+        assert len(notifications) == 1
+        assert notifications[0].message_id == "msg-valid"
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_redis_error(
+        self,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test pop_notifications handles Redis errors."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lrange = MagicMock()
+        mock_pipeline.delete = MagicMock()
+        mock_pipeline.execute = AsyncMock(
+            side_effect=redis.RedisError("Connection lost")
+        )
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        with pytest.raises(CoordinationError) as exc_info:
+            await client.pop_notifications("orchestrator")
+
+        assert "Failed to pop notifications" in str(exc_info.value)
+
+
+class TestCoordinationClientQueueIfOffline:
+    """Tests for _queue_if_offline helper."""
+
+    @pytest.fixture
+    def config(self) -> CoordinationConfig:
+        """Create test configuration."""
+        return CoordinationConfig(key_prefix="test")
+
+    @pytest.fixture
+    def sample_notification(self) -> NotificationEvent:
+        """Create sample notification event."""
+        return NotificationEvent(
+            event="message_published",
+            message_id="msg-test123",
+            msg_type=MessageType.READY_FOR_REVIEW,
+            from_instance="backend",
+            to_instance="orchestrator",
+            requires_ack=True,
+            timestamp=datetime(2026, 1, 23, 12, 0, 0, tzinfo=timezone.utc),
+        )
+
+    @pytest.mark.asyncio
+    async def test_queue_if_offline_queues_for_offline_instance(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test that notification is queued when instance is offline."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        # Presence shows no active instances
+        mock_redis.hgetall = AsyncMock(return_value={})
+
+        # Setup pipeline for queue_notification
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lpush = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[1, True])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        await client._queue_if_offline("orchestrator", sample_notification)
+
+        # Should have called lpush (queue_notification was invoked)
+        mock_pipeline.lpush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_queue_if_offline_skips_for_online_instance(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test that notification is NOT queued when instance is online."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        # Presence shows orchestrator as active
+        mock_redis.hgetall = AsyncMock(return_value={
+            "orchestrator.active": "1",
+            "orchestrator.session_id": "session-123",
+            "orchestrator.last_heartbeat": datetime.now(timezone.utc).isoformat(),
+        })
+
+        # Setup pipeline - should NOT be used for queueing
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.lpush = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(return_value=[1, True])
+        mock_redis.pipeline = MagicMock(return_value=mock_pipeline)
+
+        client = CoordinationClient(mock_redis, config)
+
+        await client._queue_if_offline("orchestrator", sample_notification)
+
+        # Should NOT have called lpush (queue_notification NOT invoked)
+        mock_pipeline.lpush.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_queue_if_offline_handles_errors_gracefully(
+        self,
+        config: CoordinationConfig,
+        sample_notification: NotificationEvent,
+    ) -> None:
+        """Test that errors in _queue_if_offline don't propagate."""
+        mock_redis = AsyncMock(spec=redis.Redis)
+
+        # Presence check fails
+        mock_redis.hgetall = AsyncMock(
+            side_effect=redis.RedisError("Connection lost")
+        )
+
+        client = CoordinationClient(mock_redis, config)
+
+        # Should not raise - errors are logged but not propagated
+        await client._queue_if_offline("orchestrator", sample_notification)

@@ -22,6 +22,15 @@ redis_available() {
     redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q "PONG"
 }
 
+# Redis configuration
+REDIS_HOST="${REDIS_HOST:-localhost}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+
+# Check if Redis is available
+redis_available() {
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q "PONG"
+}
+
 usage() {
     echo "Usage: source scripts/cli-identity.sh <backend|frontend|orchestrator>"
     echo ""
@@ -62,6 +71,61 @@ update_status() {
     fi
 }
 
+# Check and display pending notifications for an instance
+check_pending_notifications() {
+    local instance="$1"
+
+    # Skip if Redis not available
+    if ! redis_available; then
+        return 0
+    fi
+
+    # Source common.sh for the Python helper
+    source "$SCRIPT_DIR/coordination/lib/common.sh" 2>/dev/null || return 0
+
+    # Check if Python coordination is available
+    if ! check_python_coordination_available 2>/dev/null; then
+        return 0
+    fi
+
+    # Set CLAUDE_INSTANCE_ID temporarily if not already set
+    local orig_instance="${CLAUDE_INSTANCE_ID:-}"
+    export CLAUDE_INSTANCE_ID="$instance"
+
+    # Call the Python function and parse result
+    local result
+    result=$(call_python_pop_notifications 2>/dev/null) || {
+        export CLAUDE_INSTANCE_ID="$orig_instance"
+        return 0
+    }
+
+    # Restore original instance ID
+    [[ -n "$orig_instance" ]] && export CLAUDE_INSTANCE_ID="$orig_instance"
+
+    # Parse the JSON result
+    local count
+    count=$(echo "$result" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('count', 0))" 2>/dev/null) || count=0
+
+    if [[ "$count" -gt 0 ]]; then
+        echo ""
+        echo "=== NOTIFICATIONS ($count pending) ==="
+        # Display each notification summary
+        echo "$result" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for n in d.get('notifications', []):
+    msg_type = n.get('type', 'UNKNOWN')
+    from_inst = n.get('from', '?')
+    to_inst = n.get('to', '?')
+    msg_id = n.get('message_id', '?')
+    print(f'  [{msg_type}] {from_inst} -> {to_inst}: {msg_id}')
+" 2>/dev/null
+        echo ""
+        echo "Run './scripts/coordination/check-messages.sh --pending' for details."
+        echo ""
+    fi
+}
+
 main() {
     local instance="${1:-}"
 
@@ -84,6 +148,7 @@ main() {
             echo "Branch prefix: ui/"
             echo "Can merge to main: No"
             update_status "frontend" "true"
+            check_pending_notifications "frontend"
             ;;
         backend|agent)
             git config user.name "Claude Backend"
@@ -98,6 +163,7 @@ main() {
             echo "Branch prefix: agent/"
             echo "Can merge to main: No"
             update_status "backend" "true"
+            check_pending_notifications "backend"
             ;;
         orchestrator)
             # Master agent uses Claude's default git identity
@@ -122,6 +188,7 @@ main() {
             echo "Can merge to main: Yes"
             echo "Can modify project meta: Yes"
             update_status "orchestrator" "true"
+            check_pending_notifications "orchestrator"
             ;;
         deactivate)
             # Deactivate the current instance

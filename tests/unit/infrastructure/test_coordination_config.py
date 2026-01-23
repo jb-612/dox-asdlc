@@ -145,6 +145,24 @@ class TestCoordinationConfigKeyGeneration:
         channel = config.broadcast_channel()
         assert channel == "test:notify:all"
 
+    def test_notification_queue_key(self, config: CoordinationConfig) -> None:
+        """Test notification queue key generation."""
+        key = config.notification_queue_key("backend")
+        assert key == "test:notifications:backend"
+
+    def test_notification_queue_key_different_instances(
+        self, config: CoordinationConfig
+    ) -> None:
+        """Test notification queue keys are unique per instance."""
+        key1 = config.notification_queue_key("backend")
+        key2 = config.notification_queue_key("frontend")
+        key3 = config.notification_queue_key("orchestrator")
+
+        assert key1 != key2 != key3
+        assert "backend" in key1
+        assert "frontend" in key2
+        assert "orchestrator" in key3
+
 
 class TestCoordinationConfigTTL:
     """Tests for TTL calculations."""

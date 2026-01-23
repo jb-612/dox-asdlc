@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
 
 from src.core.redis_client import get_redis_client
 from src.infrastructure.coordination.client import CoordinationClient

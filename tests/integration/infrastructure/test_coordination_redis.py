@@ -594,3 +594,175 @@ class TestStatistics:
         # Should have at least these messages
         assert stats.total_messages >= 2
         assert stats.pending_messages >= 1
+
+
+class TestNotificationQueue:
+    """Integration tests for notification queue operations."""
+
+    @pytest.mark.asyncio
+    async def test_queue_notification_stores_in_redis(
+        self,
+        client: CoordinationClient,
+        redis_client: redis.Redis,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test that queue_notification stores in Redis LIST."""
+        notification = NotificationEvent(
+            event="message_published",
+            message_id="msg-queue-test",
+            msg_type=MessageType.READY_FOR_REVIEW,
+            from_instance="backend",
+            to_instance="orchestrator",
+            requires_ack=True,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        result = await client.queue_notification("orchestrator", notification)
+        assert result is True
+
+        # Verify in Redis
+        queue_key = config.notification_queue_key("orchestrator")
+        length = await redis_client.llen(queue_key)
+        assert length >= 1
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_retrieves_and_clears(
+        self,
+        client: CoordinationClient,
+        redis_client: redis.Redis,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test that pop_notifications retrieves and clears queue."""
+        # Queue some notifications
+        for i in range(3):
+            notification = NotificationEvent(
+                event="message_published",
+                message_id=f"msg-pop-test-{i}",
+                msg_type=MessageType.GENERAL,
+                from_instance="backend",
+                to_instance="test-pop-instance",
+                requires_ack=False,
+                timestamp=datetime.now(timezone.utc),
+            )
+            await client.queue_notification("test-pop-instance", notification)
+
+        # Pop notifications
+        notifications = await client.pop_notifications("test-pop-instance")
+
+        assert len(notifications) == 3
+
+        # Verify queue is empty
+        queue_key = config.notification_queue_key("test-pop-instance")
+        length = await redis_client.llen(queue_key)
+        assert length == 0
+
+    @pytest.mark.asyncio
+    async def test_pop_notifications_empty_queue(
+        self,
+        client: CoordinationClient,
+    ) -> None:
+        """Test pop_notifications with empty queue."""
+        notifications = await client.pop_notifications("nonexistent-instance")
+        assert len(notifications) == 0
+
+    @pytest.mark.asyncio
+    async def test_publish_message_queues_for_offline_instance(
+        self,
+        client: CoordinationClient,
+        redis_client: redis.Redis,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test that publish_message queues notification for offline instance."""
+        # Ensure target instance is not registered (offline)
+        # Publish a message to the offline instance
+        unique_id = f"offline-test-{datetime.now().timestamp()}"
+        await client.publish_message(
+            msg_type=MessageType.GENERAL,
+            subject="Test for offline",
+            description="Test",
+            from_instance="backend",
+            to_instance=unique_id,
+            requires_ack=False,
+        )
+
+        # Verify notification was queued
+        queue_key = config.notification_queue_key(unique_id)
+        length = await redis_client.llen(queue_key)
+        assert length == 1
+
+        # Pop and verify content
+        notifications = await client.pop_notifications(unique_id)
+        assert len(notifications) == 1
+        assert notifications[0].to_instance == unique_id
+
+    @pytest.mark.asyncio
+    async def test_publish_message_skips_for_online_instance(
+        self,
+        client: CoordinationClient,
+        redis_client: redis.Redis,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test that publish_message doesn't queue for online instance."""
+        # Register the target instance as online
+        unique_id = f"online-test-{datetime.now().timestamp()}"
+        await client.register_instance(unique_id, "session-test")
+
+        # Clear any existing notifications
+        await client.pop_notifications(unique_id)
+
+        # Publish a message
+        await client.publish_message(
+            msg_type=MessageType.GENERAL,
+            subject="Test for online",
+            description="Test",
+            from_instance="backend",
+            to_instance=unique_id,
+            requires_ack=False,
+        )
+
+        # Verify notification was NOT queued (instance is online)
+        queue_key = config.notification_queue_key(unique_id)
+        length = await redis_client.llen(queue_key)
+        assert length == 0
+
+        # Cleanup
+        await client.unregister_instance(unique_id)
+
+    @pytest.mark.asyncio
+    async def test_full_notification_cycle(
+        self,
+        client: CoordinationClient,
+        redis_client: redis.Redis,
+        config: CoordinationConfig,
+    ) -> None:
+        """Test full cycle: publish -> queue -> pop."""
+        target_instance = f"full-cycle-{datetime.now().timestamp()}"
+
+        # 1. Target is offline, publish message
+        msg = await client.publish_message(
+            msg_type=MessageType.READY_FOR_REVIEW,
+            subject="Full cycle test",
+            description="Testing the full notification cycle",
+            from_instance="backend",
+            to_instance=target_instance,
+            requires_ack=True,
+        )
+
+        # 2. Verify notification queued
+        queue_key = config.notification_queue_key(target_instance)
+        length = await redis_client.llen(queue_key)
+        assert length == 1
+
+        # 3. Pop notifications (simulating session start)
+        notifications = await client.pop_notifications(target_instance)
+
+        assert len(notifications) == 1
+        assert notifications[0].message_id == msg.id
+        assert notifications[0].msg_type == MessageType.READY_FOR_REVIEW
+        assert notifications[0].from_instance == "backend"
+        assert notifications[0].to_instance == target_instance
+        assert notifications[0].requires_ack is True
+
+        # 4. Verify queue is now empty
+        length = await redis_client.llen(queue_key)
+        assert length == 0
