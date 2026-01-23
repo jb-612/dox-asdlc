@@ -14,85 +14,94 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ### T01: Define RLM data models
 
 **File:** `src/workers/rlm/models.py`
-**Test:** `tests/unit/test_rlm_models.py`
+**Test:** `tests/unit/rlm/test_rlm_models.py`
 
-- [ ] Define `Finding` dataclass
-- [ ] Define `Citation` dataclass
-- [ ] Define `ExplorationStep` dataclass
-- [ ] Define `ExplorationTrajectory` dataclass
-- [ ] Define `RLMUsage` dataclass
-- [ ] Define `RLMResult` dataclass
-- [ ] Define `GrepMatch` dataclass
-- [ ] Add JSON serialization methods
-- [ ] Write unit tests for all models
+- [x] Define `Finding` dataclass
+- [x] Define `Citation` dataclass
+- [x] Define `ExplorationStep` dataclass
+- [x] Define `ExplorationTrajectory` dataclass
+- [x] Define `RLMUsage` dataclass
+- [x] Define `RLMResult` dataclass
+- [x] Define `GrepMatch` dataclass
+- [x] Define `ToolCall` dataclass
+- [x] Add JSON serialization methods
+- [x] Write unit tests for all models (32 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
 ### T02: Implement SubCallBudgetManager
 
 **File:** `src/workers/rlm/budget_manager.py`
-**Test:** `tests/unit/test_budget_manager.py`
+**Test:** `tests/unit/rlm/test_budget_manager.py`
 
-- [ ] Create `SubCallBudgetManager` class
-- [ ] Track total sub-calls used
-- [ ] Track per-iteration sub-calls
-- [ ] Implement `can_make_call()` check
-- [ ] Implement `record_call()` method
-- [ ] Implement `reset_iteration()` for new iteration
-- [ ] Raise `BudgetExceededError` when exceeded
-- [ ] Write unit tests
+- [x] Create `SubCallBudgetManager` class
+- [x] Track total sub-calls used
+- [x] Track per-iteration sub-calls
+- [x] Implement `can_make_call()` check
+- [x] Implement `record_call()` method
+- [x] Implement `reset_iteration()` for new iteration
+- [x] Raise `BudgetExceededError` when exceeded
+- [x] Write unit tests (34 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
 ### T03: Implement SubCallCache
 
 **File:** `src/workers/rlm/cache.py`
-**Test:** `tests/unit/test_subcall_cache.py`
+**Test:** `tests/unit/rlm/test_subcall_cache.py`
 
-- [ ] Create `SubCallCache` class
-- [ ] Implement cache key generation (hash of prompt + context)
-- [ ] Implement `get()` method
-- [ ] Implement `set()` method
-- [ ] Track cache hit statistics
-- [ ] Support cache clearing
-- [ ] Write unit tests
+- [x] Create `SubCallCache` class
+- [x] Implement cache key generation (hash of prompt + context)
+- [x] Implement `get()` method
+- [x] Implement `set()` method
+- [x] Track cache hit statistics
+- [x] Support cache clearing
+- [x] Write unit tests (35 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
 ### T04: Implement REPLToolSurface - File Operations
 
 **File:** `src/workers/rlm/tools/file_tools.py`
-**Test:** `tests/unit/test_rlm_file_tools.py`
+**Test:** `tests/unit/rlm/test_rlm_file_tools.py`
 
-- [ ] Implement `list_files()` with glob pattern support
-- [ ] Implement `read_file()` with line range support
-- [ ] Implement `grep()` with context lines
-- [ ] Ensure read-only access (no writes)
-- [ ] Validate paths are within repo
-- [ ] Write unit tests with file fixtures
+- [x] Implement `list_files()` with glob pattern support
+- [x] Implement `read_file()` with line range support
+- [x] Implement `grep()` with context lines
+- [x] Implement `file_exists()` and `get_file_info()`
+- [x] Ensure read-only access (no writes)
+- [x] Validate paths are within repo (sandbox)
+- [x] Write unit tests with file fixtures (39 tests)
 
 **Estimate:** 1.5h
+**Status:** COMPLETE
 
 ---
 
 ### T05: Implement REPLToolSurface - Symbol Operations
 
 **File:** `src/workers/rlm/tools/symbol_tools.py`
-**Test:** `tests/unit/test_rlm_symbol_tools.py`
+**Test:** `tests/unit/rlm/test_rlm_symbol_tools.py`
 
-- [ ] Implement `extract_symbols()` using P03-F02 parsers
-- [ ] Implement `parse_ast()` using P03-F02 parsers
-- [ ] Handle unsupported file types
-- [ ] Handle parse errors gracefully
-- [ ] Write unit tests
+- [x] Implement `extract_symbols()` using P03-F02 parsers
+- [x] Implement `parse_ast()` using P03-F02 parsers
+- [x] Implement `find_symbol()` and `find_symbols_by_kind()`
+- [x] Implement `get_function_signature()` and `get_imports()`
+- [x] Handle unsupported file types
+- [x] Handle parse errors gracefully
+- [x] Write unit tests (32 tests)
 
 **Estimate:** 1h
+**Status:** COMPLETE
 
 ---
 
@@ -215,14 +224,17 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 
 **Files:** `src/core/exceptions.py`, `src/workers/rlm/config.py`
 
-- [ ] Add `RLMError` base exception
-- [ ] Add `BudgetExceededError`
-- [ ] Add `RLMTimeoutError`
-- [ ] Create `RLMConfig` dataclass
-- [ ] Load from environment variables
-- [ ] Document configuration options
+- [x] Add `RLMError` base exception
+- [x] Add `BudgetExceededError`
+- [x] Add `RLMTimeoutError`
+- [x] Add `RLMToolError` exception
+- [x] Add `RLMCacheError` exception
+- [x] Create `RLMConfig` dataclass
+- [x] Load from environment variables
+- [x] Document configuration options
 
 **Estimate:** 30min
+**Status:** COMPLETE
 
 ---
 
@@ -243,21 +255,22 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 
 ## Progress
 
-- **Started**: (not started)
-- **Tasks Complete**: 0/14
-- **Percentage**: 0%
-- **Status**: PENDING
-- **Blockers**: Depends on P03-F01 and P03-F02 for models and parsers
+- **Started**: 2026-01-23
+- **Tasks Complete**: 6/14
+- **Percentage**: 43%
+- **Status**: IN_PROGRESS
+- **Blockers**: None (P03-F01 and P03-F02 complete)
+- **Tests Passing**: 172 tests
 
 ## Task Summary
 
 | Task | Description | Estimate | Status |
 |------|-------------|----------|--------|
-| T01 | RLM data models | 1h | [ ] |
-| T02 | SubCallBudgetManager | 1h | [ ] |
-| T03 | SubCallCache | 1h | [ ] |
-| T04 | File operation tools | 1.5h | [ ] |
-| T05 | Symbol operation tools | 1h | [ ] |
+| T01 | RLM data models | 1h | [x] |
+| T02 | SubCallBudgetManager | 1h | [x] |
+| T03 | SubCallCache | 1h | [x] |
+| T04 | File operation tools | 1.5h | [x] |
+| T05 | Symbol operation tools | 1h | [x] |
 | T06 | LLM query tool | 1.5h | [ ] |
 | T07 | REPLToolSurface registry | 30min | [ ] |
 | T08 | RLMAgent | 2h | [ ] |
@@ -265,7 +278,7 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 | T10 | Audit trail generation | 1h | [ ] |
 | T11 | Trigger detection | 1h | [ ] |
 | T12 | AgentRunner integration | 1.5h | [ ] |
-| T13 | Exceptions and configuration | 30min | [ ] |
+| T13 | Exceptions and configuration | 30min | [x] |
 | T14 | Integration tests | 2h | [ ] |
 
 **Total Estimated Time**: 17 hours
