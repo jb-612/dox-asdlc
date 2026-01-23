@@ -46,6 +46,13 @@ logs/
 # Claude Code local settings (user-specific permissions)
 .claude/settings.local.json
 
+# Coordination runtime files (now in Redis)
+.claude/coordination/messages/
+.claude/coordination/pending-acks/
+
+# MCP configuration (user-specific)
+.mcp.json
+
 # Redis data (local dev)
 dump.rdb
 
