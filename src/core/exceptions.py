@@ -188,7 +188,12 @@ class RLMError(ASDLCError):
 
 
 class BudgetExceededError(RLMError):
-    """Raised when RLM sub-call budget is exhausted."""
+    """Raised when RLM sub-call budget is exhausted.
+
+    Attributes:
+        budget_limit: Maximum sub-calls allowed
+        subcalls_used: Number of sub-calls already made
+    """
 
     def __init__(
         self,
@@ -205,7 +210,12 @@ class BudgetExceededError(RLMError):
 
 
 class RLMTimeoutError(RLMError):
-    """Raised when RLM exploration exceeds time limit."""
+    """Raised when RLM exploration exceeds time limit.
+
+    Attributes:
+        timeout_seconds: Configured timeout value
+        elapsed_seconds: Actual elapsed time
+    """
 
     def __init__(
         self,
@@ -215,10 +225,7 @@ class RLMTimeoutError(RLMError):
     ) -> None:
         super().__init__(
             message,
-            details={
-                "timeout_seconds": timeout_seconds,
-                "elapsed_seconds": elapsed_seconds,
-            },
+            details={"timeout_seconds": timeout_seconds, "elapsed_seconds": elapsed_seconds},
         )
         self.timeout_seconds = timeout_seconds
         self.elapsed_seconds = elapsed_seconds
