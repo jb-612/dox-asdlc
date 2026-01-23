@@ -54,7 +54,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture
 def test_prefix() -> str:
     """Generate unique prefix for test isolation."""
-    return f"test-{uuid.uuid4().hex[:8]}:"
+    return f"test-{uuid.uuid4().hex[:8]}"
 
 
 @pytest.fixture
@@ -64,8 +64,8 @@ def config(test_prefix: str) -> CoordinationConfig:
         redis_host=os.environ.get("REDIS_HOST", "localhost"),
         redis_port=int(os.environ.get("REDIS_PORT", 6379)),
         key_prefix=test_prefix,
-        message_ttl_seconds=300,  # 5 minutes for tests
-        staleness_seconds=60,
+        message_ttl_days=1,  # Short TTL for tests
+        presence_timeout_minutes=1,
         timeline_max_size=100,
     )
 
@@ -79,7 +79,7 @@ async def redis_client(config: CoordinationConfig) -> AsyncGenerator[redis.Redis
     )
     yield client
     # Cleanup: delete all test keys
-    keys = await client.keys(f"{config.key_prefix}*")
+    keys = await client.keys(f"{config.key_prefix}:*")
     if keys:
         await client.delete(*keys)
     await client.aclose()
@@ -119,7 +119,7 @@ class TestPublishAndQuery:
         )
 
         # Verify message exists in Redis
-        msg_key = f"{config.key_prefix}msg:{msg.id}"
+        msg_key = f"{config.key_prefix}:msg:{msg.id}"
         exists = await redis_client.exists(msg_key)
         assert exists
 
@@ -127,8 +127,8 @@ class TestPublishAndQuery:
         data = await redis_client.hgetall(msg_key)
         assert data["type"] == "GENERAL"
         assert data["subject"] == "Test Subject"
-        assert data["from_instance"] == "backend"
-        assert data["to_instance"] == "orchestrator"
+        assert data["from"] == "backend"
+        assert data["to"] == "orchestrator"
 
     @pytest.mark.asyncio
     async def test_publish_message_adds_to_timeline(
@@ -147,7 +147,7 @@ class TestPublishAndQuery:
         )
 
         # Verify in timeline
-        timeline_key = f"{config.key_prefix}timeline"
+        timeline_key = f"{config.key_prefix}:timeline"
         score = await redis_client.zscore(timeline_key, msg.id)
         assert score is not None
 
@@ -168,7 +168,7 @@ class TestPublishAndQuery:
         )
 
         # Verify in inbox
-        inbox_key = f"{config.key_prefix}inbox:frontend"
+        inbox_key = f"{config.key_prefix}:inbox:frontend"
         is_member = await redis_client.sismember(inbox_key, msg.id)
         assert is_member
 
@@ -190,7 +190,7 @@ class TestPublishAndQuery:
         )
 
         # Verify in pending
-        pending_key = f"{config.key_prefix}pending"
+        pending_key = f"{config.key_prefix}:pending"
         is_pending = await redis_client.sismember(pending_key, msg.id)
         assert is_pending
 
@@ -212,7 +212,7 @@ class TestPublishAndQuery:
         )
 
         # Verify NOT in pending
-        pending_key = f"{config.key_prefix}pending"
+        pending_key = f"{config.key_prefix}:pending"
         is_pending = await redis_client.sismember(pending_key, msg.id)
         assert not is_pending
 
@@ -331,7 +331,7 @@ class TestAcknowledgment:
         )
 
         # Verify in pending
-        pending_key = f"{config.key_prefix}pending"
+        pending_key = f"{config.key_prefix}:pending"
         assert await redis_client.sismember(pending_key, msg.id)
 
         # Acknowledge
@@ -369,10 +369,10 @@ class TestAcknowledgment:
         )
 
         # Verify fields updated
-        msg_key = f"{config.key_prefix}msg:{msg.id}"
+        msg_key = f"{config.key_prefix}:msg:{msg.id}"
         data = await redis_client.hgetall(msg_key)
 
-        assert data["acknowledged"] == "True"
+        assert data["acknowledged"] == "1"
         assert data["ack_by"] == "orchestrator"
         assert data.get("ack_comment") == "Looks good!"
         assert "ack_timestamp" in data
@@ -430,11 +430,11 @@ class TestPresence:
         )
 
         # Verify in presence hash
-        presence_key = f"{config.key_prefix}presence"
+        presence_key = f"{config.key_prefix}:presence"
         data = await redis_client.hgetall(presence_key)
 
         assert "backend.active" in data
-        assert data["backend.active"] == "True"
+        assert data["backend.active"] == "1"
         assert data["backend.session_id"] == "session-123"
 
     @pytest.mark.asyncio
@@ -449,7 +449,7 @@ class TestPresence:
         await client.register_instance("frontend", "session-456")
 
         # Get initial timestamp
-        presence_key = f"{config.key_prefix}presence"
+        presence_key = f"{config.key_prefix}:presence"
         initial = await redis_client.hget(presence_key, "frontend.last_heartbeat")
 
         # Small delay
@@ -477,7 +477,7 @@ class TestPresence:
         await client.unregister_instance("temp-instance")
 
         # Verify removed
-        presence_key = f"{config.key_prefix}presence"
+        presence_key = f"{config.key_prefix}:presence"
         data = await redis_client.hgetall(presence_key)
 
         assert "temp-instance.active" not in data
