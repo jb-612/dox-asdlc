@@ -138,40 +138,36 @@ check_session_start() {
     echo "Checking coordination messages..."
     echo "---------------------------------"
 
-    MESSAGES_DIR="${PROJECT_ROOT}/.claude/coordination/messages"
-    PENDING_DIR="${PROJECT_ROOT}/.claude/coordination/pending-acks"
+    REDIS_HOST="${REDIS_HOST:-localhost}"
+    REDIS_PORT="${REDIS_PORT:-6379}"
 
-    if [[ -d "$MESSAGES_DIR" ]]; then
-        MESSAGE_COUNT=$(find "$MESSAGES_DIR" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
-        echo "  Total messages: $MESSAGE_COUNT"
+    if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q "PONG"; then
+        # Use Redis for coordination checks
+        MESSAGE_COUNT=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ZCARD "asdlc:coord:timeline" 2>/dev/null || echo "0")
+        echo "  Total messages (Redis): $MESSAGE_COUNT"
 
-        if [[ -d "$PENDING_DIR" ]]; then
-            PENDING_COUNT=$(find "$PENDING_DIR" -name "*.json" 2>/dev/null | wc -l | tr -d ' ')
-            if [[ "$PENDING_COUNT" -gt 0 ]]; then
-                check "No pending acknowledgments required" "false"
-                echo "  Pending ACKs: $PENDING_COUNT"
-                echo "  Run: ./scripts/coordination/check-messages.sh"
-            else
-                check "No pending acknowledgments required" "true"
-            fi
+        PENDING_COUNT=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" SCARD "asdlc:coord:pending" 2>/dev/null || echo "0")
+        if [[ "$PENDING_COUNT" -gt 0 ]]; then
+            check "No pending acknowledgments required" "false"
+            echo "  Pending ACKs: $PENDING_COUNT"
+            echo "  Run: ./scripts/coordination/check-messages.sh --pending"
         else
             check "No pending acknowledgments required" "true"
         fi
     else
-        warn "Coordination directory not found (first-time setup?)"
+        warn "Redis not available - cannot check coordination messages"
     fi
 
     echo ""
     echo "Checking file locks..."
     echo "----------------------"
 
-    LOCKS_DIR="${PROJECT_ROOT}/.claude/coordination/locks"
-
-    if [[ -d "$LOCKS_DIR" ]]; then
-        LOCK_COUNT=$(find "$LOCKS_DIR" -name "*.lock" 2>/dev/null | wc -l | tr -d ' ')
+    if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q "PONG"; then
+        # Use Redis for lock checks
+        LOCK_COUNT=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" SCARD "asdlc:coord:locks" 2>/dev/null || echo "0")
         if [[ "$LOCK_COUNT" -gt 0 ]]; then
             warn "Active file locks found: $LOCK_COUNT"
-            find "$LOCKS_DIR" -name "*.lock" -exec basename {} .lock \; 2>/dev/null | head -5
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" SMEMBERS "asdlc:coord:locks" 2>/dev/null | head -5
         else
             check "No conflicting file locks" "true"
         fi

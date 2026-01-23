@@ -271,6 +271,64 @@ emit_result() {
 }
 
 # =============================================================================
+# Redis Lock Management
+# =============================================================================
+
+# Acquire a lock in Redis
+# Args: lock_name [expire_seconds]
+acquire_lock() {
+    local lock_name="$1"
+    local expire="${2:-300}"  # Default 5 min expiry
+    local lock_key="asdlc:coord:lock:${lock_name}"
+
+    local host="${REDIS_HOST:-localhost}"
+    local port="${REDIS_PORT:-6379}"
+
+    # Try to set lock with NX (only if not exists) and EX (expiry)
+    local result
+    result=$(redis-cli -h "$host" -p "$port" SET "$lock_key" "${CLAUDE_INSTANCE_ID:-unknown}" NX EX "$expire" 2>/dev/null)
+
+    if [[ "$result" == "OK" ]]; then
+        # Also add to locks set for tracking
+        redis-cli -h "$host" -p "$port" SADD "asdlc:coord:locks" "$lock_name" > /dev/null 2>&1
+        return 0
+    fi
+    return 1
+}
+
+# Release a lock in Redis
+# Args: lock_name
+release_lock() {
+    local lock_name="$1"
+    local lock_key="asdlc:coord:lock:${lock_name}"
+
+    local host="${REDIS_HOST:-localhost}"
+    local port="${REDIS_PORT:-6379}"
+
+    redis-cli -h "$host" -p "$port" DEL "$lock_key" > /dev/null 2>&1
+    redis-cli -h "$host" -p "$port" SREM "asdlc:coord:locks" "$lock_name" > /dev/null 2>&1
+}
+
+# Check if a lock is held
+# Args: lock_name
+check_lock() {
+    local lock_name="$1"
+    local lock_key="asdlc:coord:lock:${lock_name}"
+
+    local host="${REDIS_HOST:-localhost}"
+    local port="${REDIS_PORT:-6379}"
+
+    local holder
+    holder=$(redis-cli -h "$host" -p "$port" GET "$lock_key" 2>/dev/null)
+
+    if [[ -n "$holder" ]]; then
+        echo "$holder"
+        return 0
+    fi
+    return 1
+}
+
+# =============================================================================
 # Logging Helpers
 # =============================================================================
 

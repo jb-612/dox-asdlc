@@ -11,8 +11,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-COORDINATION_DIR="$PROJECT_ROOT/.claude/coordination"
-STATUS_FILE="$COORDINATION_DIR/status.json"
+
+# Redis configuration
+REDIS_HOST="${REDIS_HOST:-localhost}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_STATUS_KEY="asdlc:coord:status"
+
+# Check if Redis is available
+redis_available() {
+    redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q "PONG"
+}
 
 usage() {
     echo "Usage: source scripts/cli-identity.sh <backend|frontend|orchestrator>"
@@ -39,32 +47,19 @@ update_status() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    if [[ ! -f "$STATUS_FILE" ]]; then
-        echo '{"backend":{"active":false},"frontend":{"active":false},"orchestrator":{"active":false}}' > "$STATUS_FILE"
-    fi
+    if redis_available; then
+        # Use Redis for status tracking
+        local active_val="0"
+        [[ "$active" == "true" ]] && active_val="1"
 
-    # Convert bash boolean to Python boolean
-    local py_active
-    if [[ "$active" == "true" ]]; then
-        py_active="True"
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+            HSET "$REDIS_STATUS_KEY" \
+            "${instance}.active" "$active_val" \
+            "${instance}.last_update" "$timestamp" \
+            > /dev/null
     else
-        py_active="False"
+        echo "Warning: Redis not available, status not persisted" >&2
     fi
-
-    # Update status using Python for reliable JSON manipulation
-    python3 -c "
-import json
-import sys
-
-with open('$STATUS_FILE', 'r') as f:
-    status = json.load(f)
-
-status['$instance']['active'] = $py_active
-status['$instance']['last_update'] = '$timestamp'
-
-with open('$STATUS_FILE', 'w') as f:
-    json.dump(status, f, indent=2)
-"
 }
 
 main() {
@@ -144,7 +139,15 @@ main() {
             fi
             ;;
         status)
-            cat "$STATUS_FILE"
+            if redis_available; then
+                echo "Instance Status (from Redis):"
+                redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" HGETALL "$REDIS_STATUS_KEY" | \
+                    paste - - | while read key value; do
+                        echo "  $key: $value"
+                    done
+            else
+                echo "Redis not available"
+            fi
             ;;
         *)
             echo "Error: Unknown instance '$instance'"
