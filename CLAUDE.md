@@ -1,266 +1,55 @@
-# aSDLC Development Project
+# aSDLC Project
 
-## Project Overview
+Agentic Software Development Lifecycle using Claude Agent SDK, Redis coordination, and bash tools.
 
-This project implements an Agentic Software Development Lifecycle (aSDLC) system using the Claude Agent SDK, Redis for event coordination, and a bash-first tool abstraction layer. The system follows Spec Driven Development principles with explicit HITL governance gates.
+## IMPORTANT: Workflow Rules
 
-## Development Approach
+1. **YOU MUST plan before code** - Create `.workitems/Pnn-Fnn-name/` with design.md, user_stories.md, tasks.md BEFORE any implementation
+2. **YOU MUST use TDD** - Write failing test first, then implement, then refactor
+3. **YOU MUST commit only complete features** - All tests pass, 100% task completion
 
-This project follows a **Spec Driven Development** workflow. No coding begins until planning artifacts are complete.
+## Commands
 
-### Workflow Rules
-
-1. **Plan Before Code**: Every feature requires completed design, user stories, and task breakdown before implementation begins.
-
-2. **TDD Execution**: Implement tasks one at a time using test-driven development. Write tests first, then implement to pass.
-
-3. **Feature Completion**: A feature is complete only when all tasks pass, E2E tests pass, linter passes, and documentation is updated.
-
-4. **Atomic Commits**: Commit only when a feature reaches 100% completion. No partial feature commits to main branch.
-
-## Subagent Selection
-
-The project uses role-specific subagents for domain-specific work. Each subagent has built-in path restrictions and Redis coordination.
-
-| User Request | Invoke Subagent | Domain |
-|--------------|-----------------|--------|
-| Backend work (workers, agents, infra) | `backend` | P01-P03, P06 |
-| Frontend work (HITL UI, React) | `frontend` | P05 |
-| Meta files, contracts, coordination | `orchestrator` | All phases |
-| Planning artifacts | `planner` | All phases |
-| TDD implementation | `implementer` | All phases |
-| Code review | `reviewer` | All phases |
-
-### Role Subagents (CLI Identity)
-
-- **backend** - Workers, orchestrator service, infrastructure (`src/workers/`, `src/orchestrator/`, `src/infrastructure/`)
-- **frontend** - HITL Web UI, React components (`docker/hitl-ui/`, `src/hitl_ui/`)
-- **orchestrator** - Coordinator with exclusive meta file access (`CLAUDE.md`, `docs/`, `contracts/`, `.claude/rules/`)
-
-### Workflow Subagents
-
-- **planner** - Creates planning artifacts (`.workitems/`)
-- **implementer** - TDD execution for tasks
-- **reviewer** - Code review and quality checks
-
-## Project Structure
-
-```
-/asdlc-project
-├── CLAUDE.md                    # This file
-├── .claude/
-│   ├── settings.json            # Claude Code settings
-│   ├── rules/                   # Development rules
-│   ├── skills/                  # Custom skills
-│   └── agents/                  # Custom subagent definitions
-├── .workitems/                  # Feature planning folders
-│   └── Pnn-Fnn-{description}/   # Per-feature planning
-│       ├── design.md            # Technical design
-│       ├── user_stories.md      # Success criteria
-│       └── tasks.md             # Atomic task breakdown
-├── docs/                        # Solution documentation
-│   ├── BRD_HTML_Diagram.md
-│   ├── Main_Features.md
-│   ├── User_Stories.md
-│   └── System_Design.md
-├── src/                         # Source code
-│   ├── orchestrator/            # Container 1: Governance
-│   ├── workers/                 # Container 2: Agent workers
-│   │   ├── agents/              # Domain agents (discovery, design, dev)
-│   │   ├── repo_mapper/         # Context pack generation
-│   │   ├── rlm/                 # Recursive LLM exploration
-│   │   └── pool/                # Worker pool framework
-│   ├── infrastructure/          # Container 3: Redis, RAG
-│   └── core/                    # Shared models, exceptions
-├── tools/                       # Bash tool wrappers
-├── tests/                       # Test suites
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-├── docker/                      # Container definitions
-│   ├── hitl-ui/                 # HITL Web UI (React SPA)
-│   ├── orchestrator/
-│   ├── workers/
-│   └── infrastructure/
-├── helm/                        # Kubernetes Helm charts
-│   └── dox-asdlc/               # Umbrella chart
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       ├── values-minikube.yaml
-│       └── charts/              # Sub-charts
-│           ├── redis/
-│           ├── chromadb/
-│           ├── orchestrator/
-│           ├── workers/
-│           └── hitl-ui/
-├── scripts/                     # Development scripts
-│   ├── coordination/            # CLI coordination scripts
-│   ├── k8s/                     # Kubernetes scripts
-│   └── orchestrator/            # Orchestrator review scripts
-└── contracts/                   # API contracts between components
-```
-
-## Work Item Naming Convention
-
-All feature work is tracked in `.workitems/` with the naming pattern:
-
-```
-Pnn-Fnn-{description}
-```
-
-Where:
-- `Pnn` = Phase or Epic number (P01, P02, etc.)
-- `Fnn` = Feature number within the phase (F01, F02, etc.)
-- `{description}` = Kebab-case feature name
-
-Example: `P01-F01-infra-setup`, `P02-F03-repo-mapper-agent`
-
-## Development Commands
-
-### Planning Phase
 ```bash
-# Create new feature work item
-./scripts/new-feature.sh P01 F01 "infra-setup"
+# Planning
+./scripts/new-feature.sh P01 F02 "feature-name"
+./scripts/check-planning.sh P01-F02-feature-name
 
-# Validate planning completeness
-./scripts/check-planning.sh P01-F01-infra-setup
-```
-
-### Implementation Phase
-```bash
-# Run tests for current feature
+# Testing
 ./tools/test.sh src/path/to/feature
-
-# Run linter
 ./tools/lint.sh src/
-
-# Run E2E tests
 ./tools/e2e.sh
+
+# Completion
+./scripts/check-completion.sh P01-F02-feature-name
 ```
 
-### Completion Phase
-```bash
-# Update feature progress
-./scripts/update-progress.sh P01-F01-infra-setup 100
+## Subagents
 
-# Validate feature completion
-./scripts/check-completion.sh P01-F01-infra-setup
+Use role-specific subagents in `.claude/agents/`:
 
-# Commit completed feature
-git add -A && git commit -m "feat(P01-F01): infra-setup complete"
+| Task | Subagent |
+|------|----------|
+| Backend (workers, infra) | `backend` |
+| Frontend (HITL UI) | `frontend` |
+| Meta files, contracts | `orchestrator` |
+
+## Path Restrictions
+
+- **backend**: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `.workitems/P01-P03,P06`
+- **frontend**: `docker/hitl-ui/`, `src/hitl_ui/`, `.workitems/P05-*`
+- **orchestrator**: All paths, exclusive: `CLAUDE.md`, `docs/`, `contracts/`, `.claude/rules/`
+
+## Work Item Format
+
+```
+.workitems/Pnn-Fnn-{description}/
+├── design.md        # Technical approach, interfaces
+├── user_stories.md  # Acceptance criteria
+└── tasks.md         # Atomic tasks (<2hr each)
 ```
 
-### Kubernetes Development (Phase 6+)
-```bash
-# Start local Kubernetes cluster
-./scripts/k8s/start-minikube.sh
+## Related Docs
 
-# Deploy all services via Helm
-./scripts/k8s/deploy.sh
-
-# Helm operations
-helm upgrade --install dox-asdlc ./helm/dox-asdlc -f helm/dox-asdlc/values-minikube.yaml
-helm list -n dox-asdlc
-
-# Verify deployment
-kubectl get pods -n dox-asdlc
-kubectl get services -n dox-asdlc
-
-# Teardown
-./scripts/k8s/teardown.sh
-```
-
-### CLI Coordination (Trunk-Based Development)
-```bash
-# Start Claude Code and invoke the appropriate subagent for your task:
-# - backend: workers, orchestrator service, infrastructure
-# - frontend: HITL UI, React components
-# - orchestrator: meta files, docs, contracts, coordination
-claude
-
-# TBD: All CLIs commit directly to main (tests must pass)
-./tools/test.sh                    # Verify tests pass
-git add <files>
-git commit -m "feat(P01-F06): ..."  # Pre-commit hook runs tests
-git push                           # Push to main
-
-# Coordination happens automatically via subagent Redis integration
-# Each subagent checks/publishes messages as part of its workflow
-```
-
-## Phase Overview
-
-### Phase 1: Infrastructure Foundation
-- P01-F01: Infrastructure setup (Docker, Redis, directory structure)
-- P01-F02: Bash tool abstraction layer
-- P01-F03: KnowledgeStore interface and ChromaDB backend
-- P01-F04: CLI coordination with Redis backend
-- P01-F05: A2A push notifications
-
-### Phase 2: Orchestration Core
-- P02-F01: Redis event streams and consumer groups
-- P02-F02: Manager Agent and commit gateway
-- P02-F03: HITL dispatcher and decision logging
-
-### Phase 3: Agent Workers
-- P03-F01: Agent worker pool framework
-- P03-F02: Context pack generation (Repo Mapper)
-- P03-F03: RLM native implementation
-
-### Phase 4: Domain Agents
-- P04-F01: Discovery agents (PRD, Acceptance)
-- P04-F02: Design agents (Surveyor, Architect)
-- P04-F03: Development agents (UTest, Coding, Debugger, Reviewer)
-- P04-F04: Validation and Deployment agents
-
-### Phase 5: HITL and Integration
-- P05-F01: HITL Web UI
-- P05-F02: End-to-end workflow integration
-- P05-F03: Observability and metrics
-- P05-F04: Adaptive Feedback Learning (Evaluator Agent)
-- P05-F05: CLI interface
-- P05-F06: HITL UI v2 (Full SPA with React)
-
-### Phase 6: Kubernetes Platform Migration
-- P06-F01: Kubernetes base infrastructure (minikube, Helm)
-- P06-F02: Redis StatefulSet deployment
-- P06-F03: ChromaDB StatefulSet deployment (RAG service)
-- P06-F04: Stateless services deployment (orchestrator, workers, HITL-UI)
-- P06-F05: Multi-tenancy support
-
-## Current Implementation Status
-
-| Phase | Status | Features Complete |
-|-------|--------|-------------------|
-| P01: Infrastructure | ✅ Complete | F01-F05 |
-| P02: Orchestration | ✅ Complete | F01-F03 |
-| P03: Agent Workers | ✅ Complete | F01-F03 |
-| P04: Domain Agents | 🔄 In Progress | F01 in development |
-| P05: HITL & Integration | 🔄 In Progress | F01 ✅, F06 in progress |
-| P06: Kubernetes | 🔄 In Progress | F01-F04 ✅, F05 90% |
-
-## Key Principles
-
-1. **Git is authoritative** — All state derives from Git commits.
-2. **Trunk-Based Development** — All CLIs commit directly to main (tests must pass).
-3. **Bash-first tools** — All tools are bash wrappers with JSON contracts.
-4. **Path-based access control** — CLIs can only modify files in their domain.
-5. **Evidence required** — No gate advances without artifacts.
-6. **Idempotent handlers** — All event processing is retry-safe.
-7. **Continuous improvement** — HITL feedback trains the system via the Evaluator Agent.
-
-## Memory Anchors
-
-When resuming work, check:
-1. Current phase and feature in `.workitems/`
-2. Task progress in the active `tasks.md`
-3. Any blocked items or dependencies
-4. Last commit message for context
-5. `git status` for uncommitted complete work
-
-## Related Documentation
-
-- Solution Design: `docs/System_Design.md`
-- Feature Requirements: `docs/Main_Features.md`
-- User Stories: `docs/User_Stories.md`
-- Blueprint BRD: `docs/BRD_HTML_Diagram.md`
+- @docs/System_Design.md - Architecture
+- @docs/Main_Features.md - Feature specs
