@@ -4,37 +4,36 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 
 ---
 
-## 3-CLI Architecture
+## 3-CLI Architecture (Trunk-Based Development)
 
 ```
-┌─────────────────┐     ┌─────────────────┐
-│  Backend-CLI    │     │  Frontend-CLI   │
-│                 │     │                 │
-│  - Workers      │     │  - HITL UI      │
-│  - Orchestrator │     │  - Components   │
-│  - Infra        │     │  - Frontend     │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         │  READY_FOR_REVIEW     │
-         └───────────┬───────────┘
-                     ▼
-         ┌─────────────────────┐
-         │  Orchestrator-CLI   │
-         │                     │
-         │  - Code Review      │
-         │  - E2E Tests        │
-         │  - Contract Valid.  │
-         │  - Merge to main    │
-         └─────────────────────┘
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Backend-CLI    │     │  Frontend-CLI   │     │  Orchestrator   │
+│                 │     │                 │     │                 │
+│  - Workers      │     │  - HITL UI      │     │  - Meta files   │
+│  - Infra        │     │  - Components   │     │  - Coordination │
+│  - Tests        │     │  - Tests        │     │  - Build watch  │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         │     All commit directly to main               │
+         └───────────────────────┴───────────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │   pre-commit hook       │
+                    │   - Tests must pass     │
+                    │   - Path restrictions   │
+                    └─────────────────────────┘
 ```
 
 ### Instance Roles
 
 | Instance | ID | Primary Responsibility |
 |----------|-----|------------------------|
-| Backend-CLI | `backend` | Workers, orchestrator, infrastructure |
-| Frontend-CLI | `frontend` | HITL Web UI, frontend components |
-| Orchestrator-CLI | `orchestrator` | Review, E2E tests, merge to main |
+| Backend-CLI | `backend` | Workers, orchestrator service, infrastructure |
+| Frontend-CLI | `frontend` | HITL Web UI, React components |
+| Orchestrator-CLI | `orchestrator` | Meta files, coordination, build monitoring |
+
+**Note:** All CLIs can commit directly to main. See `.claude/rules/trunk-based-development.md` for details.
 
 ---
 
@@ -112,13 +111,12 @@ Ask Claude to "switch to orchestrator" or "change agent role" to re-select.
 
 The git email determines:
 - Which files you can modify (path restrictions)
-- Whether you can merge to main
 - Commit attribution (audit trail)
 
 **Enforcement layers:**
 1. `SessionStart` hook - prompts for role selection if no identity set
-2. `PreToolUse` hook - **BLOCKS** forbidden file edits and merge/push to main
-3. `pre-commit` hook - **WARNS** on git author mismatch
+2. `PreToolUse` hook - **BLOCKS** forbidden file edits (path restrictions)
+3. `pre-commit` hook - **BLOCKS** commits to main if tests fail, **WARNS** on git author mismatch
 
 ## Rule 2: File Boundaries (Path-Based Access Control)
 
@@ -134,12 +132,12 @@ The git email determines:
 - CAN read: `contracts/`, `src/core/`, `docs/`
 - CANNOT touch: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, meta files
 
-**Orchestrator-CLI (instance_id=orchestrator) — Master Agent:**
+**Orchestrator-CLI (instance_id=orchestrator) — Coordinator:**
 - EXCLUSIVE ownership of meta files (see below)
-- CAN read: All files (for review purposes)
+- CAN read: All files
 - CAN modify: Any file (no path restrictions)
-- CAN merge to main: **Yes** (only instance with this permission)
-- Primary role: Review, merge, and maintain project integrity
+- CAN commit to main: **Yes** (all CLIs can under TBD)
+- Primary role: Coordinate, monitor builds, and maintain project integrity
 
 **Meta Files (Orchestrator EXCLUSIVE ownership):**
 
@@ -163,52 +161,57 @@ The git email determines:
 - `src/core/interfaces.py` — Coordinate via messages
 - `src/core/events.py` — Coordinate via messages
 
-## Rule 3: Merge and Push Restrictions
+## Rule 3: Direct Commits to Main (TBD)
 
-**Only the Orchestrator can:**
-- Merge branches to main
-- Push to main
+**All CLIs can commit directly to main:**
+- Backend-CLI: Commits backend changes
+- Frontend-CLI: Commits frontend changes
+- Orchestrator-CLI: Commits meta file changes
 
-**Feature CLIs (Backend, Frontend):**
-- Can commit to any branch
-- Can push to any branch except main
-- Must request review for merging to main
+**Pre-commit requirements:**
+- Tests must pass (`./tools/test.sh --quick`)
+- Path restrictions are enforced
+- Git author matches CLI identity
 
-**This ensures:**
-- All changes to main go through orchestrator review
+**This enables:**
+- Faster iteration without review bottleneck
+- Individual accountability per CLI
 - Audit trail via git author identity
-- Quality gates (tests, linting) are enforced
 
-## Rule 4: Feature Development Workflow
+See `.claude/rules/trunk-based-development.md` for full TBD guidelines.
 
-**For Backend-CLI and Frontend-CLI:**
+## Rule 4: Feature Development Workflow (TBD)
 
-1. **Start Session (use launcher script):**
+**For all CLIs:**
+
+1. **Start Session:**
    ```bash
-   ./start-backend.sh   # For backend development
-   # OR
-   ./start-frontend.sh  # For frontend development
+   claude  # Select your role when prompted
    ```
 
 2. **Develop Feature:**
    ```bash
-   # Work on any branch (branch choice is informational, not enforced)
-   git checkout -b P03-F01-feature-name
+   # Create planning artifacts first
+   ./scripts/new-feature.sh P03 F01 "feature-name"
 
-   # Develop feature with TDD
-   # Run local tests: ./tools/test.sh
+   # Develop with TDD
+   # Run tests frequently: ./tools/test.sh
    # Run linter: ./tools/lint.sh
    ```
 
-3. **Request Review:**
+3. **Commit Directly to Main:**
    ```bash
-   # When feature complete, include the commit hash or branch name
-   ./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P03-F01-feature-name" "Feature complete" --to orchestrator
+   # Tests must pass (pre-commit hook verifies)
+   git add <files>
+   git commit -m "feat(P03-F01): description"
+   git push
    ```
 
-4. **Wait for Response:**
-   - `REVIEW_COMPLETE` → Feature merged to main
-   - `REVIEW_FAILED` → Fix issues and re-submit
+4. **If Tests Fail:**
+   - Fix the failing tests
+   - Or commit to a short-lived branch temporarily
+
+**No review request needed.** Tests are your verification.
 
 ## Rule 5: Contract Changes (Orchestrator-Mediated)
 
@@ -256,13 +259,12 @@ The git email determines:
 ./scripts/coordination/ack-message.sh <message-id>
 ```
 
-**Message Types:**
+**Active Message Types:**
 
 | Type | Direction | Purpose |
 |------|-----------|---------|
-| `READY_FOR_REVIEW` | Feature → Orchestrator | Request code review and merge |
-| `REVIEW_COMPLETE` | Orchestrator → Feature | Review passed, merged to main |
-| `REVIEW_FAILED` | Orchestrator → Feature | Review failed, lists issues |
+| `BUILD_BROKEN` | Any → All | Main branch tests failing |
+| `BUILD_FIXED` | Any → All | Main branch tests restored |
 | `CONTRACT_CHANGE_PROPOSED` | Feature → Orchestrator | Propose contract change |
 | `CONTRACT_REVIEW_NEEDED` | Orchestrator → Consumer | Request contract feedback |
 | `CONTRACT_FEEDBACK` | Consumer → Orchestrator | Provide contract feedback |
@@ -273,6 +275,14 @@ The git email determines:
 | `INTERFACE_UPDATE` | Any → Any | Shared interface notification |
 | `BLOCKING_ISSUE` | Any → Any | Work blocked, needs help |
 
+**Deprecated (TBD removes review workflow):**
+
+| Type | Status |
+|------|--------|
+| `READY_FOR_REVIEW` | Deprecated - commit directly to main |
+| `REVIEW_COMPLETE` | Deprecated - no longer needed |
+| `REVIEW_FAILED` | Deprecated - pre-commit enforces tests |
+
 ## Rule 7: Status Updates
 
 **Update your status when:**
@@ -281,25 +291,27 @@ The git email determines:
 - Encountering a blocking issue
 - Ending your session
 
-## Rule 8: Review Process (Feature CLIs)
+## Rule 8: Pre-Commit Verification (TBD)
 
-**Before requesting review, ensure:**
+**Before committing to main, ensure:**
 
 1. All tests pass: `./tools/test.sh`
 2. Linter passes: `./tools/lint.sh`
 3. Planning artifacts complete: `tasks.md` shows 100%
 4. No unresolved coordination messages
 
-**Request review:**
+**Commit directly:**
 ```bash
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<feature-id>" "Feature complete" --to orchestrator
+git add <files>
+git commit -m "feat(<feature-id>): description"
+git push
 ```
 
-**After receiving REVIEW_FAILED:**
-1. Read the failure reasons in the message
-2. Fix all listed issues
-3. Run tests again
-4. Re-submit review request
+**If pre-commit hook fails:**
+1. Read the error message
+2. Run `./tools/test.sh` to see failures
+3. Fix all issues
+4. Commit again
 
 ## Rule 9: Mock-First Development (Frontend-CLI)
 
@@ -340,39 +352,40 @@ may overwrite your identity. Ask Claude to "confirm my role" or "switch to [role
 claude
 
 # Claude will prompt you to select your role:
-# - Orchestrator (for review/merge/docs)
+# - Orchestrator (for meta files/coordination)
 # - Backend (for workers/infra)
 # - Frontend (for HITL UI)
 ```
 
-### Backend-CLI: Complete a Feature
+### Backend-CLI: Complete a Feature (TBD)
 ```bash
 # Select "Backend" when prompted at session start
-git checkout -b P03-F01-feature-name
-# ... develop feature ...
+./scripts/new-feature.sh P03 F01 "feature-name"
+# ... develop feature with TDD ...
 ./tools/test.sh && ./tools/lint.sh
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P03-F01-feature-name" "Complete" --to orchestrator
-# Wait for REVIEW_COMPLETE or REVIEW_FAILED
+git add <files>
+git commit -m "feat(P03-F01): feature-name complete"
+git push  # Direct to main!
 ```
 
-### Frontend-CLI: Complete a Feature
+### Frontend-CLI: Complete a Feature (TBD)
 ```bash
 # Select "Frontend" when prompted at session start
-git checkout -b P05-F01-feature-name
-# ... develop feature ...
+./scripts/new-feature.sh P05 F01 "feature-name"
+# ... develop feature with TDD ...
 ./tools/test.sh && ./tools/lint.sh
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "P05-F01-feature-name" "Complete" --to orchestrator
-# Wait for REVIEW_COMPLETE or REVIEW_FAILED
+git add <files>
+git commit -m "feat(P05-F01): feature-name complete"
+git push  # Direct to main!
 ```
 
-### Orchestrator-CLI: Review and Merge
+### Orchestrator-CLI: Coordinate and Monitor
 ```bash
 # Select "Orchestrator" when prompted at session start
 ./scripts/coordination/check-messages.sh --pending
-./scripts/orchestrator/review-branch.sh P03-F01-feature-name
-# If review passes:
-./scripts/orchestrator/merge-branch.sh P03-F01-feature-name
-./scripts/coordination/publish-message.sh REVIEW_COMPLETE "P03-F01" "Merged as abc123" --to backend
+# Monitor build status
+# Revert if main is broken
+# Coordinate contract changes
 ```
 
 ### Switching Roles Mid-Session
@@ -386,13 +399,17 @@ Ask Claude: "switch to orchestrator" or "change agent role"
 |-------|-------------|--------------|-----------|
 | 1 | `SessionStart` | Signals if identity selection needed | No |
 | 2 | Claude | Uses `AskUserQuestion` for role selection | Interactive |
-| 3 | `PreToolUse` | Checks path permissions, blocks merge/push to main | **Yes** |
-| 4 | `pre-commit` | Warns on git author mismatch | No (warning only) |
+| 3 | `PreToolUse` | Checks path permissions (domain boundaries) | **Yes** |
+| 4 | `pre-commit` | Runs tests on main, warns on author mismatch | **Yes** (tests) |
 
 **Identity Source:** `git config user.email` (set via interactive selection)
+
+**TBD Note:** All CLIs can commit to main. The pre-commit hook enforces test verification.
+Path restrictions still apply — CLIs can only modify files within their domain.
 
 **Parallel CLI Note:** Git config is shared at repo level. When running multiple CLIs,
 they may overwrite each other's identity. Use "confirm my role" or "switch to [role]"
 commands to re-establish identity as needed.
 
+See `.claude/rules/trunk-based-development.md` for TBD workflow details.
 See `.claude/rules/identity-selection.md` for the interactive selection flow.

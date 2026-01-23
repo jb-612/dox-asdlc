@@ -1,16 +1,15 @@
-# Orchestrator CLI Rules (Master Agent)
+# Orchestrator CLI Rules (Coordinator)
 
-These rules govern the Orchestrator CLI instance—the **master agent** with exclusive authority over project meta files and the `main` branch.
+These rules govern the Orchestrator CLI instance—the **coordinator** with exclusive authority over project meta files.
 
 ---
 
 ## Role Overview
 
-The Orchestrator CLI (master agent) is the guardian of project integrity:
+The Orchestrator CLI is the coordinator of project integrity under Trunk-Based Development:
 
 **Exclusive Ownership (meta files):**
 
-- `main` branch — only the master agent can merge to main
 - `CLAUDE.md` — project instructions for Claude
 - `README.md` — project documentation
 - `.claude/rules/` — development rules
@@ -21,22 +20,22 @@ The Orchestrator CLI (master agent) is the guardian of project integrity:
 **Shared with Feature CLIs:**
 
 - `.workitems/` — Feature CLIs create/update planning artifacts for their features
+- `main` branch — **All CLIs can commit** (TBD workflow)
 
 **Responsibilities:**
 
-- Reviewing feature work submitted by Backend-CLI and Frontend-CLI
-- Running E2E tests before any merge
-- Validating contract compatibility
-- Merging approved work to `main`
+- Monitoring build status on main branch
+- Reverting broken commits when authors are unavailable
 - Coordinating contract negotiations between CLIs
 - Maintaining and updating project documentation
 - Creating and managing planning artifacts
+- Resolving disputes between CLIs
 
 **CRITICAL:**
 
-- The Orchestrator is the ONLY instance allowed to merge/push to `main`
 - The Orchestrator is the ONLY instance allowed to modify project meta files
 - Feature CLIs (Backend, Frontend) must request changes to meta files via coordination messages
+- Under TBD, all CLIs can commit to main (tests must pass)
 
 ---
 
@@ -47,8 +46,8 @@ The Orchestrator CLI (master agent) is the guardian of project integrity:
 This sets:
 - Git email: `claude-orchestrator@asdlc.local`
 - Git name: `Claude Orchestrator`
-- Can merge to main: Yes
-- Can modify meta files: Yes
+- Can commit to main: Yes (all CLIs can under TBD)
+- Can modify meta files: Yes (exclusive)
 
 To switch to orchestrator mid-session, ask: "switch to orchestrator"
 
@@ -91,37 +90,66 @@ Feature CLIs CAN create and modify work items for their assigned features:
 
 ---
 
-## Rule 3: Review Request Processing
+## Rule 3: Build Monitoring (TBD)
 
-**Check for READY_FOR_REVIEW messages at session start:**
+**Under Trunk-Based Development, the orchestrator monitors build health:**
 
+**At session start, check build status:**
 ```bash
-./scripts/coordination/check-messages.sh --pending
+./tools/test.sh
 ```
 
-**Process each review request in order received:**
-
-1. Note the requesting instance and feature/branch name
-2. Check out the code to review
-3. Run the review workflow (see Rule 4)
-4. Publish response (REVIEW_COMPLETE or REVIEW_FAILED)
+**If main is broken:**
+1. Check recent commits to identify the cause
+2. Notify via coordination message:
+   ```bash
+   ./scripts/coordination/publish-message.sh BUILD_BROKEN "main" "Tests failing after <commit>" --to all
+   ```
+3. If the author is available, let them fix it
+4. If urgent or author unavailable, use revert authority (see Rule 4)
 
 ---
 
-## Rule 4: Review Checklist
+## Rule 4: Revert Authority
 
-**Before approving ANY merge, verify ALL of the following:**
+**The orchestrator has authority to revert commits when:**
+- Tests on main are failing
+- The commit author is unavailable
+- The fix is taking too long (blocking other CLIs)
+- Multiple commits need coordinated reverting
 
+**Revert protocol:**
+```bash
+# Identify the breaking commit
+git log --oneline -10
+
+# Revert it
+git revert <commit-hash>
+git commit -m "revert: <original-message> (tests broken)"
+
+# Notify the team
+./scripts/coordination/publish-message.sh BUILD_FIXED "main" "Reverted <hash>" --to all
+```
+
+**After reverting:**
+1. The original author can fix and re-submit
+2. No blame — focus on keeping main green
+
+---
+
+## Rule 5: Quality Advisory (Optional)
+
+**While review is not required under TBD, the orchestrator can still provide guidance:**
+
+**Advisory checklist (for complex changes):**
 ```markdown
-## Orchestrator Review Checklist
-
 ### Compliance
 
 - [ ] Work item exists: `.workitems/FEATURE_ID/`
 - [ ] Planning files committed: design.md, user_stories.md, tasks.md
 - [ ] Tasks show 100% progress
 
-### Quality Gates
+### Quality
 
 - [ ] Unit tests pass: `./tools/test.sh`
 - [ ] Linter passes: `./tools/lint.sh`
@@ -129,75 +157,23 @@ Feature CLIs CAN create and modify work items for their assigned features:
 
 ### Contract Compatibility
 
-- [ ] No contract changes without approval
-- [ ] If contracts changed: version bumped, CHANGELOG updated
+- [ ] No contract changes without coordination
 - [ ] Consumer CLI acknowledged contract changes
-
-### Code Quality
-
-- [ ] No security vulnerabilities introduced
-- [ ] Code follows project style guidelines
-- [ ] No hardcoded secrets or credentials
-- [ ] Error handling is appropriate
-
-### Merge Readiness
-
-- [ ] Commits are atomic and well-described
-- [ ] No merge conflicts with main
 ```
 
-**Use the automated review script:**
-
-```bash
-./scripts/orchestrator/review-branch.sh <branch-name>
-```
+**This is advisory, not blocking.** Pre-commit hooks enforce test verification.
 
 ---
 
-## Rule 5: E2E Test Requirement
+## Rule 6: Deprecated (TBD)
 
-**E2E tests are MANDATORY before any merge.**
+**The following rules are deprecated under Trunk-Based Development:**
 
-```bash
-./tools/e2e.sh
-```
+- Review request processing (READY_FOR_REVIEW messages)
+- Mandatory E2E tests before merge (now enforced by pre-commit)
+- Merge protocol (all CLIs can commit directly)
 
-**E2E tests must:**
-
-- Run against the feature code
-- Test integration between components
-- Verify contract compliance at runtime
-- Pass with zero failures
-
-**If E2E tests fail:**
-
-1. Do NOT merge
-2. Document failures in REVIEW_FAILED message
-3. Return to feature CLI for fixes
-
----
-
-## Rule 6: Merge Protocol
-
-**Only merge when ALL review checks pass:**
-
-```bash
-./scripts/orchestrator/merge-branch.sh <branch-name>
-```
-
-**The merge script will:**
-
-1. Verify orchestrator identity
-2. Verify review checklist passed
-3. Perform the merge (no fast-forward)
-4. Run post-merge verification
-5. Push to main (if configured)
-
-**NEVER use:**
-
-- `--force` flags
-- Fast-forward merges (use `--no-ff`)
-- Squash merges (preserve commit history)
+See `.claude/rules/trunk-based-development.md` for the new workflow.
 
 ---
 
@@ -237,47 +213,42 @@ Feature CLIs CAN create and modify work items for their assigned features:
 
 ---
 
-## Rule 9: Review Response Messages
+## Rule 9: Build Status Messages
 
-**For successful review:**
-
+**When main branch is broken:**
 ```bash
-./scripts/coordination/publish-message.sh REVIEW_COMPLETE "<feature-id>" "Merged to main as <commit-hash>" --to <requesting-cli>
+./scripts/coordination/publish-message.sh BUILD_BROKEN "main" "Description of failure" --to all
 ```
 
-**For failed review:**
-
+**When main branch is fixed:**
 ```bash
-./scripts/coordination/publish-message.sh REVIEW_FAILED "<feature-id>" "Failures: <list of issues>" --to <requesting-cli>
+./scripts/coordination/publish-message.sh BUILD_FIXED "main" "Description of fix" --to all
 ```
 
-**Required fields in REVIEW_FAILED:**
-
-- Specific test failures
-- Compliance issues found
-- Action items for the feature CLI
+**Deprecated message types (from old review workflow):**
+- `READY_FOR_REVIEW` — No longer needed
+- `REVIEW_COMPLETE` — No longer needed
+- `REVIEW_FAILED` — No longer needed
 
 ---
 
-## Rule 10: Post-Merge Verification
+## Rule 10: Periodic Build Verification
 
-**After merging to main:**
+**Periodically verify main branch stability:**
 
-1. Verify main branch is stable:
+```bash
+./tools/test.sh
+./tools/e2e.sh
+```
 
-   ```bash
-   ./tools/test.sh
-   ./tools/e2e.sh
-   ```
+**If verification fails:**
+1. Identify the breaking commit(s)
+2. Notify the team via BUILD_BROKEN message
+3. Use revert authority if needed (Rule 4)
 
-2. If verification fails:
-   - Revert the merge immediately
-   - Publish REVIEW_FAILED with post-merge issues
-   - Notify feature CLI
-
-3. If verification passes:
-   - Tag release if appropriate
-   - Update any tracking documents
+**If verification passes:**
+- Tag release if appropriate
+- Update any tracking documents
 
 ---
 
@@ -286,25 +257,26 @@ Feature CLIs CAN create and modify work items for their assigned features:
 **Session Start:**
 
 1. Select "Orchestrator" when prompted for agent role
-2. Check for pending review requests
-3. Check for pending contract approvals
-4. Process requests in FIFO order
+2. Check for pending messages: `./scripts/coordination/check-messages.sh --pending`
+3. Verify main branch stability: `./tools/test.sh`
+4. If main is broken, initiate revert if needed
 
 **Session End:**
 
-1. Complete any in-progress reviews (merge or fail)
-2. Do not leave main branch in unstable state
-3. Publish status update if reviews remain pending
+1. Verify main branch is stable
+2. Check for any unanswered coordination messages
+3. Leave notes in relevant `.workitems/` if work is in progress
 
 ---
 
 ## Message Types (Orchestrator)
 
+**Active:**
+
 | Type | Direction | Purpose |
 |------|-----------|---------|
-| READY_FOR_REVIEW | Received | Feature CLI requests review |
-| REVIEW_COMPLETE | Sent | Merge approved and completed |
-| REVIEW_FAILED | Sent | Review failed, needs fixes |
+| BUILD_BROKEN | Sent | Main branch tests failing |
+| BUILD_FIXED | Sent | Main branch restored |
 | CONTRACT_CHANGE_PROPOSED | Received | CLI proposes contract change |
 | CONTRACT_REVIEW_NEEDED | Sent | Request feedback from consumer CLI |
 | CONTRACT_FEEDBACK | Received | Consumer CLI provides feedback |
@@ -313,13 +285,28 @@ Feature CLIs CAN create and modify work items for their assigned features:
 | META_CHANGE_REQUEST | Received | Feature CLI requests meta file change |
 | META_CHANGE_COMPLETE | Sent | Meta file change completed |
 
+**Deprecated (TBD):**
+
+| Type | Status |
+|------|--------|
+| READY_FOR_REVIEW | No longer needed |
+| REVIEW_COMPLETE | No longer needed |
+| REVIEW_FAILED | No longer needed |
+
 ---
 
 ## Automation Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `./scripts/orchestrator/review-branch.sh <branch>` | Run full review checklist |
-| `./scripts/orchestrator/merge-branch.sh <branch>` | Safe merge to main |
-| `./scripts/orchestrator/run-e2e.sh` | Run E2E test suite |
+| `./tools/test.sh` | Run test suite |
+| `./tools/e2e.sh` | Run E2E test suite |
 | `./scripts/coordination/publish-message.sh` | Send coordination messages |
+| `./scripts/coordination/check-messages.sh` | Check for pending messages |
+
+**Deprecated (TBD):**
+
+| Script | Status |
+|--------|--------|
+| `./scripts/orchestrator/review-branch.sh.deprecated` | No longer needed |
+| `./scripts/orchestrator/merge-branch.sh.deprecated` | No longer needed |

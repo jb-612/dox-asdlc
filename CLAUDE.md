@@ -145,19 +145,22 @@ kubectl get services -n dox-asdlc
 ./scripts/k8s/teardown.sh
 ```
 
-### CLI Coordination (Multi-Agent)
+### CLI Coordination (Trunk-Based Development)
 ```bash
 # Start Claude Code - you'll be prompted to select your agent role:
-# - Orchestrator: review/merge, docs, contracts
+# - Orchestrator: meta files, docs, contracts, coordination
 # - Backend: workers, orchestrator service, infrastructure
 # - Frontend: HITL UI, React components
 claude
 
+# TBD: All CLIs commit directly to main (tests must pass)
+./tools/test.sh                    # Verify tests pass
+git add <files>
+git commit -m "feat(P01-F06): ..."  # Pre-commit hook runs tests
+git push                           # Push to main
+
 # Check for pending messages
 ./scripts/coordination/check-messages.sh --pending
-
-# Request review (feature CLIs)
-./scripts/coordination/publish-message.sh READY_FOR_REVIEW "<feature-id>" "<description>" --to orchestrator
 
 # Acknowledge message
 ./scripts/coordination/ack-message.sh <message-id>
@@ -219,11 +222,12 @@ claude
 ## Key Principles
 
 1. **Git is authoritative** — All state derives from Git commits.
-2. **Bash-first tools** — All tools are bash wrappers with JSON contracts.
-3. **Container isolation** — Governance has exclusive commit access.
-4. **Evidence required** — No gate advances without artifacts.
-5. **Idempotent handlers** — All event processing is retry-safe.
-6. **Continuous improvement** — HITL feedback trains the system via the Evaluator Agent.
+2. **Trunk-Based Development** — All CLIs commit directly to main (tests must pass).
+3. **Bash-first tools** — All tools are bash wrappers with JSON contracts.
+4. **Path-based access control** — CLIs can only modify files in their domain.
+5. **Evidence required** — No gate advances without artifacts.
+6. **Idempotent handlers** — All event processing is retry-safe.
+7. **Continuous improvement** — HITL feedback trains the system via the Evaluator Agent.
 
 ## Memory Anchors
 

@@ -40,9 +40,14 @@ A feature is complete only when ALL of the following pass:
 [ ] Progress marked as 100% in tasks.md
 ```
 
-## Rule 4: Commit Protocol
+## Rule 4: Commit Protocol (TBD)
 
-**Commit IMMEDIATELY when a feature reaches 100% completion.**
+**Commit directly to main when a feature reaches 100% completion.**
+
+Under Trunk-Based Development, all CLIs commit directly to main:
+- Tests must pass (enforced by pre-commit hook)
+- Path restrictions still apply
+- No review request needed
 
 Do not:
 - Batch multiple completed features into one commit
@@ -59,6 +64,8 @@ feat(Pnn-Fnn): {description}
 
 Closes #{issue} if applicable
 ```
+
+See `.claude/rules/trunk-based-development.md` for full TBD guidelines.
 
 ## Rule 5: Dependency Management
 

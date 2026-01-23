@@ -12,7 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 # Valid message types
+# Note: BUILD_BROKEN/BUILD_FIXED added for TBD workflow
+# READY_FOR_REVIEW, REVIEW_COMPLETE, REVIEW_FAILED are deprecated (TBD)
 VALID_TYPES=(
+    "BUILD_BROKEN"
+    "BUILD_FIXED"
     "CONTRACT_CHANGE_PROPOSED"
     "CONTRACT_REVIEW_NEEDED"
     "CONTRACT_FEEDBACK"
@@ -20,9 +24,9 @@ VALID_TYPES=(
     "CONTRACT_REJECTED"
     "INTERFACE_UPDATE"
     "BLOCKING_ISSUE"
-    "READY_FOR_REVIEW"
-    "REVIEW_COMPLETE"
-    "REVIEW_FAILED"
+    "READY_FOR_REVIEW"      # Deprecated: TBD removes review workflow
+    "REVIEW_COMPLETE"       # Deprecated: TBD removes review workflow
+    "REVIEW_FAILED"         # Deprecated: TBD removes review workflow
     "META_CHANGE_REQUEST"
     "META_CHANGE_COMPLETE"
     "GENERAL"

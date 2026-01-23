@@ -18,24 +18,25 @@ import subprocess
 import sys
 
 # Map git email to identity info
+# TBD: All CLIs can commit to main (tests must pass via pre-commit hook)
 IDENTITY_INFO = {
     "claude-backend@asdlc.local": {
         "instance_id": "backend",
         "role": "Backend Developer",
         "allowed": "src/workers/, src/orchestrator/, src/infrastructure/",
         "forbidden": "src/hitl_ui/, CLAUDE.md, docs/, contracts/",
-        "can_merge": False,
+        "can_merge": True,  # TBD
     },
     "claude-frontend@asdlc.local": {
         "instance_id": "frontend",
         "role": "Frontend Developer",
         "allowed": "src/hitl_ui/, .workitems/P05-*",
         "forbidden": "src/workers/, CLAUDE.md, docs/, contracts/",
-        "can_merge": False,
+        "can_merge": True,  # TBD
     },
     "claude-orchestrator@asdlc.local": {
         "instance_id": "orchestrator",
-        "role": "Orchestrator (Master Agent)",
+        "role": "Orchestrator (Coordinator)",
         "allowed": "All files",
         "forbidden": "None",
         "can_merge": True,
@@ -99,12 +100,13 @@ def main():
 
     print(f"Role: {identity['role']}")
     if instance_id == "orchestrator":
-        print("Branch: main (exclusive write access)")
+        print("Branch: main (exclusive meta file access)")
         print("Exclusive ownership: CLAUDE.md, docs/, contracts/, .claude/rules/")
-        print("Can merge to main: Yes")
+        print("Can commit to main: Yes (tests must pass)")
     else:
         print(f"Allowed: {identity['allowed']}")
         print(f"Forbidden: {identity['forbidden']}")
+        print("Can commit to main: Yes (tests must pass)")
 
     print("")
     print(f"Current branch: {current_branch or '(detached HEAD)'}")

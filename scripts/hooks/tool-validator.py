@@ -46,7 +46,7 @@ IDENTITY_RULES = {
             ".claude/skills/",
             ".workitems/P05-"
         ],
-        "can_merge": False,
+        "can_merge": True,  # TBD: All CLIs can commit to main
     },
     "frontend": {
         "forbidden_paths": [
@@ -67,7 +67,7 @@ IDENTITY_RULES = {
             ".workitems/P03-",
             ".workitems/P06-"
         ],
-        "can_merge": False,
+        "can_merge": True,  # TBD: All CLIs can commit to main
     },
     "orchestrator": {
         "forbidden_paths": [],
@@ -235,28 +235,9 @@ def main():
         if not command:
             allow()
 
-        current_branch = get_current_branch()
-
-        # Check git merge (only orchestrator can merge to main)
-        if is_git_merge_command(command):
-            if not can_merge and current_branch == "main":
-                block(
-                    f"MERGE BLOCKED\n"
-                    f"Instance '{instance_id}' cannot merge to main.\n"
-                    f"Only the orchestrator can merge to main.\n"
-                    f"Submit a READY_FOR_REVIEW message instead."
-                )
-
-        # Check git push to main (only orchestrator can push to main)
-        if is_git_push_command(command):
-            if "main" in command or "master" in command:
-                if not can_merge:
-                    block(
-                        f"PUSH TO MAIN BLOCKED\n"
-                        f"Instance '{instance_id}' cannot push to main.\n"
-                        f"Only the orchestrator can push to main."
-                    )
-
+        # TBD: All CLIs can merge/push to main
+        # Path restrictions still apply via Edit/Write checks above
+        # Pre-commit hook enforces test verification
         allow()
 
     # All other tools - allow
