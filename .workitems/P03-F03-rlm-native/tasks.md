@@ -141,17 +141,18 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ### T08: Implement RLMAgent
 
 **File:** `src/workers/rlm/agent.py`
-**Test:** `tests/unit/test_rlm_agent.py`
+**Test:** `tests/unit/rlm/test_rlm_agent.py`
 
-- [ ] Create `RLMAgent` class
-- [ ] Inject Anthropic client and tool surface
-- [ ] Design exploration prompt template
-- [ ] Implement single iteration execution
-- [ ] Parse agent output for tool calls and thoughts
-- [ ] Accumulate findings across iterations
-- [ ] Write unit tests with mocked responses
+- [x] Create `RLMAgent` class
+- [x] Inject Anthropic client and tool surface
+- [x] Design exploration prompt template
+- [x] Implement single iteration execution
+- [x] Parse agent output for tool calls and thoughts
+- [x] Accumulate findings across iterations
+- [x] Write unit tests with mocked responses (28 tests)
 
 **Estimate:** 2h
+**Status:** COMPLETE
 
 ---
 
@@ -258,11 +259,11 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 ## Progress
 
 - **Started**: 2026-01-23
-- **Tasks Complete**: 8/14
-- **Percentage**: 57%
+- **Tasks Complete**: 9/14
+- **Percentage**: 64%
 - **Status**: IN_PROGRESS
 - **Blockers**: None (P03-F01 and P03-F02 complete)
-- **Tests Passing**: 243 tests (208 + 35 new)
+- **Tests Passing**: 271 tests (243 + 28 new)
 
 ## Task Summary
 
@@ -275,6 +276,7 @@ Task breakdown for implementing the native RLM (Recursive LLM) exploration syste
 | T05 | Symbol operation tools | 1h | [x] |
 | T06 | LLM query tool | 1.5h | [x] |
 | T07 | REPLToolSurface registry | 30min | [x] |
+| T08 | RLMAgent | 2h | [x] |
 | T08 | RLMAgent | 2h | [ ] |
 | T09 | RLMOrchestrator | 2h | [ ] |
 | T10 | Audit trail generation | 1h | [ ] |

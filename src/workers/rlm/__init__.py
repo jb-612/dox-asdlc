@@ -6,6 +6,10 @@ using a sub-call budget and REPL-style tool surface.
 
 from __future__ import annotations
 
+from src.workers.rlm.agent import AgentIteration, RLMAgent
+from src.workers.rlm.budget_manager import BudgetSnapshot, SubCallBudgetManager
+from src.workers.rlm.cache import CacheEntry, CacheStats, SubCallCache
+from src.workers.rlm.config import RLMConfig
 from src.workers.rlm.models import (
     Citation,
     ExplorationStep,
@@ -18,6 +22,19 @@ from src.workers.rlm.models import (
 )
 
 __all__ = [
+    # Agent
+    "AgentIteration",
+    "RLMAgent",
+    # Budget
+    "BudgetSnapshot",
+    "SubCallBudgetManager",
+    # Cache
+    "CacheEntry",
+    "CacheStats",
+    "SubCallCache",
+    # Config
+    "RLMConfig",
+    # Models
     "Citation",
     "ExplorationStep",
     "ExplorationTrajectory",
