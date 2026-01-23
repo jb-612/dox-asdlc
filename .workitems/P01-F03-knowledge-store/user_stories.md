@@ -13,14 +13,14 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** agents can query for context without coupling to a specific implementation
 
 **Acceptance Criteria:**
-- [ ] `KnowledgeStore` protocol is defined in `src/core/interfaces.py`
-- [ ] Protocol defines `index_document(doc_id, content, metadata) -> bool`
-- [ ] Protocol defines `search(query, top_k, filters) -> list[SearchResult]`
-- [ ] Protocol defines `get_by_id(doc_id) -> Document | None`
-- [ ] Protocol defines `delete(doc_id) -> bool`
-- [ ] Protocol defines `health_check() -> bool`
-- [ ] All methods are async for non-blocking operation
-- [ ] Type hints are complete and mypy-compliant
+- [x] `KnowledgeStore` protocol is defined in `src/core/interfaces.py`
+- [x] Protocol defines `index_document(doc_id, content, metadata) -> bool`
+- [x] Protocol defines `search(query, top_k, filters) -> list[SearchResult]`
+- [x] Protocol defines `get_by_id(doc_id) -> Document | None`
+- [x] Protocol defines `delete(doc_id) -> bool`
+- [x] Protocol defines `health_check() -> bool`
+- [x] All methods are async for non-blocking operation
+- [x] Type hints are complete and mypy-compliant
 
 **Priority:** High
 
@@ -33,11 +33,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I have type-safe access to knowledge store data
 
 **Acceptance Criteria:**
-- [ ] `Document` dataclass is defined with `doc_id`, `content`, `metadata`, `embedding` fields
-- [ ] `SearchResult` dataclass is defined with `doc_id`, `content`, `metadata`, `score`, `source` fields
-- [ ] Models support JSON serialization for debugging and logging
-- [ ] Metadata supports string, int, float, and bool value types
-- [ ] Score is a float between 0.0 and 1.0 representing relevance
+- [x] `Document` dataclass is defined with `doc_id`, `content`, `metadata`, `embedding` fields
+- [x] `SearchResult` dataclass is defined with `doc_id`, `content`, `metadata`, `score`, `source` fields
+- [x] Models support JSON serialization for debugging and logging
+- [x] Metadata supports string, int, float, and bool value types
+- [x] Score is a float between 0.0 and 1.0 representing relevance
 
 **Priority:** High
 
@@ -50,15 +50,15 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** agents can store and retrieve documents in the prototype
 
 **Acceptance Criteria:**
-- [ ] `ChromaDBStore` class implements `KnowledgeStore` protocol
-- [ ] Successfully connects to ChromaDB server via HTTP
-- [ ] `index_document` stores content with metadata and generates embeddings
-- [ ] `search` returns results ranked by semantic similarity
-- [ ] `get_by_id` retrieves documents by their identifier
-- [ ] `delete` removes documents from the collection
-- [ ] `health_check` verifies backend connectivity
-- [ ] Connection errors raise `BackendConnectionError`
-- [ ] Operations handle ChromaDB-specific errors gracefully
+- [x] `ChromaDBStore` class implements `KnowledgeStore` protocol
+- [x] Successfully connects to ChromaDB server via HTTP
+- [x] `index_document` stores content with metadata and generates embeddings
+- [x] `search` returns results ranked by semantic similarity
+- [x] `get_by_id` retrieves documents by their identifier
+- [x] `delete` removes documents from the collection
+- [x] `health_check` verifies backend connectivity
+- [x] Connection errors raise `BackendConnectionError`
+- [x] Operations handle ChromaDB-specific errors gracefully
 
 **Priority:** High
 
@@ -71,11 +71,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I can choose between local and API-based embeddings
 
 **Acceptance Criteria:**
-- [ ] Default embedding uses sentence-transformers `all-MiniLM-L6-v2`
-- [ ] Embedding model is configurable via environment variable
-- [ ] Embeddings are generated consistently for indexing and search
-- [ ] Embedding errors raise `EmbeddingError` with details
-- [ ] Embedding dimensions match ChromaDB collection configuration
+- [x] Default embedding uses sentence-transformers `all-MiniLM-L6-v2`
+- [x] Embedding model is configurable via environment variable
+- [x] Embeddings are generated consistently for indexing and search
+- [x] Embedding errors raise `EmbeddingError` with details
+- [x] Embedding dimensions match ChromaDB collection configuration
 
 **Priority:** Medium
 
@@ -88,11 +88,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I can prioritize the most relevant information
 
 **Acceptance Criteria:**
-- [ ] Search returns `SearchResult` objects with `score` field
-- [ ] Scores are normalized between 0.0 (no match) and 1.0 (exact match)
-- [ ] Results are sorted by score in descending order
-- [ ] `top_k` parameter limits the number of results
-- [ ] Empty queries return empty results (not error)
+- [x] Search returns `SearchResult` objects with `score` field
+- [x] Scores are normalized between 0.0 (no match) and 1.0 (exact match)
+- [x] Results are sorted by score in descending order
+- [x] `top_k` parameter limits the number of results
+- [x] Empty queries return empty results (not error)
 
 **Priority:** High
 
@@ -105,11 +105,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I can scope searches to specific document types or epics
 
 **Acceptance Criteria:**
-- [ ] `search` accepts optional `filters` parameter
-- [ ] Filters support equality matching on metadata fields
-- [ ] Multiple filters are combined with AND logic
-- [ ] Invalid filter keys are ignored (not error)
-- [ ] Filters work correctly with relevance scoring
+- [x] `search` accepts optional `filters` parameter
+- [x] Filters support equality matching on metadata fields
+- [x] Multiple filters are combined with AND logic
+- [x] Invalid filter keys are ignored (not error)
+- [x] Filters work correctly with relevance scoring
 
 **Priority:** Medium
 
@@ -122,11 +122,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** the knowledge store is available in the containerized environment
 
 **Acceptance Criteria:**
-- [ ] ChromaDB service added to `docker/docker-compose.yml`
-- [ ] ChromaDB data persisted via Docker volume
-- [ ] ChromaDB accessible from orchestrator and workers containers
-- [ ] Health check verifies ChromaDB is responding
-- [ ] ChromaDB port (8000) is not exposed to host (internal only)
+- [x] ChromaDB service added to `docker/docker-compose.yml`
+- [x] ChromaDB data persisted via Docker volume
+- [x] ChromaDB accessible from orchestrator and workers containers
+- [x] Health check verifies ChromaDB is responding
+- [x] ChromaDB port (8000) is not exposed to host (internal only)
 
 **Priority:** High
 
@@ -139,11 +139,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I can easily obtain a configured instance
 
 **Acceptance Criteria:**
-- [ ] `get_knowledge_store()` factory function exists
-- [ ] Factory reads configuration from environment
-- [ ] Factory returns singleton instance (connection reuse)
-- [ ] Factory supports async context manager for cleanup
-- [ ] Configuration errors raise `ConfigurationError`
+- [x] `get_knowledge_store()` factory function exists
+- [x] Factory reads configuration from environment
+- [x] Factory returns singleton instance (connection reuse)
+- [x] Factory supports async context manager for cleanup
+- [x] Configuration errors raise `ConfigurationError`
 
 **Priority:** Medium
 
@@ -156,13 +156,13 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I can handle different failure modes appropriately
 
 **Acceptance Criteria:**
-- [ ] `KnowledgeStoreError` base exception exists
-- [ ] `DocumentNotFoundError` for missing documents
-- [ ] `IndexingError` for indexing failures
-- [ ] `SearchError` for search operation failures
-- [ ] `EmbeddingError` for embedding generation failures
-- [ ] `BackendConnectionError` for connection failures
-- [ ] All exceptions include helpful error messages
+- [x] `KnowledgeStoreError` base exception exists
+- [x] `DocumentNotFoundError` for missing documents
+- [x] `IndexingError` for indexing failures
+- [x] `SearchError` for search operation failures
+- [x] `EmbeddingError` for embedding generation failures
+- [x] `BackendConnectionError` for connection failures
+- [x] All exceptions include helpful error messages
 
 **Priority:** Medium
 
@@ -175,11 +175,11 @@ This feature implements **US 8.1: Query knowledge store for context enrichment**
 **So that** I understand how to use it correctly
 
 **Acceptance Criteria:**
-- [ ] Interface has complete docstrings
-- [ ] Usage examples in code comments
-- [ ] README or design doc includes API examples
-- [ ] Migration path to other backends is documented
-- [ ] Configuration options are documented
+- [x] Interface has complete docstrings
+- [x] Usage examples in code comments
+- [x] README or design doc includes API examples
+- [x] Migration path to other backends is documented
+- [x] Configuration options are documented
 
 **Priority:** Low
 

@@ -17,25 +17,25 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Extend the existing exception hierarchy with KnowledgeStore-specific exceptions.
 
 **Subtasks**:
-- [ ] Add `KnowledgeStoreError` base exception
-- [ ] Add `DocumentNotFoundError` exception
-- [ ] Add `IndexingError` exception
-- [ ] Add `SearchError` exception
-- [ ] Add `EmbeddingError` exception
-- [ ] Add `BackendConnectionError` exception
-- [ ] Write unit tests for exception hierarchy
+- [x] Add `KnowledgeStoreError` base exception
+- [x] Add `DocumentNotFoundError` exception
+- [x] Add `IndexingError` exception
+- [x] Add `SearchError` exception
+- [x] Add `EmbeddingError` exception
+- [x] Add `BackendConnectionError` exception
+- [x] Write unit tests for exception hierarchy
 
 **Acceptance Criteria**:
-- [ ] All exceptions inherit from appropriate base classes
-- [ ] Exceptions include `message` and `details` fields
-- [ ] Exceptions support JSON serialization via `to_dict()`
-- [ ] Unit tests verify inheritance chain
+- [x] All exceptions inherit from appropriate base classes
+- [x] Exceptions include `message` and `details` fields
+- [x] Exceptions support JSON serialization via `to_dict()`
+- [x] Unit tests verify inheritance chain
 
 **Test Cases**:
-- [ ] Test exception instantiation with message
-- [ ] Test exception instantiation with details
-- [ ] Test to_dict() serialization
-- [ ] Test inheritance from ASDLCError
+- [x] Test exception instantiation with message
+- [x] Test exception instantiation with details
+- [x] Test to_dict() serialization
+- [x] Test inheritance from ASDLCError
 
 **Estimate**: 30min
 
@@ -47,25 +47,25 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Create dataclass models for documents and search results.
 
 **Subtasks**:
-- [ ] Create `src/infrastructure/knowledge_store/` directory
-- [ ] Create `models.py` with `Document` dataclass
-- [ ] Create `SearchResult` dataclass
-- [ ] Add JSON serialization methods
-- [ ] Write unit tests for models
+- [x] Create `src/infrastructure/knowledge_store/` directory
+- [x] Create `models.py` with `Document` dataclass
+- [x] Create `SearchResult` dataclass
+- [x] Add JSON serialization methods
+- [x] Write unit tests for models
 
 **Acceptance Criteria**:
-- [ ] `Document` has fields: `doc_id`, `content`, `metadata`, `embedding`
-- [ ] `SearchResult` has fields: `doc_id`, `content`, `metadata`, `score`, `source`
-- [ ] Metadata supports str, int, float, bool values
-- [ ] Models are immutable (frozen dataclass)
-- [ ] Unit tests verify field types and serialization
+- [x] `Document` has fields: `doc_id`, `content`, `metadata`, `embedding`
+- [x] `SearchResult` has fields: `doc_id`, `content`, `metadata`, `score`, `source`
+- [x] Metadata supports str, int, float, bool values
+- [x] Models are immutable (frozen dataclass)
+- [x] Unit tests verify field types and serialization
 
 **Test Cases**:
-- [ ] Test Document creation with all fields
-- [ ] Test Document creation with minimal fields
-- [ ] Test SearchResult creation and score validation
-- [ ] Test JSON serialization round-trip
-- [ ] Test metadata type validation
+- [x] Test Document creation with all fields
+- [x] Test Document creation with minimal fields
+- [x] Test SearchResult creation and score validation
+- [x] Test JSON serialization round-trip
+- [x] Test metadata type validation
 
 **Estimate**: 45min
 
@@ -77,27 +77,27 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Create the abstract interface that all backends must implement.
 
 **Subtasks**:
-- [ ] Create `src/core/interfaces.py` (or add to existing)
-- [ ] Define `KnowledgeStore` Protocol class
-- [ ] Define `index_document` method signature
-- [ ] Define `search` method signature
-- [ ] Define `get_by_id` method signature
-- [ ] Define `delete` method signature
-- [ ] Define `health_check` method signature
-- [ ] Add comprehensive docstrings
-- [ ] Write unit tests for protocol compliance
+- [x] Create `src/core/interfaces.py` (or add to existing)
+- [x] Define `KnowledgeStore` Protocol class
+- [x] Define `index_document` method signature
+- [x] Define `search` method signature
+- [x] Define `get_by_id` method signature
+- [x] Define `delete` method signature
+- [x] Define `health_check` method signature
+- [x] Add comprehensive docstrings
+- [x] Write unit tests for protocol compliance
 
 **Acceptance Criteria**:
-- [ ] Protocol is defined using `typing.Protocol`
-- [ ] All methods are `async`
-- [ ] Type hints are complete and mypy-compliant
-- [ ] Docstrings follow Google style
-- [ ] Protocol can be used for static type checking
+- [x] Protocol is defined using `typing.Protocol`
+- [x] All methods are `async`
+- [x] Type hints are complete and mypy-compliant
+- [x] Docstrings follow Google style
+- [x] Protocol can be used for static type checking
 
 **Test Cases**:
-- [ ] Test protocol defines required methods
-- [ ] Test mypy compliance with protocol
-- [ ] Test that non-compliant class fails type check
+- [x] Test protocol defines required methods
+- [x] Test mypy compliance with protocol
+- [x] Test that non-compliant class fails type check
 
 **Estimate**: 45min
 
@@ -109,24 +109,24 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Add configuration dataclass for KnowledgeStore settings.
 
 **Subtasks**:
-- [ ] Create `src/infrastructure/knowledge_store/config.py`
-- [ ] Define `KnowledgeStoreConfig` dataclass
-- [ ] Implement `from_env()` class method
-- [ ] Add configuration to main `AppConfig`
-- [ ] Write unit tests for configuration
+- [x] Create `src/infrastructure/knowledge_store/config.py`
+- [x] Define `KnowledgeStoreConfig` dataclass
+- [x] Implement `from_env()` class method
+- [x] Add configuration to main `AppConfig`
+- [x] Write unit tests for configuration
 
 **Acceptance Criteria**:
-- [ ] Config includes: `host`, `port`, `collection_name`, `embedding_model`
-- [ ] Config loads from environment variables with defaults
-- [ ] Config integrates with existing `AppConfig` pattern
-- [ ] Missing required config raises `ConfigurationError`
-- [ ] Unit tests verify default values and env loading
+- [x] Config includes: `host`, `port`, `collection_name`, `embedding_model`
+- [x] Config loads from environment variables with defaults
+- [x] Config integrates with existing `AppConfig` pattern
+- [x] Missing required config raises `ConfigurationError`
+- [x] Unit tests verify default values and env loading
 
 **Test Cases**:
-- [ ] Test default configuration values
-- [ ] Test configuration from environment variables
-- [ ] Test configuration validation
-- [ ] Test integration with AppConfig
+- [x] Test default configuration values
+- [x] Test configuration from environment variables
+- [x] Test configuration validation
+- [x] Test integration with AppConfig
 
 **Estimate**: 30min
 
@@ -138,25 +138,25 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Add ChromaDB to the infrastructure container configuration.
 
 **Subtasks**:
-- [ ] Add ChromaDB service to `docker/docker-compose.yml`
-- [ ] Configure persistent volume for ChromaDB data
-- [ ] Add health check for ChromaDB
-- [ ] Configure network connectivity
-- [ ] Update environment variables for other services
-- [ ] Test container startup
+- [x] Add ChromaDB service to `docker/docker-compose.yml`
+- [x] Configure persistent volume for ChromaDB data
+- [x] Add health check for ChromaDB
+- [x] Configure network connectivity
+- [x] Update environment variables for other services
+- [x] Test container startup
 
 **Acceptance Criteria**:
-- [ ] ChromaDB service runs on port 8000 (internal)
-- [ ] Data persists across container restarts
-- [ ] Health check verifies ChromaDB is responding
-- [ ] Orchestrator and workers can reach ChromaDB
-- [ ] `docker compose up` starts all services
+- [x] ChromaDB service runs on port 8000 (internal)
+- [x] Data persists across container restarts
+- [x] Health check verifies ChromaDB is responding
+- [x] Orchestrator and workers can reach ChromaDB
+- [x] `docker compose up` starts all services
 
 **Test Cases**:
-- [ ] Test docker compose config is valid
-- [ ] Test ChromaDB health check endpoint
-- [ ] Test volume persistence (manual verification)
-- [ ] Test network connectivity from other containers
+- [x] Test docker compose config is valid
+- [x] Test ChromaDB health check endpoint
+- [x] Test volume persistence (manual verification)
+- [x] Test network connectivity from other containers
 
 **Estimate**: 1hr
 
@@ -168,23 +168,23 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Update requirements with ChromaDB and sentence-transformers.
 
 **Subtasks**:
-- [ ] Add `chromadb` to requirements.txt
-- [ ] Add `sentence-transformers` to requirements.txt
-- [ ] Update `pyproject.toml` with dependency groups
-- [ ] Verify dependencies install correctly
-- [ ] Test import in Python
+- [x] Add `chromadb` to requirements.txt
+- [x] Add `sentence-transformers` to requirements.txt
+- [x] Update `pyproject.toml` with dependency groups
+- [x] Verify dependencies install correctly
+- [x] Test import in Python
 
 **Acceptance Criteria**:
-- [ ] `pip install -r requirements.txt` succeeds
-- [ ] `import chromadb` works
-- [ ] `import sentence_transformers` works
-- [ ] No dependency conflicts
-- [ ] Docker build includes new dependencies
+- [x] `pip install -r requirements.txt` succeeds
+- [x] `import chromadb` works
+- [x] `import sentence_transformers` works
+- [x] No dependency conflicts
+- [x] Docker build includes new dependencies
 
 **Test Cases**:
-- [ ] Test dependency installation
-- [ ] Test imports in Python shell
-- [ ] Test Docker build with new dependencies
+- [x] Test dependency installation
+- [x] Test imports in Python shell
+- [x] Test Docker build with new dependencies
 
 **Estimate**: 30min
 
@@ -196,37 +196,37 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Create the ChromaDB backend implementation of KnowledgeStore.
 
 **Subtasks**:
-- [ ] Create `src/infrastructure/knowledge_store/chromadb_store.py`
-- [ ] Implement `__init__` with connection setup
-- [ ] Implement `index_document` method
-- [ ] Implement `search` method
-- [ ] Implement `get_by_id` method
-- [ ] Implement `delete` method
-- [ ] Implement `health_check` method
-- [ ] Handle ChromaDB-specific errors
-- [ ] Write comprehensive unit tests (mocked)
+- [x] Create `src/infrastructure/knowledge_store/chromadb_store.py`
+- [x] Implement `__init__` with connection setup
+- [x] Implement `index_document` method
+- [x] Implement `search` method
+- [x] Implement `get_by_id` method
+- [x] Implement `delete` method
+- [x] Implement `health_check` method
+- [x] Handle ChromaDB-specific errors
+- [x] Write comprehensive unit tests (mocked)
 
 **Acceptance Criteria**:
-- [ ] Class implements `KnowledgeStore` protocol
-- [ ] Connects to ChromaDB via HTTP client
-- [ ] Handles connection errors with `BackendConnectionError`
-- [ ] Generates embeddings using configured model
-- [ ] All methods have proper error handling
-- [ ] Unit tests cover all methods and error cases
+- [x] Class implements `KnowledgeStore` protocol
+- [x] Connects to ChromaDB via HTTP client
+- [x] Handles connection errors with `BackendConnectionError`
+- [x] Generates embeddings using configured model
+- [x] All methods have proper error handling
+- [x] Unit tests cover all methods and error cases
 
 **Test Cases**:
-- [ ] Test successful index_document
-- [ ] Test index_document with existing doc (update)
-- [ ] Test search returns ranked results
-- [ ] Test search with filters
-- [ ] Test search with empty results
-- [ ] Test get_by_id found
-- [ ] Test get_by_id not found
-- [ ] Test delete success
-- [ ] Test delete not found
-- [ ] Test health_check healthy
-- [ ] Test health_check unhealthy
-- [ ] Test connection error handling
+- [x] Test successful index_document
+- [x] Test index_document with existing doc (update)
+- [x] Test search returns ranked results
+- [x] Test search with filters
+- [x] Test search with empty results
+- [x] Test get_by_id found
+- [x] Test get_by_id not found
+- [x] Test delete success
+- [x] Test delete not found
+- [x] Test health_check healthy
+- [x] Test health_check unhealthy
+- [x] Test connection error handling
 
 **Estimate**: 2hr
 
@@ -238,25 +238,25 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Create a wrapper for embedding generation that works with ChromaDB.
 
 **Subtasks**:
-- [ ] Create embedding function class compatible with ChromaDB
-- [ ] Support sentence-transformers models
-- [ ] Handle embedding errors gracefully
-- [ ] Add caching for repeated texts (optional)
-- [ ] Write unit tests
+- [x] Create embedding function class compatible with ChromaDB
+- [x] Support sentence-transformers models
+- [x] Handle embedding errors gracefully
+- [x] Add caching for repeated texts (optional)
+- [x] Write unit tests
 
 **Acceptance Criteria**:
-- [ ] Embedding function generates 384-dimensional vectors (MiniLM)
-- [ ] Works with ChromaDB's embedding function interface
-- [ ] Raises `EmbeddingError` on failure
-- [ ] Model is configurable via config
-- [ ] Unit tests verify embedding generation
+- [x] Embedding function generates 384-dimensional vectors (MiniLM)
+- [x] Works with ChromaDB's embedding function interface
+- [x] Raises `EmbeddingError` on failure
+- [x] Model is configurable via config
+- [x] Unit tests verify embedding generation
 
 **Test Cases**:
-- [ ] Test embedding generation for single text
-- [ ] Test embedding generation for batch
-- [ ] Test embedding dimensions
-- [ ] Test error handling for invalid input
-- [ ] Test model loading
+- [x] Test embedding generation for single text
+- [x] Test embedding generation for batch
+- [x] Test embedding dimensions
+- [x] Test error handling for invalid input
+- [x] Test model loading
 
 **Estimate**: 1hr
 
@@ -268,24 +268,24 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Implement factory function for obtaining configured KnowledgeStore instance.
 
 **Subtasks**:
-- [ ] Create `src/infrastructure/knowledge_store/factory.py`
-- [ ] Implement `get_knowledge_store()` async function
-- [ ] Support singleton pattern for connection reuse
-- [ ] Support async context manager
-- [ ] Write unit tests
+- [x] Create `src/infrastructure/knowledge_store/factory.py`
+- [x] Implement `get_knowledge_store()` async function
+- [x] Support singleton pattern for connection reuse
+- [x] Support async context manager
+- [x] Write unit tests
 
 **Acceptance Criteria**:
-- [ ] Factory returns `ChromaDBStore` instance
-- [ ] Factory reads config from environment
-- [ ] Multiple calls return same instance (singleton)
-- [ ] Factory handles configuration errors
-- [ ] Unit tests verify factory behavior
+- [x] Factory returns `ChromaDBStore` instance
+- [x] Factory reads config from environment
+- [x] Multiple calls return same instance (singleton)
+- [x] Factory handles configuration errors
+- [x] Unit tests verify factory behavior
 
 **Test Cases**:
-- [ ] Test factory returns KnowledgeStore instance
-- [ ] Test singleton behavior
-- [ ] Test configuration from environment
-- [ ] Test error handling for missing config
+- [x] Test factory returns KnowledgeStore instance
+- [x] Test singleton behavior
+- [x] Test configuration from environment
+- [x] Test error handling for missing config
 
 **Estimate**: 45min
 
@@ -297,28 +297,28 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Create integration tests that run against actual ChromaDB instance.
 
 **Subtasks**:
-- [ ] Create `tests/integration/test_chromadb_store.py`
-- [ ] Test full index/search/retrieve/delete cycle
-- [ ] Test search relevance ordering
-- [ ] Test metadata filtering
-- [ ] Test concurrent operations
-- [ ] Add pytest fixtures for test data
+- [x] Create `tests/integration/test_chromadb_store.py`
+- [x] Test full index/search/retrieve/delete cycle
+- [x] Test search relevance ordering
+- [x] Test metadata filtering
+- [x] Test concurrent operations
+- [x] Add pytest fixtures for test data
 
 **Acceptance Criteria**:
-- [ ] Tests run against Docker ChromaDB
-- [ ] Tests clean up after themselves
-- [ ] Tests verify actual semantic search works
-- [ ] Tests pass in CI/CD environment
-- [ ] Test coverage > 80%
+- [x] Tests run against Docker ChromaDB
+- [x] Tests clean up after themselves
+- [x] Tests verify actual semantic search works
+- [x] Tests pass in CI/CD environment
+- [x] Test coverage > 80%
 
 **Test Cases**:
-- [ ] Test index and immediate search
-- [ ] Test multiple document indexing
-- [ ] Test search relevance (similar docs ranked higher)
-- [ ] Test metadata filter accuracy
-- [ ] Test document update (re-index)
-- [ ] Test delete and verify removal
-- [ ] Test health check against real server
+- [x] Test index and immediate search
+- [x] Test multiple document indexing
+- [x] Test search relevance (similar docs ranked higher)
+- [x] Test metadata filter accuracy
+- [x] Test document update (re-index)
+- [x] Test delete and verify removal
+- [x] Test health check against real server
 
 **Estimate**: 1.5hr
 
@@ -330,21 +330,21 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Add KnowledgeStore health check to infrastructure monitoring.
 
 **Subtasks**:
-- [ ] Update `src/infrastructure/health.py` with knowledge store check
-- [ ] Add KnowledgeStore status to health endpoint response
-- [ ] Handle unavailable knowledge store gracefully
-- [ ] Write unit tests
+- [x] Update `src/infrastructure/health.py` with knowledge store check
+- [x] Add KnowledgeStore status to health endpoint response
+- [x] Handle unavailable knowledge store gracefully
+- [x] Write unit tests
 
 **Acceptance Criteria**:
-- [ ] Health endpoint includes knowledge store status
-- [ ] Unhealthy knowledge store doesn't crash health check
-- [ ] Status includes connection details
-- [ ] Unit tests verify health check behavior
+- [x] Health endpoint includes knowledge store status
+- [x] Unhealthy knowledge store doesn't crash health check
+- [x] Status includes connection details
+- [x] Unit tests verify health check behavior
 
 **Test Cases**:
-- [ ] Test health check with healthy knowledge store
-- [ ] Test health check with unhealthy knowledge store
-- [ ] Test health response format
+- [x] Test health check with healthy knowledge store
+- [x] Test health check with unhealthy knowledge store
+- [x] Test health response format
 
 **Estimate**: 30min
 
@@ -356,20 +356,20 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 **Description**: Set up clean module exports and add documentation.
 
 **Subtasks**:
-- [ ] Create `src/infrastructure/knowledge_store/__init__.py` with exports
-- [ ] Add docstrings to all public functions
-- [ ] Create usage examples in docstrings
-- [ ] Update design.md with final implementation notes
+- [x] Create `src/infrastructure/knowledge_store/__init__.py` with exports
+- [x] Add docstrings to all public functions
+- [x] Create usage examples in docstrings
+- [x] Update design.md with final implementation notes
 
 **Acceptance Criteria**:
-- [ ] `from src.infrastructure.knowledge_store import KnowledgeStore, get_knowledge_store` works
-- [ ] All public APIs have docstrings
-- [ ] Examples are accurate and runnable
-- [ ] Documentation matches implementation
+- [x] `from src.infrastructure.knowledge_store import KnowledgeStore, get_knowledge_store` works
+- [x] All public APIs have docstrings
+- [x] Examples are accurate and runnable
+- [x] Documentation matches implementation
 
 **Test Cases**:
-- [ ] Test module imports
-- [ ] Test exported symbols match documentation
+- [x] Test module imports
+- [x] Test exported symbols match documentation
 
 **Estimate**: 30min
 
@@ -404,15 +404,15 @@ This task breakdown covers implementing the KnowledgeStore interface and ChromaD
 
 ## Completion Checklist
 
-- [ ] All tasks in Task List are marked complete
-- [ ] All unit tests pass: `./tools/test.sh tests/unit/`
-- [ ] All integration tests pass: `./tools/test.sh tests/integration/`
-- [ ] E2E tests pass: `./tools/e2e.sh`
-- [ ] Linter passes: `./tools/lint.sh src/`
-- [ ] No type errors: `mypy src/`
-- [ ] Documentation updated
-- [ ] Interface contracts verified against design.md
-- [ ] Progress marked as 100% in tasks.md
+- [x] All tasks in Task List are marked complete
+- [x] All unit tests pass: `./tools/test.sh tests/unit/`
+- [x] All integration tests pass: `./tools/test.sh tests/integration/`
+- [x] E2E tests pass: `./tools/e2e.sh`
+- [x] Linter passes: `./tools/lint.sh src/`
+- [x] No type errors: `mypy src/`
+- [x] Documentation updated
+- [x] Interface contracts verified against design.md
+- [x] Progress marked as 100% in tasks.md
 
 ## Notes
 
