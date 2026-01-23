@@ -22,7 +22,20 @@ logger = logging.getLogger(__name__)
 # Global connection pool and client instances
 _pool: ConnectionPool | None = None
 _client: redis.Redis | None = None
-_lock = asyncio.Lock()
+_lock: asyncio.Lock | None = None
+
+
+def _get_lock() -> asyncio.Lock:
+    """Get or create the module lock (lazy initialization).
+
+    Creating asyncio.Lock at module import time can cause issues when
+    the module is imported before an event loop exists. This function
+    creates the lock lazily when first needed.
+    """
+    global _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    return _lock
 
 
 async def get_connection_pool(config: RedisConfig | None = None) -> ConnectionPool:
@@ -42,7 +55,7 @@ async def get_connection_pool(config: RedisConfig | None = None) -> ConnectionPo
     if _pool is not None:
         return _pool
 
-    async with _lock:
+    async with _get_lock():
         # Double-check after acquiring lock
         if _pool is not None:
             return _pool
@@ -90,12 +103,14 @@ async def get_redis_client(config: RedisConfig | None = None) -> redis.Redis:
     if _client is not None:
         return _client
 
-    async with _lock:
+    # Get pool first (it has its own locking) to avoid deadlock
+    pool = await get_connection_pool(config)
+
+    async with _get_lock():
         # Double-check after acquiring lock
         if _client is not None:
             return _client
 
-        pool = await get_connection_pool(config)
         _client = redis.Redis(connection_pool=pool)
         return _client
 
@@ -107,7 +122,7 @@ async def close_redis_client() -> None:
     """
     global _client, _pool
 
-    async with _lock:
+    async with _get_lock():
         if _client is not None:
             await _client.aclose()
             _client = None
