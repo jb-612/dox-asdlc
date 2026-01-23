@@ -12,6 +12,15 @@
 COMMON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$COMMON_SCRIPT_DIR/../../.." && pwd)"
 
+# Python executable detection - prefer venv if available
+if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
+    PYTHON_CMD="$PROJECT_ROOT/.venv/bin/python"
+elif [[ -x "$PROJECT_ROOT/venv/bin/python" ]]; then
+    PYTHON_CMD="$PROJECT_ROOT/venv/bin/python"
+else
+    PYTHON_CMD="python3"
+fi
+
 # =============================================================================
 # Backend Detection
 # =============================================================================
@@ -33,7 +42,7 @@ check_redis_available() {
 
 # Check if Python coordination module is available
 check_python_coordination_available() {
-    python3 -c "from src.infrastructure.coordination import get_coordination_client" 2>/dev/null
+    $PYTHON_CMD -c "from src.infrastructure.coordination import get_coordination_client" 2>/dev/null
 }
 
 # Determine which coordination backend to use
@@ -73,17 +82,23 @@ call_python_publish() {
 
     export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
 
-    python3 << PYEOF
+    $PYTHON_CMD << PYEOF
 import asyncio
 import json
 import sys
 
 async def main():
-    from src.infrastructure.coordination import get_coordination_client
+    import redis.asyncio as redis
+    from src.infrastructure.coordination.client import CoordinationClient
+    from src.infrastructure.coordination.config import CoordinationConfig
     from src.infrastructure.coordination.types import MessageType
 
     try:
-        client = await get_coordination_client()
+        # Create Redis client directly (bypass factory to avoid asyncio.Lock issues)
+        config = CoordinationConfig.from_env()
+        r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
+
+        client = CoordinationClient(redis_client=r, config=config, instance_id="$CLAUDE_INSTANCE_ID")
         msg = await client.publish_message(
             msg_type=MessageType("$msg_type"),
             subject="$subject",
@@ -99,6 +114,7 @@ async def main():
             "from": msg.from_instance,
             "to": msg.to_instance,
         }))
+        await r.aclose()
     except Exception as e:
         print(json.dumps({
             "success": False,
@@ -121,16 +137,22 @@ call_python_check() {
 
     export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
 
-    python3 << PYEOF
+    $PYTHON_CMD << PYEOF
 import asyncio
 import json
 import sys
 
 async def main():
-    from src.infrastructure.coordination import get_coordination_client
+    import redis.asyncio as redis
+    from src.infrastructure.coordination.client import CoordinationClient
+    from src.infrastructure.coordination.config import CoordinationConfig
     from src.infrastructure.coordination.types import MessageQuery, MessageType
 
     try:
+        # Create Redis client directly (bypass factory to avoid asyncio.Lock issues)
+        config = CoordinationConfig.from_env()
+        r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
+
         query_type = None
         if "$msg_type":
             query_type = MessageType("$msg_type")
@@ -143,7 +165,7 @@ async def main():
             limit=$limit,
         )
 
-        client = await get_coordination_client()
+        client = CoordinationClient(redis_client=r, config=config, instance_id="$CLAUDE_INSTANCE_ID")
         messages = await client.get_messages(query)
 
         print(json.dumps({
@@ -151,6 +173,7 @@ async def main():
             "count": len(messages),
             "messages": [msg.to_dict() for msg in messages],
         }))
+        await r.aclose()
     except Exception as e:
         print(json.dumps({
             "success": False,
@@ -170,16 +193,22 @@ call_python_ack() {
 
     export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
 
-    python3 << PYEOF
+    $PYTHON_CMD << PYEOF
 import asyncio
 import json
 import sys
 
 async def main():
-    from src.infrastructure.coordination import get_coordination_client
+    import redis.asyncio as redis
+    from src.infrastructure.coordination.client import CoordinationClient
+    from src.infrastructure.coordination.config import CoordinationConfig
 
     try:
-        client = await get_coordination_client()
+        # Create Redis client directly (bypass factory to avoid asyncio.Lock issues)
+        config = CoordinationConfig.from_env()
+        r = redis.from_url(f"redis://{config.redis_host}:{config.redis_port}", decode_responses=True)
+
+        client = CoordinationClient(redis_client=r, config=config, instance_id="$CLAUDE_INSTANCE_ID")
         comment = """$comment""" if """$comment""" else None
         result = await client.acknowledge_message(
             message_id="$message_id",
@@ -199,6 +228,7 @@ async def main():
                 "error": "Message not found: $message_id",
             }))
             sys.exit(1)
+        await r.aclose()
     except Exception as e:
         print(json.dumps({
             "success": False,
