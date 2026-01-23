@@ -1,67 +1,32 @@
-# Contract Update Skill
+---
+name: contract-update
+description: Guides proposing, negotiating, and publishing API contract changes. Use when modifying contracts/, adding endpoints, or changing schemas.
+disable-model-invocation: true
+---
 
-## Overview
+Update contract $ARGUMENTS:
 
-This skill guides the process of proposing, negotiating, and publishing contract changes in the parallel CLI coordination system.
+## Step 1: Draft the Change
 
-## When to Use
-
-Use this skill when you need to:
-- Add a new endpoint to an API contract
-- Modify an existing schema definition
-- Add new event types
-- Change interface signatures
-- Update any file in `contracts/`
-
-## Prerequisites
-
-1. Verify your session was started with a launcher script:
-   ```bash
-   cat .claude/instance-identity.json | python3 -c "import json,sys; print(json.load(sys.stdin).get('instance_id', 'NOT SET'))"
-   ```
-
-2. Confirm you are the owner or have coordinated with the owner of the contract you're modifying.
-
-## Workflow
-
-### Step 1: Draft the Change
-
-Create a new file in `contracts/proposed/` describing your change:
+Create a proposal in `contracts/proposed/`:
 
 ```bash
-# Naming convention: YYYY-MM-DD-<contract>-<brief-description>.json
-touch contracts/proposed/2026-01-22-hitl_api-add-metrics-endpoint.json
+touch contracts/proposed/$(date +%Y-%m-%d)-$ARGUMENTS.json
 ```
 
-**Proposed change format:**
+Proposal format:
 ```json
 {
-  "contract": "hitl_api",
+  "contract": "$ARGUMENTS",
   "current_version": "1.0.0",
   "proposed_version": "1.1.0",
-  "proposer": "agent",
-  "timestamp": "2026-01-22T20:00:00Z",
   "change_type": "minor",
-  "description": "Add metrics endpoint for worker performance monitoring",
+  "description": "Description of change",
   "changes": [
     {
-      "action": "add",
-      "path": "endpoints['GET /metrics']",
-      "value": {
-        "description": "Get worker performance metrics",
-        "response": { "$ref": "#/definitions/MetricsResponse" }
-      }
-    },
-    {
-      "action": "add",
-      "path": "definitions.MetricsResponse",
-      "value": {
-        "type": "object",
-        "properties": {
-          "avg_task_duration_ms": { "type": "number" },
-          "tasks_completed": { "type": "integer" }
-        }
-      }
+      "action": "add|modify|remove",
+      "path": "path.to.field",
+      "value": { ... }
     }
   ],
   "breaking": false,
@@ -69,138 +34,70 @@ touch contracts/proposed/2026-01-22-hitl_api-add-metrics-endpoint.json
 }
 ```
 
-### Step 2: Notify Consumers
-
-Publish a coordination message:
+## Step 2: Notify Consumers
 
 ```bash
-./scripts/coordination/publish-message.sh CONTRACT_CHANGE_PROPOSED hitl_api "Add metrics endpoint"
+./scripts/coordination/publish-message.sh CONTRACT_CHANGE_PROPOSED $ARGUMENTS "Brief description"
 ```
 
-This creates a message in `.claude/coordination/messages/` that the consumer instance will see.
+## Step 3: Wait for Acknowledgment
 
-### Step 3: Wait for Acknowledgment
+Consumer will review and respond via:
+```bash
+./scripts/coordination/ack-message.sh <message-id>
+```
 
-The consumer instance should:
-1. Review the proposed change
-2. Test compatibility with their code
-3. Acknowledge via:
+If concerns raised, iterate on proposal until agreement.
+
+## Step 4: Publish the Change
+
+After ACK received:
+
+1. Create version directory:
    ```bash
-   ./scripts/coordination/ack-message.sh <message-id>
+   mkdir -p contracts/versions/v{new_version}
    ```
 
-**If the consumer has concerns:**
-- They will publish a response message with type `CONTRACT_DISCUSSION`
-- Iterate on the proposal until agreement is reached
-- Update the proposed change file
-
-### Step 4: Publish the Change
-
-Once ACK is received:
-
-1. **Determine new version number:**
-   - MAJOR: Breaking changes
-   - MINOR: New features, backward compatible
-   - PATCH: Bug fixes, documentation
-
-2. **Create new version directory:**
+2. Copy and update contract:
    ```bash
-   mkdir -p contracts/versions/v1.1.0
+   cp contracts/versions/v{old}/contract.json contracts/versions/v{new}/
+   # Apply changes, update version field
    ```
 
-3. **Copy and update the contract:**
-   ```bash
-   cp contracts/versions/v1.0.0/hitl_api.json contracts/versions/v1.1.0/
-   # Edit to incorporate the changes
-   # Update "version": "1.1.0"
-   ```
-
-4. **Update symlinks:**
+3. Update symlinks:
    ```bash
    cd contracts/current
-   rm hitl_api.json
-   ln -s ../versions/v1.1.0/hitl_api.json hitl_api.json
+   rm contract.json
+   ln -s ../versions/v{new}/contract.json contract.json
    ```
 
-5. **Update CHANGELOG.md:**
+4. Update CHANGELOG.md:
    ```markdown
-   ## [1.1.0] - 2026-01-22
-
-   ### Added
-   - **hitl_api.json**: Added `GET /metrics` endpoint for worker performance monitoring
+   ## [{new_version}] - {date}
+   ### Added/Changed/Removed
+   - Description of change
    ```
 
-6. **Clean up:**
+5. Clean up proposal:
    ```bash
-   rm contracts/proposed/2026-01-22-hitl_api-add-metrics-endpoint.json
+   rm contracts/proposed/{proposal-file}.json
    ```
 
-7. **Commit:**
+6. Commit:
    ```bash
-   git add contracts/
-   git commit -m "contract(hitl_api): v1.1.0 - Add metrics endpoint"
+   git commit -m "contract($ARGUMENTS): v{new} - {description}"
    ```
 
-### Step 5: Notify Completion
+## Step 5: Notify Completion
 
 ```bash
-./scripts/coordination/publish-message.sh CONTRACT_PUBLISHED hitl_api "v1.1.0 published"
+./scripts/coordination/publish-message.sh CONTRACT_PUBLISHED $ARGUMENTS "v{new} published"
 ```
 
-## Breaking Changes
+## Version Bump Rules
 
-For breaking changes (MAJOR version):
-
-1. **Clearly document migration path** in the proposed change
-2. **Allow consumer time to adapt** before publishing
-3. **Consider providing both old and new versions** temporarily
-4. **Update migration_notes** with step-by-step instructions
-
-## Quick Reference
-
-| Change Type | Version Bump | Requires ACK |
-|-------------|--------------|--------------|
+| Change Type | Version | Requires ACK |
+|-------------|---------|--------------|
 | Add optional field | PATCH | Recommended |
-| Add new endpoint | MINOR | Required |
-| Add new schema | MINOR | Required |
-| Change field type | MAJOR | Required |
-| Remove endpoint | MAJOR | Required |
-| Rename field | MAJOR | Required |
-
-## Example: Adding a New Event Type
-
-```json
-{
-  "contract": "events",
-  "current_version": "1.0.0",
-  "proposed_version": "1.1.0",
-  "proposer": "agent",
-  "change_type": "minor",
-  "description": "Add METRICS_COLLECTED event type",
-  "changes": [
-    {
-      "action": "add",
-      "path": "definitions.EventType.enum",
-      "value": "metrics_collected"
-    }
-  ],
-  "breaking": false
-}
-```
-
-## Troubleshooting
-
-**Consumer not responding:**
-- Check `.claude/coordination/status.json` to see if they're active
-- Leave a detailed note in the proposal file
-- Consider reaching out via alternative means
-
-**Conflicting changes:**
-- If both instances propose changes to the same contract simultaneously
-- Coordinate via messages to merge proposals
-- One instance should consolidate and re-propose
-
-**Rollback needed:**
-- Update symlinks to point to previous version
-- Document reason in CHANGELOG.md
-- Notify all consumers
+| Add endpoint/schema | MINOR | Required |
+| Change/remove field | MAJOR | Required |

@@ -1,189 +1,56 @@
-# Feature Planning Skill
-
-## Description
-
-This skill guides the creation of complete planning artifacts for a feature work item. Use this skill when creating a new feature folder in `.workitems/` or when completing incomplete planning documents.
-
-## When to Use
-
-Use this skill when:
-- Creating a new feature work item
-- Completing a `design.md` file
-- Completing a `user_stories.md` file
-- Completing a `tasks.md` file
-- Validating planning completeness before implementation
-
-## Planning Artifacts
-
-### 1. Design Document (design.md)
-
-The design document captures technical decisions and implementation approach.
-
-**Required Sections:**
-
-```markdown
-# Feature Design: {Pnn-Fnn} {Feature Name}
-
-## Overview
-Brief description of what this feature implements and why.
-
-## Dependencies
-- List features this depends on (e.g., P01-F01 must be complete)
-- List external dependencies (libraries, services)
-
-## Interfaces
-
-### Provided Interfaces
-Interfaces this feature exposes to other components.
-
-### Required Interfaces  
-Interfaces this feature consumes from other components.
-
-## Technical Approach
-How the feature will be implemented. Include:
-- Key classes/modules
-- Data flow
-- Error handling strategy
-
-## File Structure
-```
-src/path/to/feature/
-├── __init__.py
-├── core.py
-├── interfaces.py
-└── tests/
-    └── test_core.py
-```
-
-## Open Questions
-Questions that need resolution before or during implementation.
-
-## Risks
-Technical risks and mitigation strategies.
-```
-
-### 2. User Stories (user_stories.md)
-
-User stories define success criteria and acceptance tests.
-
-**Required Sections:**
-
-```markdown
-# User Stories: {Pnn-Fnn} {Feature Name}
-
-## US-{nn}: {Story Title}
-
-**As a** {role}  
-**I want** {capability}  
-**So that** {benefit}
-
-### Acceptance Criteria
-
-- [ ] Criterion 1: Specific, measurable outcome
-- [ ] Criterion 2: Specific, measurable outcome
-
-### Test Scenarios
-
-1. **Scenario**: {description}
-   - Given: {precondition}
-   - When: {action}
-   - Then: {expected result}
-
+---
+name: feature-planning
+description: Creates complete planning artifacts for a feature work item. Use when creating a new feature in .workitems/ or completing planning documents (design.md, user_stories.md, tasks.md).
 ---
 
-## US-{nn}: {Next Story}
-...
+Create planning artifacts for feature $ARGUMENTS:
+
+## Step 1: Create Feature Folder
+
+```bash
+mkdir -p .workitems/$ARGUMENTS
 ```
 
-### 3. Task Breakdown (tasks.md)
+## Step 2: Create design.md
 
-Tasks are atomic units of work, each completable in under 2 hours.
+Include these sections:
+- **Overview**: What the feature implements and why
+- **Dependencies**: Features this depends on, external dependencies
+- **Interfaces**: Provided and required interfaces with signatures
+- **Technical Approach**: Key classes, data flow, error handling
+- **File Structure**: Directory layout for the feature
+- **Risks**: Technical risks and mitigations
 
-**Required Sections:**
+## Step 3: Create user_stories.md
+
+For each user story include:
+- **As a** {role} **I want** {capability} **So that** {benefit}
+- **Acceptance Criteria**: Specific, testable outcomes
+- **Test Scenarios**: Given/When/Then format
+
+## Step 4: Create tasks.md
+
+Break work into atomic tasks (each < 2 hours):
 
 ```markdown
-# Tasks: {Pnn-Fnn} {Feature Name}
-
 ## Progress
-
-- Started: {date or "Not started"}
+- Started: {date}
 - Tasks Complete: 0/{total}
 - Percentage: 0%
-- Status: NOT_STARTED | IN_PROGRESS | BLOCKED | COMPLETE
-- Blockers: None
-
-## Task List
+- Status: NOT_STARTED
 
 ### T01: {Task description}
 - [ ] Estimate: {30min | 1hr | 2hr}
-- [ ] Model: {haiku | sonnet | opus} (see Model Recommendations below)
-- [ ] Tests: {test file or "N/A"}
+- [ ] Tests: {test file path}
 - [ ] Dependencies: {T00 or "None"}
 - [ ] Notes: {implementation hints}
-
-### T02: {Next task}
-...
-
-## Model Recommendations
-
-Assign models based on task complexity:
-
-| Task Type | Model | Rationale |
-|-----------|-------|-----------|
-| Simple implementation (CRUD, straightforward logic) | haiku | Fast, cost-effective |
-| Standard implementation (new features, refactoring) | haiku | Cost-effective, sufficient for well-scoped tasks |
-| Complex implementation (architectural decisions, debugging) | sonnet | Better reasoning for edge cases |
-| Design/Planning (architecture, design decisions) | sonnet | Required for nuanced judgments |
-| Code review/Analysis (reviewing complex code) | sonnet | Better code comprehension |
-| Escalation (stuck on task, needs resolution) | opus | Most capable model for difficult problems |
-
-## Completion Checklist
-
-- [ ] All tasks marked complete
-- [ ] All unit tests pass
-- [ ] E2E tests pass
-- [ ] Linter passes
-- [ ] Documentation updated
-- [ ] Interfaces verified
-- [ ] Progress: 100%
 ```
 
 ## Validation Checklist
 
 Before implementation begins, verify:
-
-1. **Design completeness**
-   - [ ] Overview explains the feature purpose
-   - [ ] All dependencies are listed and available
-   - [ ] Interfaces are defined with signatures
-   - [ ] Technical approach is clear
-   - [ ] File structure is specified
-
-2. **User stories completeness**
-   - [ ] At least one user story exists
-   - [ ] Each story has acceptance criteria
-   - [ ] Acceptance criteria are testable
-   - [ ] Test scenarios are defined
-
-3. **Tasks completeness**
-   - [ ] All work is broken into tasks
-   - [ ] Each task is < 2 hours
-   - [ ] Task dependencies are explicit
-   - [ ] Estimates are provided
-   - [ ] Progress section is initialized
-
-## Example Usage
-
-To create a new feature:
-
-```bash
-# 1. Create the folder structure
-mkdir -p .workitems/P01-F02-bash-tools
-
-# 2. Create design.md
-# 3. Create user_stories.md  
-# 4. Create tasks.md
-
-# 5. Validate completeness
-./scripts/check-planning.sh P01-F02-bash-tools
-```
+- [ ] Overview explains feature purpose
+- [ ] All dependencies listed and available
+- [ ] Interfaces defined with signatures
+- [ ] Each task is < 2 hours and testable
+- [ ] Progress section initialized
