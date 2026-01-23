@@ -72,3 +72,67 @@ export function formatSessionId(sessionId: string): string {
   if (sessionId.length <= 12) return sessionId;
   return sessionId.slice(0, 12);
 }
+
+/**
+ * Format token count with K/M suffixes
+ */
+export function formatTokens(tokens: number): string {
+  if (tokens < 1000) return tokens.toString();
+  if (tokens < 1_000_000) return `${(tokens / 1000).toFixed(1)}K`;
+  return `${(tokens / 1_000_000).toFixed(2)}M`;
+}
+
+/**
+ * Format cost in USD
+ */
+export function formatCost(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  if (cost < 1) return `$${cost.toFixed(3)}`;
+  if (cost < 100) return `$${cost.toFixed(2)}`;
+  return `$${cost.toFixed(0)}`;
+}
+
+/**
+ * Format duration in human-readable form
+ */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3600000) {
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.floor((ms % 60000) / 1000);
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+  const hours = Math.floor(ms / 3600000);
+  const mins = Math.floor((ms % 3600000) / 60000);
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+/**
+ * Format a number with comma separators
+ */
+export function formatNumber(num: number): string {
+  return num.toLocaleString('en-US');
+}
+
+/**
+ * Format a git SHA (first 7 characters)
+ */
+export function formatGitSha(sha: string): string {
+  return sha.slice(0, 7);
+}
+
+/**
+ * Format an epic ID for display
+ */
+export function formatEpicId(epicId: string): string {
+  return epicId.toUpperCase();
+}
+
+/**
+ * Format a run ID for display (shortened)
+ */
+export function formatRunId(runId: string): string {
+  if (runId.length <= 8) return runId;
+  return runId.slice(0, 8);
+}

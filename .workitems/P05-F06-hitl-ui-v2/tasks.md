@@ -3,8 +3,8 @@
 ## Progress
 
 - Started: 2026-01-23
-- Tasks Complete: 5/68
-- Percentage: 7%
+- Tasks Complete: 6/68
+- Percentage: 9%
 - Status: IN_PROGRESS
 - Blockers: None
 
@@ -83,13 +83,18 @@
   - StatusBar: Git info, worker count, pending gates, system health indicator
   - Layout: Updated to include RightPanel and StatusBar with toggle state
 
-### TASK-006: Implement base utilities
-- [ ] Create `utils/markdown.ts` (markdown parsing helpers)
-- [ ] Create `utils/diff.ts` (diff formatting helpers)
-- [ ] Create `utils/formatters.ts` (date, token, cost formatters)
-- [ ] Write unit tests for all utility functions
+### TASK-006: Implement base utilities ✓
+- [x] Create `utils/markdown.ts` (markdown parsing helpers)
+- [x] Create `utils/diff.ts` (diff formatting helpers)
+- [x] Extend `utils/formatters.ts` (token, cost, duration, git formatters)
+- [x] Write unit tests for all utility functions
 - **Estimate:** 1h
-- **Tests:** Formatters produce correct output
+- **Tests:** 92 tests passed (formatters: 36, markdown: 36, diff: 20)
+- **Completed:** 2026-01-23
+- **Implementation Notes:**
+  - formatters.ts: Added formatTokens, formatCost, formatDuration, formatNumber, formatGitSha, formatEpicId, formatRunId
+  - markdown.ts: TOC extraction, code block parsing, word count, reading time, isMarkdown detection, stripMarkdown, excerpt generation
+  - diff.ts: Line diff, word diff, unified diff parsing, stats calculation, diff collapsing
 
 ### TASK-007: Create mock data layer
 - [ ] Create `api/mocks/runs.ts` (mock run data)
