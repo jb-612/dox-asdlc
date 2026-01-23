@@ -43,8 +43,10 @@ logs/
 .env.local
 .env.*.local
 
-# Claude Code local settings (user-specific permissions)
+# Claude Code local settings (user-specific, not committed)
 .claude/settings.local.json
+CLAUDE.local.md
+.claude/*.local.*
 
 # CLI instance identity (session-specific, created by launcher scripts)
 .claude/instance-identity.json

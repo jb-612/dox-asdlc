@@ -1,54 +1,48 @@
 {
-  "project": {
-    "name": "asdlc-implementation",
-    "version": "0.1.0"
-  },
   "permissions": {
-    "mode": "default",
-    "allowedTools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-    "blockedCommands": ["rm -rf /", "sudo rm", "git push --force"],
-    "allowedPaths": [
-      "/home/claude/asdlc-project/**",
-      "!**/node_modules/**",
-      "!**/.git/objects/**"
+    "allow": [
+      "Bash(./tools/test.sh:*)",
+      "Bash(./tools/lint.sh:*)",
+      "Bash(./tools/e2e.sh:*)",
+      "Bash(./scripts/new-feature.sh:*)",
+      "Bash(./scripts/check-planning.sh:*)",
+      "Bash(./scripts/check-completion.sh:*)",
+      "Bash(./scripts/coordination/check-messages.sh:*)",
+      "Bash(./scripts/coordination/ack-message.sh:*)",
+      "Bash(./scripts/coordination/publish-message.sh:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install)",
+      "Bash(npx:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf /)",
+      "Bash(sudo:*)"
     ]
-  },
-  "context": {
-    "sources": ["project"],
-    "autoLoadSkills": true,
-    "compactThreshold": 80000
-  },
-  "workflow": {
-    "requirePlanningBeforeCode": true,
-    "tddEnforced": true,
-    "commitOnlyOnComplete": true
-  },
-  "subagents": {
-    "enabled": true,
-    "maxConcurrent": 3,
-    "definitions": ".claude/agents/"
   },
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "*",
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/hooks/session-start.py",
+            "command": "python3 scripts/hooks/session-start.py",
             "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/hooks/prompt-validator.py",
-            "timeout": 5000
           }
         ]
       }
@@ -59,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/hooks/tool-validator.py",
+            "command": "python3 scripts/hooks/tool-validator.py",
             "timeout": 5000
           }
         ]
@@ -69,21 +63,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/hooks/tool-validator.py",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel)\" && python3 scripts/hooks/tool-validator.py",
+            "command": "python3 scripts/hooks/tool-validator.py",
             "timeout": 5000
           }
         ]
       }
     ]
-  }
+  },
+  "env": {
+    "PYTHONPATH": "."
+  },
+  "enableAllProjectMcpServers": true
 }
