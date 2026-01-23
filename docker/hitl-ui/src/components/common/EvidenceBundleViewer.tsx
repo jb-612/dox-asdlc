@@ -14,6 +14,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
+import DOMPurify from 'dompurify';
 import CodeDiff from './CodeDiff';
 
 export type EvidenceType = 'test_results' | 'diff' | 'report' | 'log' | 'security_scan';
@@ -312,7 +313,7 @@ export default function EvidenceBundleViewer({
       ) : data.format === 'html' ? (
         <div
           className="prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: data.content }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(data.content) }}
         />
       ) : (
         <pre className="text-sm bg-bg-tertiary rounded p-3 overflow-x-auto text-text-secondary whitespace-pre-wrap">
