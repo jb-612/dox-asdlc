@@ -52,6 +52,26 @@ const mockArtifacts = [
   },
 ];
 
+// Mock spec index data for development
+const mockSpecIndex = {
+  discovery: [
+    { id: 'prd-001', name: 'PRD - User Authentication', status: 'complete' as const, artifactId: 'art-001' },
+    { id: 'acceptance-001', name: 'Acceptance Tests - Auth', status: 'in_progress' as const },
+  ],
+  design: [
+    { id: 'arch-001', name: 'System Architecture', status: 'complete' as const, artifactId: 'art-002' },
+    { id: 'task-001', name: 'Task Breakdown', status: 'pending' as const },
+  ],
+  development: [
+    { id: 'utest-001', name: 'Unit Tests', status: 'in_progress' as const, artifactId: 'art-003' },
+    { id: 'code-001', name: 'Implementation', status: 'pending' as const },
+  ],
+  validation: [
+    { id: 'review-001', name: 'Code Review', status: 'pending' as const },
+    { id: 'deploy-001', name: 'Deployment', status: 'pending' as const },
+  ],
+};
+
 export default function ArtifactsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('explorer');
   const navigate = useNavigate();
@@ -155,7 +175,7 @@ export default function ArtifactsPage() {
         {activeTab === 'explorer' ? (
           <ArtifactExplorer artifacts={mockArtifacts} onArtifactClick={handleArtifactClick} />
         ) : (
-          <SpecIndexBrowser />
+          <SpecIndexBrowser specIndex={mockSpecIndex} onEntryClick={handleArtifactClick} />
         )}
       </div>
     </div>

@@ -60,6 +60,7 @@ interface StudioState {
 
   setSelectedModel: (model: 'sonnet' | 'opus' | 'haiku') => void;
   setRlmEnabled: (enabled: boolean) => void;
+  setStreaming: (streaming: boolean) => void;
 
   resetStudio: () => void;
 }
@@ -154,6 +155,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   setSelectedModel: (model) => set({ selectedModel: model }),
 
   setRlmEnabled: (enabled) => set({ rlmEnabled: enabled }),
+
+  setStreaming: (streaming) => set({ isStreaming: streaming }),
 
   resetStudio: () => set(DEFAULT_STATE),
 }));

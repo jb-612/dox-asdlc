@@ -39,8 +39,8 @@ export interface SpecIndex {
 }
 
 export interface SpecIndexBrowserProps {
-  /** Spec index data */
-  specIndex: SpecIndex;
+  /** Spec index data (optional, will show empty state if not provided) */
+  specIndex?: SpecIndex;
   /** Loading state */
   isLoading?: boolean;
   /** Custom class name */
@@ -76,8 +76,16 @@ const statusColors: Record<EntryStatus, string> = {
   failed: 'text-status-error',
 };
 
+// Default empty spec index
+const emptySpecIndex: SpecIndex = {
+  discovery: [],
+  design: [],
+  development: [],
+  validation: [],
+};
+
 export default function SpecIndexBrowser({
-  specIndex,
+  specIndex = emptySpecIndex,
   isLoading = false,
   className,
   onEntryClick,
@@ -86,15 +94,18 @@ export default function SpecIndexBrowser({
     new Set(['discovery', 'design', 'development', 'validation'])
   );
 
+  // Safely access spec index with fallback
+  const safeSpecIndex = specIndex || emptySpecIndex;
+
   // Get all entries
   const allEntries = useMemo(() => {
     return [
-      ...specIndex.discovery,
-      ...specIndex.design,
-      ...specIndex.development,
-      ...specIndex.validation,
+      ...(safeSpecIndex.discovery || []),
+      ...(safeSpecIndex.design || []),
+      ...(safeSpecIndex.development || []),
+      ...(safeSpecIndex.validation || []),
     ];
-  }, [specIndex]);
+  }, [safeSpecIndex]);
 
   // Calculate progress stats
   const progressStats = useMemo(() => {
@@ -161,7 +172,7 @@ export default function SpecIndexBrowser({
 
   // Render folder
   const renderFolder = (folder: FolderKey) => {
-    const entries = specIndex[folder];
+    const entries = safeSpecIndex[folder] || [];
     const isExpanded = expandedFolders.has(folder);
     const progress = getFolderProgress(entries);
     const isComplete = progress.complete === progress.total && progress.total > 0;

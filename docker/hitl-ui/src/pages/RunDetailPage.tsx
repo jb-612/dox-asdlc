@@ -49,8 +49,8 @@ const mockRunData = {
   startedAt: '2026-01-23T10:00:00Z',
   duration: 300000, // 5 minutes in ms
   events: [
-    { id: '1', type: 'start', message: 'Run started', timestamp: '2026-01-23T10:00:00Z' },
-    { id: '2', type: 'complete', message: 'Run completed', timestamp: '2026-01-23T10:05:00Z' },
+    { id: '1', type: 'start' as const, message: 'Run started', timestamp: '2026-01-23T10:00:00Z' },
+    { id: '2', type: 'completion' as const, message: 'Run completed', timestamp: '2026-01-23T10:05:00Z' },
   ],
 };
 
