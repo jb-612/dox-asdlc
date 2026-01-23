@@ -20,7 +20,19 @@ logger = logging.getLogger(__name__)
 
 # Global singleton client
 _client: CoordinationClient | None = None
-_lock = asyncio.Lock()
+_lock: asyncio.Lock | None = None
+
+
+def _get_lock() -> asyncio.Lock:
+    """Get or create the module lock (lazy initialization).
+
+    Creating asyncio.Lock at module import time can cause issues when
+    the module is imported before an event loop exists.
+    """
+    global _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    return _lock
 
 
 async def get_coordination_client(
@@ -51,7 +63,7 @@ async def get_coordination_client(
     if _client is not None:
         return _client
 
-    async with _lock:
+    async with _get_lock():
         # Double-check after acquiring lock
         if _client is not None:
             return _client
@@ -78,14 +90,10 @@ async def get_coordination_client(
 
 
 async def reset_coordination_client() -> None:
-    """Reset the coordination client singleton.
-
-    This is primarily for testing purposes.
-    Does not close the underlying Redis connection.
-    """
+    """Reset the coordination client singleton (for testing)."""
     global _client
 
-    async with _lock:
+    async with _get_lock():
         if _client is not None:
             logger.info("Resetting coordination client singleton")
             _client = None

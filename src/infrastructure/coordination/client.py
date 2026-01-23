@@ -12,7 +12,7 @@ import logging
 import uuid
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -36,8 +36,6 @@ from src.infrastructure.coordination.types import (
     PresenceInfo,
 )
 
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
