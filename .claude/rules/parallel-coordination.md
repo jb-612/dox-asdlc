@@ -38,36 +38,31 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 
 ---
 
-## MANDATORY: Session Start - Use Launcher Scripts
+## Session Start - Interactive Role Selection
 
-**ALWAYS start Claude Code using the appropriate launcher script:**
+**When you start Claude Code, you'll be prompted to select your agent role:**
 
-```bash
-# For backend development (workers, orchestrator, infrastructure)
-./start-backend.sh
+```
+Which agent role do you want to use for this session?
 
-# For frontend development (HITL Web UI)
-./start-frontend.sh
-
-# For review/merge operations (orchestrator only)
-./start-orchestrator.sh
+[ ] Orchestrator - Master agent: review code, merge to main, modify docs/contracts/rules
+[ ] Backend      - Backend developer: workers, orchestrator service, infrastructure
+[ ] Frontend     - Frontend developer: HITL UI, React components
 ```
 
-**Why launchers are required:**
-- They create `.claude/instance-identity.json` with role-specific path permissions
-- They set git user.name/email for commit attribution (audit trail)
-- Claude Code hooks read this file to enforce path restrictions
-- Environment variables don't persist across Claude bash sessions, but the identity file does
+**How it works:**
+1. The `SessionStart` hook detects if no identity is set
+2. Claude uses `AskUserQuestion` to prompt you for role selection
+3. Based on your choice, git config is set automatically
+4. Path enforcement and merge permissions are applied based on your role
 
-**If you start Claude without a launcher:**
-- The `UserPromptSubmit` hook will **BLOCK** all prompts
-- You'll see: "BLOCKED: NO LAUNCHER USED"
-- Exit and restart using the correct launcher
+**Changing roles mid-session:**
+Ask Claude to "switch to orchestrator" or "change agent role" to re-select.
 
-**The launcher script automatically:**
-- Sets git author for commit attribution
-- Displays your role permissions and path restrictions
-- Configures identity for all enforcement layers
+**Why git email-based identity:**
+- Each role has a distinct git email for commit attribution
+- Hooks derive identity from `git config user.email`
+- Provides audit trail for who made which changes
 
 ---
 
@@ -105,25 +100,25 @@ These rules govern how the three Claude CLI instances work simultaneously on thi
 
 ---
 
-## Rule 1: Instance Identity (Enforced via Launcher Scripts)
+## Rule 1: Instance Identity (Git Email-Based)
 
-**Identity is automatically set when you use a launcher script:**
+**Identity is derived from `git config user.email`:**
 
-```bash
-./start-backend.sh      # Sets identity: backend
-./start-frontend.sh     # Sets identity: frontend
-./start-orchestrator.sh # Sets identity: orchestrator
-```
+| Role | Git Email | Git Name |
+|------|-----------|----------|
+| Orchestrator | `claude-orchestrator@asdlc.local` | Claude Orchestrator |
+| Backend | `claude-backend@asdlc.local` | Claude Backend |
+| Frontend | `claude-frontend@asdlc.local` | Claude Frontend |
 
-The identity file at `.claude/instance-identity.json` determines:
+The git email determines:
 - Which files you can modify (path restrictions)
 - Whether you can merge to main
+- Commit attribution (audit trail)
 
 **Enforcement layers:**
-1. `SessionStart` hook - displays role and permissions
-2. `UserPromptSubmit` hook - **BLOCKS** if no identity file
-3. `PreToolUse` hook - **BLOCKS** forbidden file edits and merge/push to main
-4. `pre-commit` hook - **WARNS** on git author mismatch
+1. `SessionStart` hook - prompts for role selection if no identity set
+2. `PreToolUse` hook - **BLOCKS** forbidden file edits and merge/push to main
+3. `pre-commit` hook - **WARNS** on git author mismatch
 
 ## Rule 2: File Boundaries (Path-Based Access Control)
 
@@ -332,18 +327,27 @@ When Backend-CLI delivers real implementation, mocks are swapped seamlessly.
 3. Check for any unanswered coordination messages
 4. Leave clear notes in `tasks.md` for resumption
 
-**Note:** The identity file (`.claude/instance-identity.json`) persists until overwritten by the next launcher script. This is intentional - it prevents commits outside of Claude Code sessions from bypassing restrictions.
+**Note:** Git config persists at the repo level. In parallel CLI scenarios, another CLI
+may overwrite your identity. Ask Claude to "confirm my role" or "switch to [role]" if needed.
 
 ---
 
 ## Quick Reference: Common Workflows
 
+### Starting a Session
+```bash
+# Start Claude Code normally
+claude
+
+# Claude will prompt you to select your role:
+# - Orchestrator (for review/merge/docs)
+# - Backend (for workers/infra)
+# - Frontend (for HITL UI)
+```
+
 ### Backend-CLI: Complete a Feature
 ```bash
-# Start session (from project root)
-./start-backend.sh
-
-# Inside Claude Code session:
+# Select "Backend" when prompted at session start
 git checkout -b P03-F01-feature-name
 # ... develop feature ...
 ./tools/test.sh && ./tools/lint.sh
@@ -353,10 +357,7 @@ git checkout -b P03-F01-feature-name
 
 ### Frontend-CLI: Complete a Feature
 ```bash
-# Start session (from project root)
-./start-frontend.sh
-
-# Inside Claude Code session:
+# Select "Frontend" when prompted at session start
 git checkout -b P05-F01-feature-name
 # ... develop feature ...
 ./tools/test.sh && ./tools/lint.sh
@@ -366,10 +367,7 @@ git checkout -b P05-F01-feature-name
 
 ### Orchestrator-CLI: Review and Merge
 ```bash
-# Start session (from project root)
-./start-orchestrator.sh
-
-# Inside Claude Code session:
+# Select "Orchestrator" when prompted at session start
 ./scripts/coordination/check-messages.sh --pending
 ./scripts/orchestrator/review-branch.sh P03-F01-feature-name
 # If review passes:
@@ -377,15 +375,24 @@ git checkout -b P05-F01-feature-name
 ./scripts/coordination/publish-message.sh REVIEW_COMPLETE "P03-F01" "Merged as abc123" --to backend
 ```
 
+### Switching Roles Mid-Session
+Ask Claude: "switch to orchestrator" or "change agent role"
+
 ---
 
 ## Identity Enforcement Summary
 
 | Layer | Hook/Script | What It Does | Blocking? |
 |-------|-------------|--------------|-----------|
-| 1 | `SessionStart` | Displays role and permissions | No (informational) |
-| 2 | `UserPromptSubmit` | Checks identity file exists | **Yes** |
+| 1 | `SessionStart` | Signals if identity selection needed | No |
+| 2 | Claude | Uses `AskUserQuestion` for role selection | Interactive |
 | 3 | `PreToolUse` | Checks path permissions, blocks merge/push to main | **Yes** |
 | 4 | `pre-commit` | Warns on git author mismatch | No (warning only) |
 
-See `.claude/coordination/README.md` for detailed troubleshooting.
+**Identity Source:** `git config user.email` (set via interactive selection)
+
+**Parallel CLI Note:** Git config is shared at repo level. When running multiple CLIs,
+they may overwrite each other's identity. Use "confirm my role" or "switch to [role]"
+commands to re-establish identity as needed.
+
+See `.claude/rules/identity-selection.md` for the interactive selection flow.

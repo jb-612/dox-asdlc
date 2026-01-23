@@ -147,10 +147,11 @@ kubectl get services -n dox-asdlc
 
 ### CLI Coordination (Multi-Agent)
 ```bash
-# Start session with launcher (required - creates identity file)
-./start-backend.sh      # For backend development
-./start-frontend.sh     # For frontend development
-./start-orchestrator.sh # For review/merge operations
+# Start Claude Code - you'll be prompted to select your agent role:
+# - Orchestrator: review/merge, docs, contracts
+# - Backend: workers, orchestrator service, infrastructure
+# - Frontend: HITL UI, React components
+claude
 
 # Check for pending messages
 ./scripts/coordination/check-messages.sh --pending
@@ -160,6 +161,8 @@ kubectl get services -n dox-asdlc
 
 # Acknowledge message
 ./scripts/coordination/ack-message.sh <message-id>
+
+# Switch roles mid-session: ask "switch to orchestrator" or "change agent role"
 ```
 
 ## Phase Overview

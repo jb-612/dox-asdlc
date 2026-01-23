@@ -42,20 +42,15 @@ The Orchestrator CLI (master agent) is the guardian of project integrity:
 
 ## Rule 1: Identity Verification
 
-**At session start, the identity file is created by the launcher script.**
+**At session start, select "Orchestrator" when prompted for your agent role.**
 
-Use the launcher to start your session:
+This sets:
+- Git email: `claude-orchestrator@asdlc.local`
+- Git name: `Claude Orchestrator`
+- Can merge to main: Yes
+- Can modify meta files: Yes
 
-```bash
-./start-orchestrator.sh
-```
-
-The launcher creates `.claude/instance-identity.json` with:
-
-- `instance_id`: "orchestrator"
-- `can_merge`: true
-- `can_modify_meta`: true
-- Git author: Claude Orchestrator <claude-orchestrator@asdlc.local>
+To switch to orchestrator mid-session, ask: "switch to orchestrator"
 
 ---
 
@@ -290,7 +285,7 @@ Feature CLIs CAN create and modify work items for their assigned features:
 
 **Session Start:**
 
-1. Use launcher: `./start-orchestrator.sh`
+1. Select "Orchestrator" when prompted for agent role
 2. Check for pending review requests
 3. Check for pending contract approvals
 4. Process requests in FIFO order

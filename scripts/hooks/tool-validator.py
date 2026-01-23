@@ -7,6 +7,9 @@ This hook runs before Edit, Write, and Bash (git) operations to:
 2. Block git merge/push to main for non-orchestrator instances
 3. BLOCK operations that violate the identity rules
 
+Identity is derived from git config user.email (set by launcher scripts).
+This allows multiple CLI instances to run in parallel without conflict.
+
 Receives tool call information via stdin as JSON:
 {
   "tool_name": "Edit" | "Write" | "Bash",
@@ -28,6 +31,57 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Path rules by identity (derived from git config user.email)
+IDENTITY_RULES = {
+    "backend": {
+        "forbidden_paths": [
+            "src/hitl_ui/",
+            "docker/hitl-ui/",
+            "tests/unit/hitl_ui/",
+            "CLAUDE.md",
+            "README.md",
+            "docs/",
+            "contracts/",
+            ".claude/rules/",
+            ".claude/skills/",
+            ".workitems/P05-"
+        ],
+        "can_merge": False,
+    },
+    "frontend": {
+        "forbidden_paths": [
+            "src/workers/",
+            "src/orchestrator/",
+            "src/infrastructure/",
+            "docker/workers/",
+            "docker/orchestrator/",
+            "docker/infrastructure/",
+            "CLAUDE.md",
+            "README.md",
+            "docs/",
+            "contracts/",
+            ".claude/rules/",
+            ".claude/skills/",
+            ".workitems/P01-",
+            ".workitems/P02-",
+            ".workitems/P03-",
+            ".workitems/P06-"
+        ],
+        "can_merge": False,
+    },
+    "orchestrator": {
+        "forbidden_paths": [],
+        "can_merge": True,
+    },
+}
+
+# Map git email to identity
+EMAIL_TO_IDENTITY = {
+    "claude-backend@asdlc.local": "backend",
+    "claude-frontend@asdlc.local": "frontend",
+    "claude-orchestrator@asdlc.local": "orchestrator",
+}
+
 
 def get_project_root() -> Path:
     """Find the project root by looking for .claude directory."""
@@ -36,6 +90,20 @@ def get_project_root() -> Path:
         if (path / ".claude").is_dir():
             return path
     return cwd
+
+
+def get_git_email() -> str:
+    """Get the current git user.email config."""
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
 
 
 def get_current_branch() -> str:
@@ -50,6 +118,11 @@ def get_current_branch() -> str:
         return result.stdout.strip()
     except Exception:
         return ""
+
+
+def get_identity_from_email(email: str) -> str:
+    """Derive identity from git email."""
+    return EMAIL_TO_IDENTITY.get(email, "unknown")
 
 
 def block(reason: str):
@@ -113,23 +186,19 @@ def is_git_merge_command(command: str) -> bool:
 
 def main():
     project_root = get_project_root()
-    identity_file = project_root / ".claude" / "instance-identity.json"
 
-    # If no identity file, allow all operations (human user)
-    if not identity_file.exists():
+    # Get identity from git config (works with parallel CLIs)
+    git_email = get_git_email()
+    instance_id = get_identity_from_email(git_email)
+
+    # If no recognized identity, allow all operations (human user)
+    if instance_id == "unknown":
         allow()
 
-    # Load identity configuration
-    try:
-        with open(identity_file) as f:
-            identity = json.load(f)
-    except (json.JSONDecodeError, IOError):
-        # Can't read identity, allow operation
-        allow()
-
-    instance_id = identity.get("instance_id", "unknown")
-    forbidden_paths = identity.get("forbidden_paths", [])
-    can_merge = identity.get("can_merge", False)
+    # Get rules for this identity
+    rules = IDENTITY_RULES.get(instance_id, {"forbidden_paths": [], "can_merge": False})
+    forbidden_paths = rules["forbidden_paths"]
+    can_merge = rules["can_merge"]
 
     # Read tool call from stdin
     try:
