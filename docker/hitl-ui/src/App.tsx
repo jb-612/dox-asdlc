@@ -15,12 +15,14 @@ import DiagramDetailPage from './pages/DiagramDetailPage';
 import DocDetailPage from './pages/DocDetailPage';
 import StudioDiscoveryPage from './pages/StudioDiscoveryPage';
 import RuleProposalsPage from './pages/RuleProposalsPage';
+import { initMermaid } from './config/mermaid';
 
 function App() {
   // Initialize theme on app load
   useEffect(() => {
     const theme = localStorage.getItem('theme') || 'dark';
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    initMermaid(theme as 'light' | 'dark');
   }, []);
   return (
     <BrowserRouter>

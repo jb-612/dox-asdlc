@@ -44,13 +44,34 @@ describe('mermaid configuration', () => {
     const { getMermaidConfig } = await import('./mermaid');
     const config = getMermaidConfig('dark');
 
-    expect(config.theme).toBe('dark');
+    expect(config.theme).toBe('base');
   });
 
   it('supports light theme configuration', async () => {
     const { getMermaidConfig } = await import('./mermaid');
     const config = getMermaidConfig('light');
 
-    expect(config.theme).toBe('default');
+    expect(config.theme).toBe('base');
+  });
+
+  it('includes themeVariables for dark theme', async () => {
+    const { getMermaidConfig } = await import('./mermaid');
+    const config = getMermaidConfig('dark');
+    expect(config.themeVariables).toBeDefined();
+    expect(config.themeVariables?.primaryTextColor).toBe('#FBFCFC');
+    expect(config.themeVariables?.nodeTextColor).toBe('#FBFCFC');
+  });
+
+  it('includes themeVariables for light theme', async () => {
+    const { getMermaidConfig } = await import('./mermaid');
+    const config = getMermaidConfig('light');
+    expect(config.themeVariables).toBeDefined();
+    expect(config.themeVariables?.primaryTextColor).toBe('#0F172A');
+  });
+
+  it('uses base theme to allow custom themeVariables', async () => {
+    const { getMermaidConfig } = await import('./mermaid');
+    const config = getMermaidConfig('dark');
+    expect(config.theme).toBe('base');
   });
 });
