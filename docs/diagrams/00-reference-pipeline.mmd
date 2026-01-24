@@ -1,0 +1,37 @@
+flowchart TD
+Start(["User Request: Start Epic"])
+    --> Coordinator["Workflow Coordinator"]
+    -->|Spawns| DiscoveryCLI["Discovery Container\n(Claude Code CLI)"]
+    -->|Produces| PRD["PRD.md\ntest_specs.md"]
+    --> HITL1["HITL Gateway:\nBacklog Review"]
+    -->|Approved| DesignCLI["Design Container\n(Claude Code CLI)"]
+    -->|Produces| DesignDocs["architecture.md\ntasks.md"]
+    --> HITL2["HITL Gateway:\nDesign Review"]
+    -->|Approved| DevCLI["Development Container\n(Claude Code CLI)"]
+    -->|Produces| Patch["patches, unit tests"]
+    --> HITL3["HITL Gateway:\nCode Review"]
+    -->|Approved| CICD["CI/CD Agent (Claude SDK)"]
+    --> Security["Security Agent (Claude SDK)"]
+    --> SRE["SRE Agent (Claude SDK)"]
+    --> Observability["Observability Agent (Claude SDK)"]
+    --> Done(["Artifacts stored & notifications"])
+
+    %% Links for artifact flow
+    PRD -->|Artifacts->| HITL1
+    DesignDocs -->|Artifacts->| HITL2
+    Patch -->|Artifacts->| HITL3
+    HITL1 -.->|Rejected| Coordinator
+    HITL2 -.->|Rejected| Coordinator
+    HITL3 -.->|Rejected| Coordinator
+
+    %% Styling
+    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px;
+    class HITL1,HITL2,HITL3 hitl;
+    classDef cli fill:#E6F0FF,stroke:#2563eb;
+    class DiscoveryCLI,DesignCLI,DevCLI cli;
+    classDef sdk fill:#FFF4E6,stroke:#eab308;
+    class CICD,Security,SRE,Observability sdk;
+    classDef art fill:#faf5ff,stroke:#9333ea;
+    class PRD,DesignDocs,Patch art;
+    classDef coord fill:#D0E8FF,stroke:#0b1559;
+    class Coordinator,Start,Done coord;

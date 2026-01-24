@@ -1,0 +1,101 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart LR
+    subgraph AgentContainer["Agent Container"]
+        Agent["Claude Code CLI\n(Agent Loop)"]
+
+        subgraph BuiltIn["Built-in Tools"]
+            Read["Read"]
+            Write["Write"]
+            Edit["Edit"]
+            Bash["Bash"]
+            Glob["Glob"]
+            Grep["Grep"]
+            Todo["TodoWrite"]
+            Task["Task\n(Subagent)"]
+        end
+
+        subgraph MCPClients["MCP Tool Clients"]
+            RLMClient["mcp__rlm__*"]
+            RAGClient["mcp__rag__*"]
+            GitClient["mcp__git__*"]
+            JiraClient["mcp__jira__*"]
+        end
+    end
+
+    subgraph MCPServers["MCP Servers (stdio)"]
+        subgraph RLMServer["RLM Server"]
+            DeepAnalyze["deep_analyze()"]
+            SecurityAnalyze["analyze_security_vulnerability()"]
+            ArchDecision["analyze_architecture_decision()"]
+        end
+
+        subgraph RAGServer["RAG Server"]
+            QueryCode["query_codebase()"]
+            FindSimilar["find_similar_code()"]
+            SearchFiles["search_by_file_pattern()"]
+        end
+
+        subgraph GitServer["Git MCP Server"]
+            Commit["commit()"]
+            Branch["branch()"]
+            Diff["diff()"]
+            Push["push()"]
+        end
+
+        subgraph JiraServer["Jira MCP Server (SSE)"]
+            CreateIssue["create_issue()"]
+            UpdateIssue["update_issue()"]
+            Transition["transition()"]
+        end
+    end
+
+    subgraph External["External Services"]
+        Anthropic["Anthropic API"]
+        ChromaDB[("ChromaDB")]
+        GitRepo[("Git Repository")]
+        JiraAPI["Jira Cloud API"]
+    end
+
+    %% Agent to built-in
+    Agent --> BuiltIn
+
+    %% Agent to MCP clients
+    Agent <-->|"tool_use"| RLMClient
+    Agent <-->|"tool_use"| RAGClient
+    Agent <-->|"tool_use"| GitClient
+    Agent <-->|"tool_use"| JiraClient
+
+    %% MCP client to server (stdio)
+    RLMClient <-->|"stdio"| RLMServer
+    RAGClient <-->|"stdio"| RAGServer
+    GitClient <-->|"stdio"| GitServer
+    JiraClient <-->|"SSE"| JiraServer
+
+    %% Server to external
+    DeepAnalyze -->|"Extended Thinking"| Anthropic
+    SecurityAnalyze -->|"Extended Thinking"| Anthropic
+    ArchDecision -->|"Extended Thinking"| Anthropic
+
+    QueryCode -->|"Prompt Caching"| Anthropic
+    QueryCode <-->|"embeddings"| ChromaDB
+    FindSimilar <-->|"embeddings"| ChromaDB
+
+    Commit -->|"git commands"| GitRepo
+    Branch -->|"git commands"| GitRepo
+
+    CreateIssue -->|"REST"| JiraAPI
+    UpdateIssue -->|"REST"| JiraAPI
+
+    %% Styling
+    classDef agent fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef mcpclient fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef mcpserver fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef external fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+
+    class Agent agent
+    class Read,Write,Edit,Bash,Glob,Grep,Todo,Task builtin
+    class RLMClient,RAGClient,GitClient,JiraClient mcpclient
+    class DeepAnalyze,SecurityAnalyze,ArchDecision,QueryCode,FindSimilar,SearchFiles,Commit,Branch,Diff,Push,CreateIssue,UpdateIssue,Transition mcpserver
+    class Anthropic,ChromaDB,GitRepo,JiraAPI external

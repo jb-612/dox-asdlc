@@ -1,0 +1,62 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart TD
+    Start(["Agent needs\ninformation"])
+    --> Decision{"What type\nof need?"}
+
+    Decision -->|"Find existing code/docs"| RAGPath
+    Decision -->|"Deep analysis needed"| RLMPath
+    Decision -->|"File operations"| BuiltInPath
+    Decision -->|"Simple inference"| DirectPath
+
+    subgraph RAGPath["RAG Path (Cost Efficient)"]
+        RAGCall["mcp__rag__query_codebase(\n  question='How is auth implemented?'\n)"]
+        --> ChromaQuery["ChromaDB:\nEmbedding search"]
+        --> RetrieveChunks["Retrieve top-k\ncode chunks"]
+        --> CachedLLM["Anthropic API:\nPrompt Caching\n(90% cost reduction)"]
+        --> RAGResult["Return:\nAnswer + Sources"]
+    end
+
+    subgraph RLMPath["RLM Path (Deep Reasoning)"]
+        RLMCall["mcp__rlm__deep_analyze(\n  problem='JWT vs Sessions?',\n  thinking_budget=10000\n)"]
+        --> ThinkingAPI["Anthropic API:\nExtended Thinking\n(budget_tokens)"]
+        --> DeepAnalysis["Claude thinks deeply:\n• Multiple approaches\n• Trade-offs\n• Risks"]
+        --> RLMResult["Return:\nAnalysis + Recommendation"]
+    end
+
+    subgraph BuiltInPath["Built-in Tools Path"]
+        BuiltInCall["Use built-in tools:\n• Read, Write, Edit\n• Bash, Glob, Grep"]
+        --> LocalOp["Local file/command\noperations"]
+        --> BuiltInResult["Return:\nFile contents / Output"]
+    end
+
+    subgraph DirectPath["Direct Path"]
+        DirectCall["Claude's training\nknowledge"]
+        --> DirectResult["Return:\nImmediate answer"]
+    end
+
+    RAGResult --> Continue["Agent continues\nwith result"]
+    RLMResult --> Continue
+    BuiltInResult --> Continue
+    DirectResult --> Continue
+
+    %% Cost annotations
+    RAGPath -.->|"~$0.001/query\n(cached)"| CostLow["💰 Low Cost"]
+    RLMPath -.->|"~$0.05-0.50/query\n(thinking tokens)"| CostHigh["💰💰 Higher Cost"]
+
+    %% Styling
+    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
+    classDef rag fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef rlm fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef direct fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef cost fill:#FEE2E2,stroke:#dc2626,stroke-width:1px
+
+    class Start,Continue start
+    class Decision decision
+    class RAGCall,ChromaQuery,RetrieveChunks,CachedLLM,RAGResult rag
+    class RLMCall,ThinkingAPI,DeepAnalysis,RLMResult rlm
+    class BuiltInCall,LocalOp,BuiltInResult builtin
+    class DirectCall,DirectResult direct
+    class CostLow,CostHigh cost

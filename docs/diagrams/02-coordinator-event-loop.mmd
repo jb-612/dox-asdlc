@@ -1,0 +1,52 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart TD
+    Start(["Coordinator Starts"])
+    --> Init["Initialize:\n• Connect to Redis\n• Load K8s client\n• Load WORKFLOW config"]
+    --> Loop{"while True"}
+
+    Loop --> XRead["await redis.xread(\n  streams, block=5000\n)"]
+    XRead -->|timeout| Loop
+    XRead -->|events| ProcessEvents["Process Events"]
+
+    ProcessEvents --> CheckType{Event Type?}
+
+    CheckType -->|PhaseCompleted| PhaseHandler["handle_phase_completed()"]
+    CheckType -->|GateApproved| ApprovedHandler["handle_gate_approved()"]
+    CheckType -->|GateRejected| RejectedHandler["handle_gate_rejected()"]
+    CheckType -->|EpicCreated| EpicHandler["handle_epic_created()"]
+
+    PhaseHandler --> CheckTransition{WORKFLOW\ntransition?}
+
+    CheckTransition -->|AUTO| SpawnNext["spawn_agent(\n  next_phase\n)"]
+    CheckTransition -->|HITL| RequestGate["request_hitl_gate()"]
+
+    ApprovedHandler --> SpawnApproved["spawn_agent(\n  next_phase\n)"]
+
+    RejectedHandler --> SpawnRetry["spawn_agent(\n  same_phase,\n  with_feedback\n)"]
+
+    EpicHandler --> SpawnDiscovery["spawn_agent(\n  'discovery'\n)"]
+
+    SpawnNext --> CreateJob["k8s.create_namespaced_job(\n  namespace='asdlc',\n  body=job_manifest\n)"]
+    SpawnApproved --> CreateJob
+    SpawnRetry --> CreateJob
+    SpawnDiscovery --> CreateJob
+
+    RequestGate --> PublishHITL["redis.xadd(\n  'asdlc:hitl:requests',\n  gate_data\n)"]
+
+    CreateJob --> LogEvent["redis.xadd(\n  'coordinator:events',\n  'AgentSpawned'\n)"]
+    PublishHITL --> Loop
+    LogEvent --> Loop
+
+    %% Styling
+    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef process fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
+    classDef spawn fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef redis fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class Start,Loop start
+    class Init,ProcessEvents,PhaseHandler,ApprovedHandler,RejectedHandler,EpicHandler process
+    class CheckType,CheckTransition decision
+    class SpawnNext,SpawnApproved,SpawnRetry,SpawnDiscovery,CreateJob spawn
+    class XRead,RequestGate,PublishHITL,LogEvent redis

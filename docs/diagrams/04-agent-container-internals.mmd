@@ -1,0 +1,67 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart TB
+    subgraph Container["Agent Container (K8s Job)"]
+        subgraph Runner["Agent Runner (Python)"]
+            LoadTask["Load TASK_JSON\nfrom env"]
+            BuildOpts["Build ClaudeAgentOptions:\n• allowed_tools\n• mcp_servers\n• subagents\n• hooks"]
+            QueryLoop["async for message in\nquery(prompt, options)"]
+            PublishMsg["await redis.xadd(\n  progress_stream,\n  message\n)"]
+            HandleComplete["handle_completion():\n• Publish PhaseCompleted\n• Request HITL if needed"]
+        end
+
+        subgraph SDK["Claude Agent SDK"]
+            AgentLoop["Agent Loop\n(Claude Code CLI)"]
+            BuiltInTools["Built-in Tools:\n• Read, Write, Edit\n• Bash, Glob, Grep\n• TodoWrite, Task"]
+            Subagents["Subagents:\n• test-first\n• implementer\n• debugger"]
+        end
+
+        subgraph MCP["MCP Servers (stdio)"]
+            RLMServer["RLM Server\nmcp__rlm__deep_analyze"]
+            RAGServer["RAG Server\nmcp__rag__query_codebase"]
+            GitServer["Git Server\nmcp__git__commit"]
+        end
+    end
+
+    subgraph External["External Services"]
+        Redis[("Redis\nStreams")]
+        Anthropic["Anthropic API"]
+        ChromaDB[("ChromaDB")]
+        Workspace[("Workspace\nVolume")]
+    end
+
+    %% Runner flow
+    LoadTask --> BuildOpts
+    BuildOpts --> QueryLoop
+    QueryLoop --> PublishMsg
+    PublishMsg --> QueryLoop
+    QueryLoop -->|ResultMessage| HandleComplete
+
+    %% SDK connections
+    QueryLoop <-->|streaming| AgentLoop
+    AgentLoop --> BuiltInTools
+    AgentLoop --> Subagents
+    BuiltInTools <-->|files| Workspace
+
+    %% MCP connections
+    AgentLoop <-->|stdio| RLMServer
+    AgentLoop <-->|stdio| RAGServer
+    AgentLoop <-->|stdio| GitServer
+
+    %% External connections
+    PublishMsg -->|xadd| Redis
+    HandleComplete -->|xadd| Redis
+    RLMServer -->|Extended Thinking| Anthropic
+    RAGServer -->|Prompt Caching| Anthropic
+    RAGServer <-->|embeddings| ChromaDB
+
+    %% Styling
+    classDef runner fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef sdk fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef mcp fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef external fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+
+    class LoadTask,BuildOpts,QueryLoop,PublishMsg,HandleComplete runner
+    class AgentLoop,BuiltInTools,Subagents sdk
+    class RLMServer,RAGServer,GitServer mcp
+    class Redis,Anthropic,ChromaDB,Workspace external

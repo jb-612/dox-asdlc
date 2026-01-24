@@ -1,0 +1,78 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#FEE2E2'}}}%%
+
+flowchart TB
+    subgraph Producers["Event Producers"]
+        Agents["Agent Containers"]
+        Coord["Coordinator"]
+        HITLGw["HITL Gateway"]
+        SPA["SPA (User Actions)"]
+    end
+
+    subgraph RedisStreams["Redis Streams"]
+        subgraph PhaseStreams["Phase Streams"]
+            Discovery["asdlc:phase:discovery"]
+            Design["asdlc:phase:design"]
+            Development["asdlc:phase:development"]
+            Test["asdlc:phase:test"]
+            Security["asdlc:phase:security"]
+            Validator["asdlc:phase:validator"]
+            Deployment["asdlc:phase:deployment"]
+        end
+
+        subgraph HITLStreams["HITL Streams"]
+            Requests["asdlc:hitl:requests"]
+            Decisions["asdlc:hitl:decisions"]
+            Questions["asdlc:hitl:questions"]
+        end
+
+        subgraph AgentStreams["Agent Streams"]
+            Progress["asdlc:agent:progress:{task_id}"]
+            Todos["asdlc:agent:todos:{task_id}"]
+            Tools["asdlc:agent:tools:{task_id}"]
+        end
+
+        subgraph EpicStreams["Epic Streams"]
+            Created["asdlc:epic:created"]
+            Completed["asdlc:epic:completed"]
+            Failed["asdlc:epic:failed"]
+        end
+    end
+
+    subgraph Consumers["Event Consumers"]
+        CoordConsumer["Coordinator\n(xread blocking)"]
+        HITLConsumer["HITL Gateway\n(xread)"]
+        WSRelay["WebSocket Relay\n(xread → push)"]
+    end
+
+    %% Producer connections
+    Agents -->|"PhaseCompleted\nAgentProgress"| PhaseStreams
+    Agents -->|"progress, todos, tools"| AgentStreams
+    Coord -->|"AgentSpawned"| PhaseStreams
+    Coord -->|"GateRequired"| Requests
+    HITLGw -->|"GateApproved/Rejected"| Decisions
+    SPA -->|"EpicCreated"| Created
+
+    %% Consumer connections
+    PhaseStreams -->|xread| CoordConsumer
+    Requests -->|xread| HITLConsumer
+    Decisions -->|xread| CoordConsumer
+    Created -->|xread| CoordConsumer
+    AgentStreams -->|xread| WSRelay
+    HITLStreams -->|xread| WSRelay
+
+    %% Consumer actions
+    CoordConsumer -->|"spawn agent"| Agents
+    HITLConsumer -->|"show in UI"| SPA
+    WSRelay -->|"WebSocket push"| SPA
+
+    %% Styling
+    classDef producer fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef stream fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef consumer fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+
+    class Agents,Coord,HITLGw,SPA producer
+    class Discovery,Design,Development,Test,Security,Validator,Deployment stream
+    class Requests,Decisions,Questions stream
+    class Progress,Todos,Tools stream
+    class Created,Completed,Failed stream
+    class CoordConsumer,HITLConsumer,WSRelay consumer

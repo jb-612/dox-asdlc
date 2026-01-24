@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base'}}%%
+
+sequenceDiagram
+    autonumber
+    participant Agent as Claude Code CLI
+    participant MCP as MCP Server (stdio)
+    participant API as Anthropic API
+    participant DB as ChromaDB
+
+    Note over Agent: Agent needs deep analysis
+
+    rect rgb(255, 247, 237)
+        Note over Agent,API: RLM Flow (Extended Thinking)
+        Agent->>MCP: mcp__rlm__deep_analyze<br/>{problem: "JWT vs Sessions?"}
+        MCP->>API: POST /v1/messages<br/>{thinking: {type: enabled,<br/>budget_tokens: 10000}}
+        Note over API: Claude thinks deeply...<br/>(uses thinking tokens)
+        API-->>MCP: Response with thinking + answer
+        MCP-->>Agent: Analysis result
+    end
+
+    Note over Agent: Agent needs codebase info
+
+    rect rgb(220, 252, 231)
+        Note over Agent,DB: RAG Flow (Prompt Caching)
+        Agent->>MCP: mcp__rag__query_codebase<br/>{question: "How is auth done?"}
+        MCP->>DB: query(embeddings)
+        DB-->>MCP: Top-k code chunks
+        MCP->>API: POST /v1/messages<br/>{system: [{text: context,<br/>cache_control: ephemeral}]}
+        Note over API: Check cache...<br/>90% cost savings if hit!
+        API-->>MCP: Answer + cache status
+        MCP-->>Agent: Answer + sources
+    end
+
+    Note over Agent: Agent needs to commit
+
+    rect rgb(224, 231, 255)
+        Note over Agent,DB: Git MCP Flow
+        Agent->>MCP: mcp__git__commit<br/>{message: "feat: add auth"}
+        MCP->>MCP: Execute: git add . && git commit
+        MCP-->>Agent: Commit SHA
+    end
+
+    Note over Agent: Agent continues with results
