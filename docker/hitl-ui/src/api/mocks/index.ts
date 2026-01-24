@@ -46,6 +46,18 @@ export {
 
 export type { StreamEvent, EventType } from './events';
 
+// Documentation mocks
+export {
+  mockDocuments,
+  mockDiagrams,
+  getMockDocumentContent,
+  getMockDiagramContent,
+  listMockDocuments,
+  listMockDiagrams,
+  filterMockDocumentsByCategory,
+  filterMockDiagramsByCategory,
+} from './docs';
+
 // Helper to check if mocks are enabled
 export function useMocks(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';

@@ -1,0 +1,43 @@
+%%{init: {'theme': 'base'}}%%
+
+sequenceDiagram
+    autonumber
+    participant Dev as Development Agent
+    participant Redis as Redis Streams
+    participant Coord as Coordinator
+    participant K8s as Kubernetes API
+    participant Test as Test Agent
+
+    Note over Dev: Working on implementation...
+    
+    Dev->>Dev: Complete all tasks
+    Dev->>Redis: XADD asdlc:phase:development<br/>{event: PhaseCompleted, status: success}
+    Dev->>Dev: exit(0)
+    
+    Note over Dev: Container exits ❌
+
+    Redis-->>Coord: XREAD returns event
+    
+    Coord->>Coord: Check WORKFLOW["development"]
+    Note over Coord: transition = AUTO<br/>next = "test"
+    
+    Coord->>Coord: Build job manifest
+    Coord->>K8s: POST /apis/batch/v1/jobs<br/>{name: agent-test-xyz, env: {...}}
+    K8s-->>Coord: Job created
+    
+    Coord->>Redis: XADD coordinator:events<br/>{event: AgentSpawned}
+    
+    K8s->>Test: Start container
+    
+    Note over Test: Container starts ✓
+    
+    Test->>Redis: XADD asdlc:agent:progress<br/>{event: AgentStarted}
+    Test->>Test: Running tests...
+    Test->>Redis: XADD (progress updates)
+    Test->>Test: Tests complete
+    Test->>Redis: XADD asdlc:phase:test<br/>{event: PhaseCompleted}
+    Test->>Test: exit(0)
+    
+    Note over Test: Container exits ❌
+
+    Note over Dev,Test: ⏱️ Total A2A transition time: ~2-5 seconds

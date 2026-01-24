@@ -461,3 +461,45 @@ export interface ArtifactsResponse {
   artifacts: ArtifactDetail[];
   total: number;
 }
+
+// ============================================================================
+// Documentation Types
+// ============================================================================
+
+// Document category
+export type DocumentCategory = 'system' | 'feature' | 'architecture' | 'workflow';
+
+// Diagram category
+export type DiagramCategory = 'architecture' | 'flow' | 'sequence' | 'decision';
+
+// Document metadata
+export interface DocumentMeta {
+  id: string;
+  title: string;
+  path: string;
+  category: DocumentCategory;
+  description: string;
+  lastModified?: string;
+}
+
+// Diagram metadata
+export interface DiagramMeta {
+  id: string;
+  title: string;
+  filename: string;
+  category: DiagramCategory;
+  description: string;
+  thumbnail?: string;
+}
+
+// Document with content
+export interface DocumentContent {
+  meta: DocumentMeta;
+  content: string;
+}
+
+// Diagram with content
+export interface DiagramContent {
+  meta: DiagramMeta;
+  content: string;
+}

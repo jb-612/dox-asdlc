@@ -8,9 +8,12 @@ import {
   ServerIcon,
   FolderOpenIcon,
   DocumentIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/24/outline';
 import { useTenantStore } from '@/stores/tenantStore';
 import { useSessionStore } from '@/stores/sessionStore';
+import { useUIStore } from '@/stores/uiStore';
 import clsx from 'clsx';
 
 const environments = ['dev', 'staging', 'prod'] as const;
@@ -36,6 +39,7 @@ export default function Header() {
     useTenantStore();
   const { environment, setEnvironment, repo, setRepo, epicId, setEpic } =
     useSessionStore();
+  const { theme, toggleTheme } = useUIStore();
   const [userName] = useState('Operator');
 
   const currentPageTitle = pageTitle[location.pathname] || 'aSDLC';
@@ -203,6 +207,19 @@ export default function Header() {
             </Menu.Items>
           </Menu>
         )}
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors"
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? (
+            <SunIcon className="h-5 w-5" />
+          ) : (
+            <MoonIcon className="h-5 w-5" />
+          )}
+        </button>
 
         {/* Settings Button */}
         <button className="p-2 rounded-lg text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-colors">

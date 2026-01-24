@@ -1,0 +1,78 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart TD
+    Start(["Task: Implement Feature"])
+    --> CreateTodo["TodoWrite:\nCreate task checklist"]
+    --> ReadSpec["Read task specification\nfrom /workspace/design/tasks.json"]
+
+    ReadSpec --> QueryRAG["mcp__rag__query_codebase:\n'How are similar features implemented?'"]
+    QueryRAG --> UnderstandPatterns["Understand existing\npatterns and conventions"]
+
+    UnderstandPatterns --> TDDLoop
+
+    subgraph TDDLoop["TDD Cycle"]
+        subgraph Red["🔴 RED Phase"]
+            WriteTest["Subagent: test-first\nWrite failing test"]
+            RunTest1["Bash: npm test\nConfirm test FAILS"]
+        end
+
+        subgraph Green["🟢 GREEN Phase"]
+            Implement["Subagent: implementer\nWrite minimal code"]
+            RunTest2["Bash: npm test\nCheck if passes"]
+            PassCheck{Tests\npass?}
+        end
+
+        subgraph Debug["🔧 DEBUG Phase"]
+            AnalyzeError["Analyze test failure"]
+            NeedDeep{Complex\nissue?}
+            CallRLM["Subagent: debugger\nmcp__rlm__deep_analyze"]
+            SimpleFix["Apply simple fix"]
+        end
+
+        subgraph Refactor["♻️ REFACTOR Phase"]
+            CleanUp["Refactor code\nwhile keeping tests green"]
+            RunTest3["Bash: npm test\nConfirm still green"]
+        end
+    end
+
+    WriteTest --> RunTest1
+    RunTest1 -->|"✗ Fails (good!)"| Implement
+    Implement --> RunTest2
+    RunTest2 --> PassCheck
+
+    PassCheck -->|"✓ Yes"| UpdateTodo1["TodoWrite:\nMark step complete"]
+    PassCheck -->|"✗ No"| AnalyzeError
+
+    AnalyzeError --> NeedDeep
+    NeedDeep -->|"Yes"| CallRLM
+    NeedDeep -->|"No"| SimpleFix
+    CallRLM --> Implement
+    SimpleFix --> Implement
+
+    UpdateTodo1 --> MoreTasks{More\ntasks?}
+    MoreTasks -->|"Yes"| WriteTest
+    MoreTasks -->|"No"| CleanUp
+
+    CleanUp --> RunTest3
+    RunTest3 -->|"✓ Green"| Commit["mcp__git__commit:\nCommit changes"]
+    RunTest3 -->|"✗ Red"| CleanUp
+
+    Commit --> UpdateTodo2["TodoWrite:\nMark all complete"]
+    UpdateTodo2 --> Complete(["Phase Complete\nPublish to Redis"])
+
+    %% Styling
+    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef red fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef green fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef debug fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef refactor fill:#E0E7FF,stroke:#6366f1,stroke-width:2px
+    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
+    classDef tool fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+
+    class Start,Complete start
+    class WriteTest,RunTest1 red
+    class Implement,RunTest2 green
+    class AnalyzeError,CallRLM,SimpleFix debug
+    class CleanUp,RunTest3 refactor
+    class PassCheck,NeedDeep,MoreTasks decision
+    class CreateTodo,QueryRAG,Commit,UpdateTodo1,UpdateTodo2 tool

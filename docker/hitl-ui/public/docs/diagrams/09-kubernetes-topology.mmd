@@ -1,0 +1,103 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart TB
+    subgraph K8s["Kubernetes Cluster (namespace: asdlc)"]
+        subgraph AlwaysRunning["Always Running (Deployments)"]
+            subgraph CoordDeploy["Deployment: coordinator"]
+                CoordPod["Pod: coordinator\n256Mi RAM, 0.1 CPU\npython coordinator.main"]
+            end
+
+            subgraph HITLDeploy["Deployment: hitl-gateway"]
+                HITLPod1["Pod: hitl-gateway-1\n512Mi RAM, 0.2 CPU"]
+                HITLPod2["Pod: hitl-gateway-2\n(replica)"]
+            end
+
+            subgraph RedisDeploy["Deployment: redis"]
+                RedisPod["Pod: redis\n256Mi RAM\nredis:7-alpine"]
+            end
+
+            subgraph ChromaDeploy["Deployment: chromadb"]
+                ChromaPod["Pod: chromadb\n1Gi RAM\nchromadb/chroma"]
+            end
+        end
+
+        subgraph Ephemeral["Ephemeral (Jobs)"]
+            Job1["Job: agent-discovery-abc123\n2Gi RAM, 1 CPU\nTTL: 1 hour"]
+            Job2["Job: agent-design-def456\n2Gi RAM, 1 CPU\nTTL: 1 hour"]
+            Job3["Job: agent-dev-ghi789\n2Gi RAM, 1 CPU\nTTL: 1 hour"]
+            JobN["Job: agent-*-*\n(spawned on demand)"]
+        end
+
+        subgraph Storage["Persistent Storage"]
+            PVC1[("PVC: workspace-epic-001\n10Gi")]
+            PVC2[("PVC: chromadb-data\n10Gi")]
+        end
+
+        subgraph Services["Services"]
+            RedisSvc["Service: redis\nport: 6379"]
+            HITLSvc["Service: hitl-gateway\nport: 8080"]
+            ChromaSvc["Service: chromadb\nport: 8000"]
+        end
+
+        subgraph RBAC["RBAC"]
+            SA["ServiceAccount:\ncoordinator-sa"]
+            Role["Role:\ncoordinator-role\n• create jobs\n• list pods"]
+            RB["RoleBinding"]
+        end
+
+        subgraph Ingress["Ingress"]
+            Ing["Ingress: asdlc-ingress\nasdlc.example.com/api"]
+        end
+    end
+
+    subgraph External["External"]
+        User["User Browser"]
+        Anthropic["Anthropic API"]
+    end
+
+    %% Service connections
+    RedisPod --> RedisSvc
+    HITLPod1 --> HITLSvc
+    HITLPod2 --> HITLSvc
+    ChromaPod --> ChromaSvc
+
+    %% Pod connections
+    CoordPod -->|xread/xadd| RedisSvc
+    CoordPod -->|create_job| Ephemeral
+    Job1 -->|xadd| RedisSvc
+    Job2 -->|xadd| RedisSvc
+    Job3 -->|xadd| RedisSvc
+    HITLPod1 -->|pub/sub| RedisSvc
+
+    %% Storage
+    Job1 -->|mount| PVC1
+    Job2 -->|mount| PVC1
+    Job3 -->|mount| PVC1
+    ChromaPod -->|mount| PVC2
+
+    %% RBAC
+    SA --> CoordPod
+    Role --> RB
+    RB --> SA
+
+    %% External
+    Ing --> HITLSvc
+    User -->|HTTPS| Ing
+    Job1 -->|API calls| Anthropic
+    Job2 -->|API calls| Anthropic
+    Job3 -->|API calls| Anthropic
+
+    %% Styling
+    classDef deployment fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef job fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,stroke-dasharray: 5 5
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef service fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef rbac fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class CoordPod,HITLPod1,HITLPod2,RedisPod,ChromaPod deployment
+    class Job1,Job2,Job3,JobN job
+    class PVC1,PVC2 storage
+    class RedisSvc,HITLSvc,ChromaSvc,Ing service
+    class SA,Role,RB rbac
+    class User,Anthropic external

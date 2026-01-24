@@ -1,0 +1,106 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF'}}}%%
+
+flowchart LR
+    subgraph Phase1["Discovery Phase"]
+        D1["Discovery\nAgent"]
+        D1 -->|produces| D1Art["PRD.md\nacceptance.md"]
+    end
+
+    subgraph Gate1["HITL-1"]
+        H1{"Backlog\nApproval"}
+    end
+
+    subgraph Phase2["Design Phase"]
+        D2["Design\nAgent"]
+        D2 -->|produces| D2Art["architecture.md\ntasks.json"]
+    end
+
+    subgraph Gate2["HITL-2"]
+        H2{"Design\nSign-off"}
+    end
+
+    subgraph Phase3["Development Phase"]
+        D3["Development\nAgent"]
+        D3 -->|produces| D3Art["src/*\ntests/*"]
+    end
+
+    subgraph Auto1["A2A (Auto)"]
+        A1(("→"))
+    end
+
+    subgraph Phase4["Test Phase"]
+        D4["Test\nAgent"]
+        D4 -->|produces| D4Art["test-results/*\ncoverage/*"]
+    end
+
+    subgraph Auto2["A2A (Auto)"]
+        A2(("→"))
+    end
+
+    subgraph Phase5["Security Phase"]
+        D5["Security\nAgent"]
+        D5 -->|produces| D5Art["security-report.md\nvulns.json"]
+    end
+
+    subgraph Auto3["A2A (Auto)"]
+        A3(("→"))
+    end
+
+    subgraph Phase6["Validator Phase"]
+        D6["Validator\nAgent"]
+        D6 -->|produces| D6Art["validation-report.md"]
+    end
+
+    subgraph Gate3["HITL-5"]
+        H3{"Quality\nGate"}
+    end
+
+    subgraph Phase7["Deployment Phase"]
+        D7["Deployment\nAgent"]
+        D7 -->|produces| D7Art["release-notes.md\nartifacts/*"]
+    end
+
+    subgraph Gate4["HITL-6"]
+        H4{"Release\nAuth"}
+    end
+
+    Done(["Epic Complete"])
+
+    %% Main flow
+    D1Art --> H1
+    H1 -->|Approved| D2
+    H1 -.->|Rejected| D1
+
+    D2Art --> H2
+    H2 -->|Approved| D3
+    H2 -.->|Rejected| D2
+
+    D3Art --> A1
+    A1 -->|AUTO| D4
+
+    D4Art --> A2
+    A2 -->|AUTO| D5
+
+    D5Art --> A3
+    A3 -->|AUTO| D6
+
+    D6Art --> H3
+    H3 -->|Approved| D7
+    H3 -.->|Rejected| D6
+
+    D7Art --> H4
+    H4 -->|Approved| Done
+    H4 -.->|Rejected| D7
+
+    %% Styling
+    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef artifact fill:#faf5ff,stroke:#9333ea,stroke-width:2px
+    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
+    classDef auto fill:#DCFCE7,stroke:#16a34a,stroke-width:3px
+    classDef done fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+
+    class D1,D2,D3,D4,D5,D6,D7 agent
+    class D1Art,D2Art,D3Art,D4Art,D5Art,D6Art,D7Art artifact
+    class H1,H2,H3,H4 hitl
+    class A1,A2,A3 auto
+    class Done done

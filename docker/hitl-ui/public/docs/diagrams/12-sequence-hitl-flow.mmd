@@ -1,0 +1,52 @@
+%%{init: {'theme': 'base'}}%%
+
+sequenceDiagram
+    autonumber
+    participant Design as Design Agent
+    participant Redis as Redis Streams
+    participant Coord as Coordinator
+    participant Gateway as HITL Gateway
+    participant SPA as SPA (Browser)
+    participant Human as Human Reviewer
+    participant K8s as Kubernetes API
+    participant Dev as Development Agent
+
+    Note over Design: Design phase complete
+    
+    Design->>Redis: XADD asdlc:phase:design<br/>{event: PhaseCompleted}
+    Design->>Design: exit(0)
+    
+    Redis-->>Coord: XREAD returns event
+    
+    Coord->>Coord: Check WORKFLOW["design"]
+    Note over Coord: transition = HITL<br/>gate = "HITL-2"
+    
+    Coord->>Redis: XADD asdlc:hitl:requests<br/>{event: GateRequired, gate: HITL-2}
+    
+    Redis-->>Gateway: XREAD returns request
+    Gateway->>SPA: WebSocket push<br/>{type: gate_required}
+    
+    SPA->>SPA: Display review UI
+    SPA->>Human: Show artifacts for review
+    
+    Note over Human: Reviews architecture.md,<br/>tasks.json
+    
+    alt Approved
+        Human->>SPA: Click [Approve]
+        SPA->>Gateway: POST /hitl/approve
+        Gateway->>Redis: XADD asdlc:hitl:decisions<br/>{event: GateApproved}
+        Redis-->>Coord: XREAD returns decision
+        Coord->>K8s: Create development agent job
+        K8s->>Dev: Start container
+        Note over Dev: Development begins ✓
+    else Rejected
+        Human->>SPA: Click [Reject] + feedback
+        SPA->>Gateway: POST /hitl/reject<br/>{feedback: "Missing API specs"}
+        Gateway->>Redis: XADD asdlc:hitl:decisions<br/>{event: GateRejected, feedback: ...}
+        Redis-->>Coord: XREAD returns decision
+        Coord->>K8s: Create design agent job<br/>(with feedback in context)
+        K8s->>Design: Start container (retry)
+        Note over Design: Design retries with feedback 🔄
+    end
+
+    Note over Design,Dev: ⏱️ HITL wait time: depends on human

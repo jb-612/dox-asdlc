@@ -1,0 +1,79 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b', 'secondaryColor': '#FFF7ED', 'tertiaryColor': '#faf5ff'}}}%%
+
+flowchart TB
+    subgraph UI["User Interface Layer"]
+        SPA["SPA (Next.js)\n• Epic Management\n• HITL Review UI\n• Real-time Progress"]
+    end
+
+    subgraph Orchestration["Orchestration Layer (Always Running)"]
+        Coordinator["Coordinator\n(Python Service)\n• while True: xread()\n• Spawn K8s Jobs"]
+        HITLGateway["HITL Gateway\n(FastAPI)\n• REST API\n• WebSocket"]
+        GitGateway["Git Gateway\n• Artifact Storage\n• Version Control"]
+    end
+
+    subgraph EventBus["Event Bus"]
+        Redis[("Redis Streams\n• asdlc:phase:*\n• asdlc:hitl:*\n• asdlc:agent:*")]
+    end
+
+    subgraph MCPServers["MCP Tool Servers"]
+        RLM["RLM Server\n(Extended Thinking)"]
+        RAG["RAG Server\n(Prompt Caching)"]
+        GitMCP["Git MCP\n(commit, branch)"]
+        JiraMCP["Jira MCP\n(issues)"]
+    end
+
+    subgraph Agents["Agent Containers (Ephemeral K8s Jobs)"]
+        subgraph PhaseAgents["Phase Agents"]
+            Discovery["Discovery\nAgent"]
+            Design["Design\nAgent"]
+            Development["Development\nAgent"]
+            Test["Test\nAgent"]
+        end
+        subgraph QualityAgents["Quality Agents"]
+            Security["Security\nAgent"]
+            Validator["Validator\nAgent"]
+            Evaluator["Evaluator\nAgent"]
+        end
+    end
+
+    subgraph Infrastructure["Infrastructure"]
+        PostgreSQL[("PostgreSQL\n(State)")]
+        ChromaDB[("ChromaDB\n(Embeddings)")]
+        Git[("Git Repos\n(Artifacts)")]
+        Anthropic["Anthropic API\n(Claude Models)"]
+    end
+
+    %% User interactions
+    SPA <-->|REST/WebSocket| HITLGateway
+
+    %% Orchestration flows
+    Coordinator -->|create_job()| Agents
+    Coordinator <-->|xread/xadd| Redis
+    HITLGateway <-->|pub/sub| Redis
+    GitGateway <-->|store| Git
+
+    %% Agent flows
+    Agents -->|xadd progress| Redis
+    Agents <-->|stdio| MCPServers
+
+    %% MCP to external
+    RLM -->|Extended Thinking| Anthropic
+    RAG -->|Prompt Caching| Anthropic
+    RAG <-->|embeddings| ChromaDB
+
+    %% Styling
+    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef eventbus fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef mcp fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef quality fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef infra fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+
+    class SPA ui
+    class Coordinator,HITLGateway,GitGateway orchestration
+    class Redis eventbus
+    class RLM,RAG,GitMCP,JiraMCP mcp
+    class Discovery,Design,Development,Test agent
+    class Security,Validator,Evaluator quality
+    class PostgreSQL,ChromaDB,Git,Anthropic infra

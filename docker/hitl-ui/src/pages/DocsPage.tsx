@@ -1,12 +1,34 @@
 /**
- * DocsPage - Documentation page with Learn and Apply tabs
+ * DocsPage - Documentation page with Overview, Diagrams, Reference, and Glossary tabs
+ *
+ * Integrates system documentation, mermaid diagrams, and glossary into a
+ * unified documentation experience with URL-persisted tab navigation and search.
  */
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import BlueprintMap, { Cluster } from '../components/docs/BlueprintMap';
 import MethodologyStepper, { Stage } from '../components/docs/MethodologyStepper';
 import InteractiveGlossary, { GlossaryTerm } from '../components/docs/InteractiveGlossary';
+import DiagramGallery from '../components/docs/DiagramGallery';
+import DocBrowser from '../components/docs/DocBrowser';
+import DocViewer from '../components/docs/DocViewer';
+import DocSearch, { SearchResult } from '../components/docs/DocSearch';
+import { useDocuments, useDiagrams, useDocument } from '../api/docs';
+
+// Tab types
+type TabId = 'overview' | 'diagrams' | 'reference' | 'glossary';
+
+const validTabs: TabId[] = ['overview', 'diagrams', 'reference', 'glossary'];
+
+// Tab configuration
+const tabs: Array<{ id: TabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'diagrams', label: 'Diagrams' },
+  { id: 'reference', label: 'Reference' },
+  { id: 'glossary', label: 'Glossary' },
+];
 
 // Mock data for BlueprintMap
 const mockClusters: Cluster[] = [
@@ -185,138 +207,247 @@ const mockTerms: GlossaryTerm[] = [
 ];
 
 export default function DocsPage() {
-  const [activeTab, setActiveTab] = useState<'learn' | 'apply'>('learn');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Get active tab from URL or default to overview
+  const activeTab = useMemo(() => {
+    const tabParam = searchParams.get('tab') as TabId | null;
+    return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview';
+  }, [searchParams]);
+
+  // Selected document in Reference tab
+  const [selectedDocId, setSelectedDocId] = useState<string | undefined>();
+
+  // Fetch documents and diagrams
+  const { data: documents = [], isLoading: docsLoading } = useDocuments();
+  const { data: diagrams = [], isLoading: diagramsLoading } = useDiagrams();
+  const { data: selectedDocument } = useDocument(selectedDocId);
+
+  // Handle tab change
+  const handleTabChange = useCallback(
+    (tabId: TabId) => {
+      setSearchParams({ tab: tabId });
+    },
+    [setSearchParams]
+  );
+
+  // Handle diagram selection - navigate to detail page
+  const handleDiagramSelect = useCallback(
+    (diagramId: string) => {
+      navigate(`/docs/diagrams/${diagramId}`);
+    },
+    [navigate]
+  );
+
+  // Handle document selection in browser
+  const handleDocSelect = useCallback((docId: string) => {
+    setSelectedDocId(docId);
+  }, []);
+
+  // Handle search result selection
+  const handleSearchResultSelect = useCallback(
+    (result: SearchResult) => {
+      if (result.type === 'diagram') {
+        // Navigate to diagrams tab and potentially highlight the diagram
+        setSearchParams({ tab: 'diagrams' });
+        // Optionally navigate to diagram detail
+        // navigate(`/docs/diagrams/${result.id}`);
+      } else if (result.type === 'document') {
+        // Navigate to reference tab and select the document
+        setSearchParams({ tab: 'reference' });
+        setSelectedDocId(result.id);
+      }
+    },
+    [setSearchParams]
+  );
+
+  // Render Overview tab content
+  const renderOverviewTab = () => (
+    <div className="space-y-8">
+      {/* System Overview */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">System Overview</h2>
+        <BlueprintMap clusters={mockClusters} showFlow />
+      </section>
+
+      {/* Methodology Stages */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Methodology Stages</h2>
+        <MethodologyStepper stages={mockStages} />
+      </section>
+    </div>
+  );
+
+  // Render Diagrams tab content
+  const renderDiagramsTab = () => (
+    <div>
+      {diagramsLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-blue" />
+        </div>
+      ) : (
+        <DiagramGallery diagrams={diagrams} onSelect={handleDiagramSelect} />
+      )}
+    </div>
+  );
+
+  // Mobile sidebar collapse state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Auto-collapse sidebar when document selected on mobile
+  const handleDocSelectWithCollapse = useCallback((docId: string) => {
+    handleDocSelect(docId);
+    // Check if mobile-sized viewport (could be detected via window width or media query)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [handleDocSelect]);
+
+  // Render Reference tab content
+  const renderReferenceTab = () => (
+    <div className="flex flex-col md:flex-row gap-4 md:gap-6 h-full">
+      {/* Mobile sidebar toggle */}
+      <button
+        className="md:hidden flex items-center gap-2 px-4 py-2 bg-white rounded-lg border text-sm font-medium text-gray-700 hover:bg-gray-50"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-expanded={sidebarOpen}
+        data-testid="sidebar-toggle"
+      >
+        <svg
+          className={clsx('h-4 w-4 transition-transform', sidebarOpen && 'rotate-180')}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        {sidebarOpen ? 'Hide' : 'Show'} Documents
+      </button>
+
+      {/* Sidebar - Document Browser */}
+      <div
+        className={clsx(
+          'bg-white rounded-lg border p-4 overflow-y-auto transition-all duration-200',
+          'md:w-64 md:flex-shrink-0 md:block',
+          sidebarOpen ? 'block' : 'hidden md:block'
+        )}
+        data-testid="doc-browser-container"
+      >
+        {docsLoading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 bg-gray-200 rounded w-3/4" />
+            <div className="h-4 bg-gray-200 rounded w-1/2" />
+            <div className="h-4 bg-gray-200 rounded w-2/3" />
+          </div>
+        ) : (
+          <DocBrowser
+            documents={documents}
+            selectedId={selectedDocId}
+            onSelect={handleDocSelectWithCollapse}
+          />
+        )}
+      </div>
+
+      {/* Main content - Document Viewer */}
+      <div className="flex-1 bg-white rounded-lg border p-4 md:p-6 overflow-y-auto min-h-[300px]">
+        {selectedDocId && selectedDocument ? (
+          <DocViewer document={selectedDocument} />
+        ) : selectedDocId ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-blue" />
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full text-text-muted">
+            <div className="text-center">
+              <svg
+                className="h-12 w-12 mx-auto mb-3 opacity-50"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1}
+              >
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>Select a document to view</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Render Glossary tab content
+  const renderGlossaryTab = () => (
+    <div>
+      <InteractiveGlossary terms={mockTerms} />
+    </div>
+  );
+
+  // Render active tab content
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return renderOverviewTab();
+      case 'diagrams':
+        return renderDiagramsTab();
+      case 'reference':
+        return renderReferenceTab();
+      case 'glossary':
+        return renderGlossaryTab();
+      default:
+        return renderOverviewTab();
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-gray-50 max-w-7xl mx-auto" data-testid="docs-page">
-      {/* Header */}
+      {/* Header with Search */}
       <div className="bg-white border-b px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Documentation</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Learn about the aSDLC methodology and how to use the system effectively
-        </p>
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Documentation</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              Learn about the aSDLC methodology and how to use the system effectively
+            </p>
+          </div>
+          <DocSearch
+            documents={documents}
+            diagrams={diagrams}
+            onResultSelect={handleSearchResultSelect}
+            className="w-80"
+            placeholder="Search docs and diagrams..."
+          />
+        </div>
       </div>
 
       {/* Tab Navigation */}
       <div className="bg-white border-b">
         <div className="px-6">
           <nav className="flex gap-4" role="tablist" data-testid="tabs-container">
-            <button
-              onClick={() => setActiveTab('learn')}
-              className={clsx(
-                'py-3 px-4 border-b-2 font-medium text-sm transition-colors',
-                activeTab === 'learn'
-                  ? 'border-accent-teal text-accent-teal'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              )}
-              role="tab"
-              aria-selected={activeTab === 'learn'}
-              data-testid="tab-learn"
-            >
-              Learn
-            </button>
-            <button
-              onClick={() => setActiveTab('apply')}
-              className={clsx(
-                'py-3 px-4 border-b-2 font-medium text-sm transition-colors',
-                activeTab === 'apply'
-                  ? 'border-accent-teal text-accent-teal'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              )}
-              role="tab"
-              aria-selected={activeTab === 'apply'}
-              data-testid="tab-apply"
-            >
-              Apply
-            </button>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={clsx(
+                  'py-3 px-4 border-b-2 font-medium text-sm transition-colors',
+                  activeTab === tab.id
+                    ? 'border-accent-teal text-accent-teal'
+                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                )}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                data-testid={`tab-${tab.id}`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </nav>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {activeTab === 'learn' ? (
-          <div className="space-y-8">
-            {/* System Overview */}
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">System Overview</h2>
-              <BlueprintMap clusters={mockClusters} showFlow />
-            </section>
-
-            {/* Methodology Stages */}
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Methodology Stages</h2>
-              <MethodologyStepper stages={mockStages} />
-            </section>
-
-            {/* Glossary */}
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Glossary</h2>
-              <InteractiveGlossary terms={mockTerms} />
-            </section>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {/* Getting Started */}
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Getting Started</h2>
-              <div className="bg-white rounded-lg border p-6">
-                <p className="text-gray-700 mb-4">
-                  Welcome to the aSDLC system! Here's how to get started with your first workflow.
-                </p>
-                <div data-testid="quick-actions" className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 border rounded hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium text-gray-900 mb-2">Start Discovery</h3>
-                    <p className="text-sm text-gray-600">Begin a new discovery session for your project</p>
-                  </div>
-                  <div className="p-4 border rounded hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium text-gray-900 mb-2">Review Gates</h3>
-                    <p className="text-sm text-gray-600">Check pending approval gates</p>
-                  </div>
-                  <div className="p-4 border rounded hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium text-gray-900 mb-2">View Artifacts</h3>
-                    <p className="text-sm text-gray-600">Browse generated artifacts</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Common Workflows */}
-            <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Common Workflows</h2>
-              <div className="bg-white rounded-lg border p-6 space-y-4">
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Creating a New PRD</h3>
-                  <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                    <li>Navigate to Discovery Studio</li>
-                    <li>Start a chat session describing your requirements</li>
-                    <li>Review the working outline as it develops</li>
-                    <li>Preview and save the generated PRD</li>
-                  </ol>
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Approving Code Changes</h3>
-                  <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                    <li>Go to Gates page to see pending reviews</li>
-                    <li>Click on a gate to view details</li>
-                    <li>Review the code diff and evidence</li>
-                    <li>Approve or reject with feedback</li>
-                  </ol>
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-2">Monitoring Agent Activity</h3>
-                  <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                    <li>Open the Agent Cockpit</li>
-                    <li>View KPIs and worker utilization</li>
-                    <li>Check the workflow graph for bottlenecks</li>
-                    <li>Review recent runs and their status</li>
-                  </ol>
-                </div>
-              </div>
-            </section>
-          </div>
-        )}
-      </div>
+      <div className="flex-1 overflow-auto p-6">{renderTabContent()}</div>
     </div>
   );
 }
