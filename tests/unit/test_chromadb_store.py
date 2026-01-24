@@ -5,6 +5,7 @@ Tests ChromaDBStore with mocked ChromaDB client.
 
 from __future__ import annotations
 
+import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +19,10 @@ from src.core.exceptions import (
 from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
 from src.infrastructure.knowledge_store.config import KnowledgeStoreConfig
 from src.infrastructure.knowledge_store.models import Document, SearchResult
+
+
+# Suppress deprecation warnings during most tests since we know it's deprecated
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
 @pytest.fixture
@@ -63,6 +68,28 @@ class TestChromaDBStoreInit:
 
             assert store is not None
             assert store.config == mock_config
+
+    @pytest.mark.filterwarnings("error::DeprecationWarning")
+    def test_store_emits_deprecation_warning(
+        self, mock_config: KnowledgeStoreConfig, mock_client: MagicMock
+    ) -> None:
+        """Test ChromaDBStore emits deprecation warning on creation."""
+        with patch(
+            "src.infrastructure.knowledge_store.chromadb_store.chromadb.HttpClient",
+            return_value=mock_client,
+        ):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                ChromaDBStore(mock_config)
+
+                # Verify deprecation warning was raised
+                assert len(w) >= 1
+                deprecation_warnings = [
+                    x for x in w if issubclass(x.category, DeprecationWarning)
+                ]
+                assert len(deprecation_warnings) == 1
+                assert "DEPRECATED" in str(deprecation_warnings[0].message)
+                assert "ElasticsearchStore" in str(deprecation_warnings[0].message)
 
     def test_store_creates_collection_on_first_access(
         self, mock_config: KnowledgeStoreConfig, mock_client: MagicMock

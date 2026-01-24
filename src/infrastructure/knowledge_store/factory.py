@@ -6,11 +6,13 @@ Provides singleton pattern for KnowledgeStore access with backend selection.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING, Union
 
 from src.core.exceptions import ConfigurationError
 from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
 from src.infrastructure.knowledge_store.config import KnowledgeStoreConfig
+from src.infrastructure.knowledge_store.elasticsearch_store import ElasticsearchStore
 from src.infrastructure.knowledge_store.mock_anthology import MockAnthologyStore
 
 if TYPE_CHECKING:
@@ -19,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Type alias for supported store types
-StoreType = Union[ChromaDBStore, MockAnthologyStore]
+StoreType = Union[ElasticsearchStore, ChromaDBStore, MockAnthologyStore]
 
 # Singleton instance
 _knowledge_store: StoreType | None = None
@@ -34,7 +36,8 @@ def get_knowledge_store(
     configuration, or returns the existing instance on subsequent calls.
 
     Supported backends:
-        - "chromadb": ChromaDB vector database (default)
+        - "elasticsearch": Elasticsearch vector database (default, recommended)
+        - "chromadb": ChromaDB vector database (deprecated, use elasticsearch)
         - "mock_anthology": In-memory mock for testing
 
     Args:
@@ -67,7 +70,23 @@ def get_knowledge_store(
         backend = config.backend.lower()
         logger.info(f"Creating KnowledgeStore with backend: {backend}")
 
-        if backend == "chromadb":
+        if backend == "elasticsearch":
+            logger.info(
+                f"Connecting to Elasticsearch at {config.elasticsearch_url}"
+            )
+            _knowledge_store = ElasticsearchStore(config)
+        elif backend == "chromadb":
+            warnings.warn(
+                "ChromaDB backend is DEPRECATED and will be removed in 30 days. "
+                "Please migrate to Elasticsearch by setting "
+                "KNOWLEDGE_STORE_BACKEND=elasticsearch",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            logger.warning(
+                "ChromaDB backend is DEPRECATED. "
+                "Please migrate to Elasticsearch."
+            )
             logger.info(
                 f"Connecting to ChromaDB at {config.host}:{config.port}"
             )
@@ -78,7 +97,7 @@ def get_knowledge_store(
         else:
             raise ConfigurationError(
                 f"Unsupported knowledge store backend: '{backend}'. "
-                f"Supported backends: chromadb, mock_anthology"
+                f"Supported backends: elasticsearch, chromadb, mock_anthology"
             )
 
     return _knowledge_store

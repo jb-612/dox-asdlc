@@ -66,9 +66,14 @@ Create the name of the service account to use
 
 {{/*
 Get the namespace to deploy to
+Prefers global.namespace if set, otherwise uses Release.Namespace
 */}}
 {{- define "dox-asdlc.namespace" -}}
-{{- default .Values.global.namespace .Release.Namespace }}
+{{- if .Values.global.namespace }}
+{{- .Values.global.namespace }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
 {{- end }}
 
 {{/*

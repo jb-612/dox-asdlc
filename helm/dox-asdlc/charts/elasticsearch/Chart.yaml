@@ -1,0 +1,16 @@
+apiVersion: v2
+name: elasticsearch
+description: Elasticsearch StatefulSet for aSDLC KnowledgeStore RAG backend
+type: application
+
+version: 0.1.0
+appVersion: "8.11.0"
+
+keywords:
+  - elasticsearch
+  - vector-database
+  - rag
+  - knowledge-store
+  - knn-search
+
+home: https://www.elastic.co/elasticsearch/

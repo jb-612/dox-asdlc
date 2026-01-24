@@ -76,9 +76,33 @@ redis:
   aof:
     enabled: true
 
-# ChromaDB subchart configuration (KnowledgeStore backend)
-chromadb:
+# Elasticsearch subchart configuration (KnowledgeStore backend - DEFAULT)
+# Elasticsearch is the recommended production backend for KnowledgeStore
+elasticsearch:
   enabled: true
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  config:
+    clusterName: "asdlc-cluster"
+    discoveryType: "single-node"
+    javaOpts: "-Xms512m -Xmx512m"
+    securityEnabled: false
+
+# ChromaDB subchart configuration (DEPRECATED - use elasticsearch instead)
+# This backend is deprecated and will be removed in 30 days.
+# Set chromadb.enabled=true and elasticsearch.enabled=false to use ChromaDB.
+chromadb:
+  enabled: false
   replicas: 1
   persistence:
     enabled: true
@@ -152,3 +176,8 @@ sharedEnv:
   MULTI_TENANCY_ENABLED: "false"
   DEFAULT_TENANT_ID: "default"
   ALLOWED_TENANTS: "*"
+  # KnowledgeStore settings
+  KNOWLEDGE_STORE_BACKEND: "elasticsearch"
+  ELASTICSEARCH_URL: "http://knowledge-store:9200"
+  ES_INDEX_PREFIX: "asdlc"
+  ES_NUM_CANDIDATES: "100"

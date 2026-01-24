@@ -1,7 +1,7 @@
 """KnowledgeStore module for RAG and semantic search.
 
 This module provides a knowledge store abstraction for document indexing,
-semantic search, and retrieval using ChromaDB as the backend.
+semantic search, and retrieval. The default backend is Elasticsearch.
 
 Usage:
     ```python
@@ -39,13 +39,34 @@ Usage:
     ```
 """
 
-from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
 from src.infrastructure.knowledge_store.config import KnowledgeStoreConfig
-from src.infrastructure.knowledge_store.factory import (
-    get_knowledge_store,
-    reset_knowledge_store,
-)
 from src.infrastructure.knowledge_store.models import Document, SearchResult
+
+
+def get_knowledge_store(config: KnowledgeStoreConfig | None = None):
+    """Get the singleton KnowledgeStore instance.
+
+    This is a lazy import wrapper that avoids loading all backends at import time.
+    See factory.get_knowledge_store for full documentation.
+    """
+    from src.infrastructure.knowledge_store.factory import (
+        get_knowledge_store as _get_knowledge_store,
+    )
+
+    return _get_knowledge_store(config)
+
+
+def reset_knowledge_store() -> None:
+    """Reset the singleton KnowledgeStore instance.
+
+    See factory.reset_knowledge_store for full documentation.
+    """
+    from src.infrastructure.knowledge_store.factory import (
+        reset_knowledge_store as _reset_knowledge_store,
+    )
+
+    _reset_knowledge_store()
+
 
 __all__ = [
     # Factory functions
@@ -56,6 +77,19 @@ __all__ = [
     "SearchResult",
     # Configuration
     "KnowledgeStoreConfig",
-    # Backend (for advanced use)
-    "ChromaDBStore",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import of backend classes."""
+    if name == "ElasticsearchStore":
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        return ElasticsearchStore
+    elif name == "ChromaDBStore":
+        from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
+
+        return ChromaDBStore
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,0 +1,109 @@
+# Default values for elasticsearch subchart
+
+# Enable/disable Elasticsearch deployment
+enabled: true
+
+# Init container for sysctl settings (requires privileged access)
+# Set to false if vm.max_map_count is configured at node level
+initSysctl:
+  enabled: true
+
+# Number of replicas (single replica for prototype)
+replicas: 1
+
+# Elasticsearch image configuration
+image:
+  repository: docker.elastic.co/elasticsearch/elasticsearch
+  tag: "8.11.0"
+  pullPolicy: IfNotPresent
+
+# Resource configuration
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  # Mount path for Elasticsearch data
+  mountPath: "/usr/share/elasticsearch/data"
+
+# Elasticsearch configuration
+config:
+  # Cluster name
+  clusterName: "asdlc-cluster"
+  # Discovery type (single-node for prototype)
+  discoveryType: "single-node"
+  # Java heap options
+  javaOpts: "-Xms512m -Xmx512m"
+  # Disable security for local development
+  securityEnabled: false
+  # HTTP host binding
+  httpHost: "0.0.0.0"
+  # HTTP port
+  httpPort: 9200
+
+# Service configuration
+# Named "knowledge-store" to allow backend substitution
+service:
+  # Service name override (defaults to release-name-elasticsearch)
+  nameOverride: "knowledge-store"
+  type: ClusterIP
+  port: 9200
+
+# Liveness probe configuration
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 60
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 5
+  # Elasticsearch cluster health endpoint
+  path: /_cluster/health
+
+# Readiness probe configuration
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  path: /_cluster/health
+
+# Security context
+securityContext:
+  runAsNonRoot: false  # Elasticsearch requires root for some operations
+  # runAsUser: 1000
+  # fsGroup: 1000
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Index settings for aSDLC
+indexSettings:
+  # Prefix for index names
+  prefix: "asdlc"
+  # Number of shards
+  numberOfShards: 1
+  # Number of replicas
+  numberOfReplicas: 0
+  # kNN settings
+  knn:
+    numCandidates: 100

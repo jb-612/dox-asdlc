@@ -141,3 +141,87 @@ class TestKnowledgeStoreConfigSerialization:
         config = KnowledgeStoreConfig()
 
         assert config.connection_url == "http://localhost:8000"
+
+
+class TestElasticsearchConfig:
+    """Tests for Elasticsearch-specific configuration."""
+
+    def test_default_elasticsearch_url(self) -> None:
+        """Test default Elasticsearch URL."""
+        config = KnowledgeStoreConfig()
+
+        assert config.elasticsearch_url == "http://localhost:9200"
+
+    def test_elasticsearch_url_from_env(self) -> None:
+        """Test Elasticsearch URL from environment variable."""
+        with patch.dict(
+            os.environ,
+            {"ELASTICSEARCH_URL": "http://elasticsearch.prod:9200"},
+        ):
+            config = KnowledgeStoreConfig.from_env()
+
+            assert config.elasticsearch_url == "http://elasticsearch.prod:9200"
+
+    def test_elasticsearch_api_key_default_none(self) -> None:
+        """Test Elasticsearch API key defaults to None."""
+        config = KnowledgeStoreConfig()
+
+        assert config.elasticsearch_api_key is None
+
+    def test_elasticsearch_api_key_from_env(self) -> None:
+        """Test Elasticsearch API key from environment variable."""
+        with patch.dict(
+            os.environ,
+            {"ELASTICSEARCH_API_KEY": "my-secret-api-key"},
+        ):
+            config = KnowledgeStoreConfig.from_env()
+
+            assert config.elasticsearch_api_key == "my-secret-api-key"
+
+    def test_elasticsearch_index_prefix(self) -> None:
+        """Test default Elasticsearch index prefix."""
+        config = KnowledgeStoreConfig()
+
+        assert config.es_index_prefix == "asdlc"
+
+    def test_elasticsearch_index_prefix_from_env(self) -> None:
+        """Test Elasticsearch index prefix from environment variable."""
+        with patch.dict(
+            os.environ,
+            {"ES_INDEX_PREFIX": "custom_prefix"},
+        ):
+            config = KnowledgeStoreConfig.from_env()
+
+            assert config.es_index_prefix == "custom_prefix"
+
+    def test_elasticsearch_num_candidates(self) -> None:
+        """Test default Elasticsearch kNN num_candidates."""
+        config = KnowledgeStoreConfig()
+
+        assert config.es_num_candidates == 100
+
+    def test_elasticsearch_num_candidates_from_env(self) -> None:
+        """Test Elasticsearch num_candidates from environment variable."""
+        with patch.dict(
+            os.environ,
+            {"ES_NUM_CANDIDATES": "200"},
+        ):
+            config = KnowledgeStoreConfig.from_env()
+
+            assert config.es_num_candidates == 200
+
+    def test_elasticsearch_config_in_to_dict(self) -> None:
+        """Test Elasticsearch config is included in to_dict."""
+        config = KnowledgeStoreConfig(
+            elasticsearch_url="http://es:9200",
+            es_index_prefix="myprefix",
+            es_num_candidates=150,
+        )
+
+        result = config.to_dict()
+
+        assert result["elasticsearch_url"] == "http://es:9200"
+        assert result["es_index_prefix"] == "myprefix"
+        assert result["es_num_candidates"] == 150
+        # API key should not be in dict for security
+        assert "elasticsearch_api_key" not in result

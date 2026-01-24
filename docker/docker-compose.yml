@@ -20,15 +20,15 @@ services:
       - SERVICE_NAME=orchestrator
       - SERVICE_PORT=8080
       - GIT_WRITE_ACCESS=true
-      - KNOWLEDGE_STORE_HOST=chromadb
-      - KNOWLEDGE_STORE_PORT=8000
+      - KNOWLEDGE_STORE_BACKEND=elasticsearch
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     volumes:
       - ../:/app/workspace:rw
       - git-credentials:/app/.git-credentials:ro
     depends_on:
       infrastructure:
         condition: service_healthy
-      chromadb:
+      elasticsearch:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -57,14 +57,14 @@ services:
       - SERVICE_NAME=workers
       - SERVICE_PORT=8081
       - GIT_WRITE_ACCESS=false
-      - KNOWLEDGE_STORE_HOST=chromadb
-      - KNOWLEDGE_STORE_PORT=8000
+      - KNOWLEDGE_STORE_BACKEND=elasticsearch
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     volumes:
       - ../:/app/workspace:ro
     depends_on:
       infrastructure:
         condition: service_healthy
-      chromadb:
+      elasticsearch:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
@@ -96,27 +96,29 @@ services:
     networks:
       - asdlc-network
 
-  # Container 3b: ChromaDB Knowledge Store
+  # Container 3b: Elasticsearch Knowledge Store
   # - Vector database for RAG and semantic search
-  # - Stores document embeddings for context retrieval
-  chromadb:
-    image: chromadb/chroma:0.4.22
-    container_name: asdlc-chromadb
-    hostname: chromadb
+  # - Stores document embeddings with kNN search
+  # - Replaces ChromaDB as the default backend
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: asdlc-elasticsearch
+    hostname: elasticsearch
     ports:
-      - "8000:8000"
+      - "9200:9200"
     environment:
-      - IS_PERSISTENT=TRUE
-      - PERSIST_DIRECTORY=/chroma/chroma
-      - ANONYMIZED_TELEMETRY=FALSE
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=asdlc-cluster
     volumes:
-      - chromadb-data:/chroma/chroma
+      - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
     networks:
       - asdlc-network
 
@@ -159,7 +161,7 @@ networks:
 volumes:
   redis-data:
     name: asdlc-redis-data
-  chromadb-data:
-    name: asdlc-chromadb-data
+  elasticsearch-data:
+    name: asdlc-elasticsearch-data
   git-credentials:
     name: asdlc-git-credentials

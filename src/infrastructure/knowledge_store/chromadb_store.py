@@ -1,5 +1,8 @@
 """ChromaDB implementation of the KnowledgeStore interface.
 
+DEPRECATED: This module is deprecated and will be removed in 30 days.
+Please migrate to Elasticsearch by setting KNOWLEDGE_STORE_BACKEND=elasticsearch.
+
 Provides vector storage and semantic search using ChromaDB backend.
 Supports multi-tenancy through tenant-prefixed collection names.
 """
@@ -7,6 +10,7 @@ Supports multi-tenancy through tenant-prefixed collection names.
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any
 
 import chromadb
@@ -27,6 +31,9 @@ logger = logging.getLogger(__name__)
 class ChromaDBStore:
     """ChromaDB implementation of KnowledgeStore protocol.
 
+    DEPRECATED: This class is deprecated and will be removed in 30 days.
+    Please migrate to ElasticsearchStore by setting KNOWLEDGE_STORE_BACKEND=elasticsearch.
+
     Connects to a ChromaDB instance via HTTP and provides document
     indexing, semantic search, and retrieval operations.
 
@@ -35,6 +42,7 @@ class ChromaDBStore:
 
     Example:
         ```python
+        # Deprecated - use ElasticsearchStore instead
         config = KnowledgeStoreConfig.from_env()
         store = ChromaDBStore(config)
 
@@ -50,12 +58,22 @@ class ChromaDBStore:
     def __init__(self, config: KnowledgeStoreConfig) -> None:
         """Initialize ChromaDB store with configuration.
 
+        DEPRECATED: Use ElasticsearchStore instead.
+
         Args:
             config: Configuration for ChromaDB connection.
 
         Raises:
             BackendConnectionError: If connection to ChromaDB fails.
         """
+        warnings.warn(
+            "ChromaDBStore is DEPRECATED and will be removed in 30 days. "
+            "Please migrate to ElasticsearchStore by setting "
+            "KNOWLEDGE_STORE_BACKEND=elasticsearch. "
+            "See docs/System_Design.md Section 5.3 for migration guidance.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self._base_collection_name = config.collection_name
         self._collection_cache: dict[str, Any] = {}
