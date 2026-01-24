@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# deploy.sh - Deploy dox-asdlc to Kubernetes via Helm
+# deploy-plane.sh - Deploy Plane CE to Kubernetes
 #
-# Usage: ./scripts/k8s/deploy.sh [options]
+# Usage: ./scripts/k8s/deploy-plane.sh [options]
 #
 # Options:
 #   --values <file>   Additional values file (can be repeated)
@@ -11,20 +11,19 @@ set -euo pipefail
 #   --dry-run         Render templates without installing
 #   --debug           Enable Helm debug output
 #   --wait            Wait for all pods to be ready
-#   --timeout <dur>   Timeout for --wait (default: 5m)
-#   --with-plane      Also deploy Plane CE for project management
+#   --timeout <dur>   Timeout for --wait (default: 10m)
 #   --help            Show this help message
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Configuration
-RELEASE_NAME="dox-asdlc"
-CHART_PATH="$PROJECT_ROOT/helm/dox-asdlc"
-NAMESPACE="dox-asdlc"
+RELEASE_NAME="plane-app"
+CHART_NAME="makeplane/plane-ce"
+NAMESPACE="plane-ce"
 
-# Default values file based on environment
-DEFAULT_VALUES_FILE="$CHART_PATH/values-minikube.yaml"
+# Default values file
+DEFAULT_VALUES_FILE="$PROJECT_ROOT/helm/plane-ce/values-minikube.yaml"
 
 # Helm options
 HELM_OPTS=()
@@ -33,8 +32,7 @@ SET_VALUES=()
 DRY_RUN=false
 DEBUG=false
 WAIT=false
-TIMEOUT="5m"
-WITH_PLANE=false
+TIMEOUT="10m"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -62,10 +60,6 @@ while [[ $# -gt 0 ]]; do
         --timeout)
             TIMEOUT="$2"
             shift 2
-            ;;
-        --with-plane)
-            WITH_PLANE=true
-            shift
             ;;
         --help|-h)
             head -20 "$0" | grep -E "^#" | sed 's/^# //' | sed 's/^#//'
@@ -107,79 +101,26 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check if chart exists
-    if [ ! -f "$CHART_PATH/Chart.yaml" ]; then
-        error "Helm chart not found at: $CHART_PATH"
-        exit 1
+    # Check if Plane repo is added
+    if ! helm repo list 2>/dev/null | grep -q "^makeplane"; then
+        log "Plane Helm repository not found. Adding it now..."
+        "$SCRIPT_DIR/add-plane-repo.sh"
     fi
-
-    # Check if custom images exist (warn if missing)
-    check_custom_images
 
     log "Prerequisites met."
 }
 
-# Check if custom Docker images are available
-check_custom_images() {
-    local missing_images=()
-    local images=("dox-asdlc/orchestrator" "dox-asdlc/workers" "dox-asdlc/hitl-ui")
+# Add default values file
+setup_values() {
+    log "Setting up values files..."
 
-    for img in "${images[@]}"; do
-        if ! docker image inspect "$img:latest" &> /dev/null; then
-            missing_images+=("$img")
-        fi
-    done
-
-    if [ ${#missing_images[@]} -gt 0 ]; then
-        echo ""
-        log "WARNING: Custom images not found locally:"
-        for img in "${missing_images[@]}"; do
-            echo "    - $img:latest"
-        done
-        echo ""
-        echo "  Build images first: ./scripts/build-images.sh --minikube"
-        echo ""
-        echo "  Continuing deployment (images may be pulled from registry if available)..."
-        echo ""
-    fi
-}
-
-# Detect environment and select values file
-detect_environment() {
-    log "Detecting environment..."
-
-    # Check if running in minikube context
-    local context
-    context=$(kubectl config current-context 2>/dev/null || echo "")
-
-    if [[ "$context" == *"minikube"* ]] || [[ "$context" == "dox-asdlc" ]]; then
-        log "  Detected minikube environment."
-        if [ -f "$DEFAULT_VALUES_FILE" ]; then
-            VALUES_FILES=("$DEFAULT_VALUES_FILE" "${VALUES_FILES[@]}")
-            log "  Using values file: $DEFAULT_VALUES_FILE"
-        fi
+    if [ -f "$DEFAULT_VALUES_FILE" ]; then
+        VALUES_FILES=("$DEFAULT_VALUES_FILE" "${VALUES_FILES[@]}")
+        log "  Using values file: $DEFAULT_VALUES_FILE"
     else
-        log "  Non-minikube environment detected."
-        log "  Using default values.yaml only."
+        log "  WARNING: Default values file not found: $DEFAULT_VALUES_FILE"
+        log "  Using chart defaults."
     fi
-}
-
-# Lint the chart
-lint_chart() {
-    log "Linting Helm chart..."
-
-    local lint_cmd=(helm lint "$CHART_PATH")
-
-    for vf in "${VALUES_FILES[@]}"; do
-        lint_cmd+=(-f "$vf")
-    done
-
-    if ! "${lint_cmd[@]}"; then
-        error "Helm lint failed. Please fix the issues before deploying."
-        exit 1
-    fi
-
-    log "Helm lint passed."
 }
 
 # Build Helm command
@@ -188,7 +129,7 @@ build_helm_command() {
         upgrade
         --install
         "$RELEASE_NAME"
-        "$CHART_PATH"
+        "$CHART_NAME"
         --namespace "$NAMESPACE"
         --create-namespace
     )
@@ -219,7 +160,7 @@ build_helm_command() {
 
 # Deploy the chart
 deploy_chart() {
-    log "Deploying dox-asdlc..."
+    log "Deploying Plane CE..."
 
     if [ "$DRY_RUN" = true ]; then
         log "  Running in dry-run mode (templates will be rendered but not applied)."
@@ -233,9 +174,77 @@ deploy_chart() {
     fi
 
     if [ "$DRY_RUN" = false ]; then
-        log "Deployment successful."
+        log "Deployment initiated."
     else
         log "Dry-run complete."
+    fi
+}
+
+# Wait for pods to be ready
+wait_for_pods() {
+    if [ "$DRY_RUN" = true ] || [ "$WAIT" = true ]; then
+        return 0
+    fi
+
+    log "Waiting for pods to be ready (this may take a few minutes)..."
+
+    local max_attempts=60
+    local attempt=0
+
+    while [ $attempt -lt $max_attempts ]; do
+        local ready_pods
+        ready_pods=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+        local total_pods
+        total_pods=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+
+        if [ "$total_pods" -gt 0 ]; then
+            log "  Pods ready: $ready_pods/$total_pods"
+
+            # Check if all pods are running
+            local not_ready
+            not_ready=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep -cv "Running" || echo "0")
+
+            if [ "$not_ready" -eq 0 ] && [ "$ready_pods" -gt 0 ]; then
+                log "All pods are running."
+                return 0
+            fi
+        fi
+
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+
+    log "WARNING: Not all pods are ready after waiting. Check status manually."
+}
+
+# Get access URL
+get_access_url() {
+    if [ "$DRY_RUN" = true ]; then
+        return 0
+    fi
+
+    log "Getting access URL..."
+
+    # Check if we're on minikube
+    local context
+    context=$(kubectl config current-context 2>/dev/null || echo "")
+
+    if [[ "$context" == *"minikube"* ]] || [[ "$context" == "dox-asdlc" ]]; then
+        # Use minikube service command
+        echo ""
+        log "To access Plane CE on minikube, run:"
+        echo "  minikube service ${RELEASE_NAME}-web -n $NAMESPACE --url"
+        echo ""
+        log "Or open in browser:"
+        echo "  minikube service ${RELEASE_NAME}-web -n $NAMESPACE"
+    else
+        # Try to get NodePort
+        local node_port
+        node_port=$(kubectl get svc "${RELEASE_NAME}-web" -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+
+        if [ -n "$node_port" ]; then
+            log "Access Plane CE at: http://<node-ip>:$node_port"
+        fi
     fi
 }
 
@@ -248,17 +257,17 @@ verify_deployment() {
     log "Verifying deployment..."
 
     # Show release status
-    helm status "$RELEASE_NAME" -n "$NAMESPACE"
+    helm status "$RELEASE_NAME" -n "$NAMESPACE" 2>/dev/null || true
 
-    # Show resources
+    # Show pods
     echo ""
-    log "Resources in namespace $NAMESPACE:"
-    kubectl get all -n "$NAMESPACE" 2>/dev/null || log "  No resources yet (subcharts not enabled)."
+    log "Pods in namespace '$NAMESPACE':"
+    kubectl get pods -n "$NAMESPACE" 2>/dev/null || log "  No pods yet."
 
-    # Show secrets (names only)
+    # Show services
     echo ""
-    log "Secrets:"
-    kubectl get secrets -n "$NAMESPACE" 2>/dev/null || log "  No secrets yet."
+    log "Services:"
+    kubectl get svc -n "$NAMESPACE" 2>/dev/null || log "  No services yet."
 }
 
 # Print summary
@@ -269,63 +278,40 @@ print_summary() {
 
     echo ""
     echo "=========================================="
-    echo "  dox-asdlc Deployment Complete"
+    echo "  Plane CE Deployment Complete"
     echo "=========================================="
     echo ""
     echo "Release:     $RELEASE_NAME"
     echo "Namespace:   $NAMESPACE"
-    echo "Chart:       $CHART_PATH"
+    echo "Chart:       $CHART_NAME"
     echo ""
     echo "Commands:"
     echo "  Check status:     helm status $RELEASE_NAME -n $NAMESPACE"
     echo "  List pods:        kubectl get pods -n $NAMESPACE"
     echo "  View logs:        kubectl logs -n $NAMESPACE <pod-name>"
-    echo "  Upgrade:          ./scripts/k8s/deploy.sh"
-    echo "  Uninstall:        ./scripts/k8s/teardown.sh"
+    echo "  Access UI:        minikube service ${RELEASE_NAME}-web -n $NAMESPACE"
+    echo "  Uninstall:        ./scripts/k8s/teardown-plane.sh"
     echo ""
-}
-
-# Deploy Plane CE (if requested)
-deploy_plane() {
-    if [ "$WITH_PLANE" = false ]; then
-        return 0
-    fi
-
-    log "Deploying Plane CE..."
+    echo "First-time setup:"
+    echo "  1. Open the web UI"
+    echo "  2. Create an admin account"
+    echo "  3. Set up your workspace"
+    echo "  4. Create your first project"
     echo ""
-
-    local plane_opts=()
-
-    if [ "$DRY_RUN" = true ]; then
-        plane_opts+=(--dry-run)
-    fi
-
-    if [ "$DEBUG" = true ]; then
-        plane_opts+=(--debug)
-    fi
-
-    if [ "$WAIT" = true ]; then
-        plane_opts+=(--wait --timeout "$TIMEOUT")
-    fi
-
-    if ! "$SCRIPT_DIR/deploy-plane.sh" "${plane_opts[@]}"; then
-        error "Plane CE deployment failed."
-        exit 1
-    fi
 }
 
 # Main execution
 main() {
-    log "Starting dox-asdlc deployment..."
+    log "Starting Plane CE deployment..."
 
     check_prerequisites
-    detect_environment
-    lint_chart
+    setup_values
     build_helm_command
     deploy_chart
+    wait_for_pods
     verify_deployment
+    get_access_url
     print_summary
-    deploy_plane
 
     log "Deployment process complete."
 }

@@ -1,0 +1,181 @@
+# Plane CE Values for Minikube
+#
+# This file configures Plane CE for local development on minikube.
+# Resource limits are conservative to work on developer machines.
+#
+# Requirements:
+#   - minikube with at least 4 CPUs and 8GB RAM
+#   - Helm repository: helm repo add makeplane https://helm.plane.so/
+#
+# Usage:
+#   helm install plane-app makeplane/plane-ce -n plane-ce --create-namespace -f values-minikube.yaml
+
+# =============================================================================
+# Service Configuration
+# =============================================================================
+
+# Use NodePort for minikube access (avoids ingress complexity)
+ingress:
+  enabled: false
+
+# Web service configuration
+web:
+  replicas: 1
+  service:
+    type: NodePort
+    port: 3000
+    nodePort: 30080
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# API service configuration
+api:
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Worker configuration (background jobs)
+worker:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Beat worker configuration (scheduled tasks)
+beatworker:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+
+postgresql:
+  enabled: true
+  auth:
+    username: plane
+    password: plane123
+    database: plane
+  primary:
+    persistence:
+      enabled: true
+      size: 1Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+
+# =============================================================================
+# Cache Configuration
+# =============================================================================
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 512Mi
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  replica:
+    replicaCount: 0
+
+# =============================================================================
+# Object Storage Configuration
+# =============================================================================
+
+minio:
+  enabled: true
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin
+  persistence:
+    enabled: true
+    size: 2Gi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# =============================================================================
+# Message Queue Configuration
+# =============================================================================
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: plane
+    password: plane123
+  persistence:
+    enabled: true
+    size: 512Mi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# =============================================================================
+# Application Settings
+# =============================================================================
+
+# Environment variables for the application
+env:
+  # Secret key for Django (change in production!)
+  secretKey: "change-me-in-production-this-is-dev-only"
+
+  # Frontend URL (will be set automatically by deploy script)
+  # siteUrl: "http://localhost:30080"
+
+  # Enable debug mode for development
+  debug: "1"
+
+# =============================================================================
+# Notes for Production
+# =============================================================================
+# For production deployments, you should:
+# 1. Enable ingress and configure TLS
+# 2. Use external PostgreSQL with proper credentials
+# 3. Use external Redis with authentication
+# 4. Use external object storage (S3, GCS, etc.)
+# 5. Increase replica counts for HA
+# 6. Set proper resource limits based on load
+# 7. Change all default passwords and secrets

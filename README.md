@@ -143,6 +143,32 @@ kubectl get services -n dox-asdlc
 ./scripts/k8s/teardown.sh
 ```
 
+### Plane CE (Project Management)
+
+Optionally deploy Plane Community Edition for project/task management:
+
+```bash
+# Deploy Plane CE alongside aSDLC
+./scripts/k8s/deploy.sh --with-plane
+
+# Or deploy Plane CE separately
+./scripts/k8s/deploy-plane.sh
+
+# Access Plane CE UI (minikube)
+minikube service plane-app-web -n plane-ce --url
+
+# Remove Plane CE
+./scripts/k8s/teardown-plane.sh
+```
+
+**First-time Plane CE setup:**
+1. Open the web UI using the URL from the command above
+2. Create an admin account
+3. Set up your workspace
+4. Create your first project
+
+**Resource requirements:** Plane CE requires additional resources. Recommended minikube configuration: 4 CPUs, 8GB RAM.
+
 ## Documentation
 
 - [System Design](docs/System_Design.md) - Technical architecture

@@ -369,3 +369,67 @@ The HITL Web UI includes a tenant selector:
 - Selection persisted in browser session
 - All API requests include `X-Tenant-ID` header
 - Gate requests filtered to current tenant only
+
+## 14. Plane CE Integration
+
+Plane Community Edition is deployed as a companion service for project and task management.
+
+### 14.1 Deployment architecture
+
+Plane CE runs in a separate namespace (`plane-ce`) from the main aSDLC system (`dox-asdlc`):
+
+```
+Kubernetes Cluster
+├── dox-asdlc namespace
+│   ├── orchestrator
+│   ├── workers
+│   ├── hitl-ui
+│   ├── redis
+│   └── chromadb
+└── plane-ce namespace
+    ├── plane-app-web
+    ├── plane-app-api
+    ├── plane-app-worker
+    ├── plane-app-beat-worker
+    ├── postgresql
+    ├── redis
+    ├── minio
+    └── rabbitmq
+```
+
+### 14.2 Rationale for separate namespace
+
+1. **Independent dependencies**: Plane CE has its own PostgreSQL, Redis, MinIO, and RabbitMQ
+2. **Lifecycle isolation**: Upgrade/rollback Plane without affecting aSDLC runtime
+3. **Resource isolation**: Separate resource quotas and limits
+4. **Official Helm chart**: Uses tested configurations from Plane maintainers
+
+### 14.3 Deployment commands
+
+```bash
+# Deploy Plane CE only
+./scripts/k8s/deploy-plane.sh
+
+# Deploy aSDLC with Plane CE
+./scripts/k8s/deploy.sh --with-plane
+
+# Remove Plane CE
+./scripts/k8s/teardown-plane.sh
+```
+
+### 14.4 Access
+
+For minikube deployments, Plane CE is accessed via NodePort:
+
+```bash
+minikube service plane-app-web -n plane-ce --url
+```
+
+### 14.5 Resource requirements
+
+Plane CE adds the following resource requirements to minikube:
+- Additional 2 CPUs recommended
+- Additional 2GB RAM recommended
+- ~5GB persistent storage (PostgreSQL, Redis, MinIO)
+
+Minimum minikube configuration with Plane CE: 4 CPUs, 8GB RAM
