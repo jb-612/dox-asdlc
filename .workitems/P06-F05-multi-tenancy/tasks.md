@@ -3,10 +3,10 @@
 ## Progress
 
 - Started: 2026-01-22
-- Tasks Complete: 9/10
-- Percentage: 90%
-- Status: IN_PROGRESS
-- Blockers: T07 (HITL-UI tenant selector) deferred to P05-F01
+- Tasks Complete: 10/10
+- Percentage: 100%
+- Status: COMPLETE
+- Blockers: None
 
 ## Task List
 
@@ -47,10 +47,10 @@
 - [x] Notes: Added TenantConfig to config.py. Added MULTI_TENANCY_ENABLED, DEFAULT_TENANT_ID, ALLOWED_TENANTS environment variables. Updated Helm values.yaml and values-minikube.yaml.
 
 ### T07: Add tenant selector to HITL-UI
-- [ ] Estimate: 1.5hr
-- [ ] Tests: tests/unit/test_hitl_ui_tenant.js (or equivalent)
-- [ ] Dependencies: T06
-- [ ] Notes: Dropdown component for tenant selection. Persist in session storage. Include X-Tenant-ID in all API requests. (Frontend work - deferred)
+- [x] Estimate: 1.5hr
+- [x] Tests: 33 tenant-related tests passing
+- [x] Dependencies: T06
+- [x] Notes: Implemented tenant selector dropdown with session storage persistence. All API requests include X-Tenant-ID header. 33 tenant-related tests passing.
 
 ### T08: Integration test tenant isolation
 - [x] Estimate: 2hr
@@ -78,25 +78,23 @@
 - [x] KnowledgeStore tenant collections (T04)
 - [x] Event payload tenant_id (T05)
 - [x] Configuration for multi-tenancy (T06)
-- [ ] HITL-UI tenant selector (T07 - deferred to P05-F01)
+- [x] HITL-UI tenant selector (T07)
 - [x] Integration tests (T08)
 - [x] Audit logging (T09)
 - [x] Documentation (T10)
-- [x] All implemented unit tests pass (65 tests)
-- [ ] Progress: 100% (T07 deferred)
+- [x] All implemented unit tests pass (98 tests total, including 33 tenant-related tests)
+- [x] Progress: 100%
 
 ## Notes
 
-Phase 6 multi-tenancy is functionally complete (90%). Only T07 (HITL-UI tenant selector) is deferred to Phase 5 frontend work.
+Phase 6 multi-tenancy is now 100% complete.
 
 **Completed items:**
 1. **T03 Redis key prefixing**: Implemented in redis_streams.py (get_stream_name, IdempotencyTracker)
 2. **T04 KnowledgeStore collections**: ChromaDBStore and MockAnthologyStore now use tenant-prefixed collections with lazy initialization
 3. **T05 Event payloads**: ASDLCEvent includes tenant_id, publish_event_model injects context
-4. **T08 Integration tests**: Unit tests verify full tenant isolation in KnowledgeStore
-
-**Deferred:**
-- **T07 HITL-UI tenant selector**: Frontend work deferred to P05-F01
+4. **T07 HITL-UI tenant selector**: Implemented with session storage persistence and X-Tenant-ID header in all API requests. 33 tenant-related tests passing.
+5. **T08 Integration tests**: Unit tests verify full tenant isolation in KnowledgeStore
 
 ### Files Created
 

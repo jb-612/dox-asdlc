@@ -10,6 +10,7 @@ import {
   Cog6ToothIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  LightBulbIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -38,9 +39,10 @@ const navigationSections: NavSection[] = [
     ],
   },
   {
-    title: 'Operations',
-    defaultCollapsed: true,
+    title: 'Administration',
+    defaultCollapsed: false,
     items: [
+      { name: 'Rule Proposals', href: '/rules', icon: LightBulbIcon },
       { name: 'Budget', href: '/budget', icon: CurrencyDollarIcon, disabled: true },
       { name: 'Admin', href: '/admin', icon: Cog6ToothIcon, disabled: true },
     ],

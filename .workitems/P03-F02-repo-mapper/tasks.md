@@ -51,13 +51,13 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 **File:** `src/workers/repo_mapper/parsers/typescript_parser.py`
 **Test:** `tests/unit/test_typescript_parser.py`
 
-- [ ] Create `TypeScriptParser` class implementing `ASTParser` protocol
-- [ ] Install and configure tree-sitter with TypeScript grammar
-- [ ] Parse functions and arrow functions
-- [ ] Parse classes and interfaces
-- [ ] Parse import/export statements
-- [ ] Handle JSX components
-- [ ] Write unit tests with TypeScript fixtures
+- [x] Create `TypeScriptParser` class implementing `ASTParser` protocol
+- [x] Install and configure tree-sitter with TypeScript grammar
+- [x] Parse functions and arrow functions
+- [x] Parse classes and interfaces
+- [x] Parse import/export statements
+- [x] Handle JSX components
+- [x] Write unit tests with TypeScript fixtures
 
 **Estimate:** 2h
 
@@ -70,7 +70,7 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 
 - [x] Create `ParserRegistry` class
 - [x] Register Python parser for `.py` files
-- [ ] Register TypeScript parser for `.ts`, `.tsx`, `.js`, `.jsx` (deferred with T03)
+- [x] Register TypeScript parser for `.ts`, `.tsx`, `.js`, `.jsx`
 - [x] Implement `get_parser_for_file()` method
 - [x] Handle unknown file types gracefully
 - [x] Write unit tests
@@ -211,10 +211,11 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 ## Progress
 
 - **Started**: 2026-01-22
-- **Tasks Complete**: 11/12
-- **Percentage**: 92%
-- **Status**: COMPLETE (T03 deferred)
-- **Blockers**: None (T03 TypeScript parser deferred to future iteration)
+- **Completed**: 2026-01-24
+- **Tasks Complete**: 12/12
+- **Percentage**: 100%
+- **Status**: COMPLETE
+- **Blockers**: None
 
 ## Task Summary
 
@@ -222,7 +223,7 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 |------|-------------|----------|--------|
 | T01 | Data models | 1h | [x] |
 | T02 | Python AST Parser | 2h | [x] |
-| T03 | TypeScript AST Parser | 2h | [ ] |
+| T03 | TypeScript AST Parser | 2h | [x] |
 | T04 | Parser Registry | 30min | [x] |
 | T05 | DependencyGraph | 2h | [x] |
 | T06 | SymbolExtractor | 1.5h | [x] |
@@ -237,11 +238,11 @@ Task breakdown for implementing the Repo Mapper context pack generator.
 
 ## Completion Checklist
 
-- [ ] All tasks in Task List are marked complete
-- [ ] All unit tests pass: `./tools/test.sh tests/unit/`
-- [ ] All integration tests pass: `./tools/test.sh tests/integration/`
+- [x] All tasks in Task List are marked complete
+- [x] All unit tests pass: `./tools/test.sh tests/unit/`
+- [x] All integration tests pass: `./tools/test.sh tests/integration/`
 - [ ] Linter passes: `./tools/lint.sh src/`
 - [ ] No type errors: `mypy src/`
 - [ ] Documentation updated
 - [ ] Interface contracts verified against design.md
-- [ ] Progress marked as 100% in tasks.md
+- [x] Progress marked as 100% in tasks.md

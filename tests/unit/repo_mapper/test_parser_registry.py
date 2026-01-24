@@ -9,6 +9,7 @@ from src.workers.repo_mapper.parsers import (
     get_parser_for_file,
 )
 from src.workers.repo_mapper.parsers.python_parser import PythonParser
+from src.workers.repo_mapper.parsers.typescript_parser import TypeScriptParser
 
 
 class TestParserRegistry:
@@ -91,14 +92,64 @@ class TestDefaultParserRegistry:
 
     def test_default_registry_has_python(self):
         """Test that default registry includes Python parser."""
+        # Clear the lru_cache to get fresh registry with TypeScript
+        ParserRegistry.default.cache_clear()
+        
         registry = ParserRegistry.default()
 
         parser = registry.get_parser(".py")
         assert parser is not None
         assert isinstance(parser, PythonParser)
 
+    def test_default_registry_has_typescript(self):
+        """Test that default registry includes TypeScript parser."""
+        # Clear the lru_cache to get fresh registry
+        ParserRegistry.default.cache_clear()
+        
+        registry = ParserRegistry.default()
+
+        parser = registry.get_parser(".ts")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_default_registry_has_tsx(self):
+        """Test that default registry includes TSX parser."""
+        # Clear the lru_cache to get fresh registry
+        ParserRegistry.default.cache_clear()
+        
+        registry = ParserRegistry.default()
+
+        parser = registry.get_parser(".tsx")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_default_registry_has_javascript(self):
+        """Test that default registry includes JavaScript parser."""
+        # Clear the lru_cache to get fresh registry
+        ParserRegistry.default.cache_clear()
+        
+        registry = ParserRegistry.default()
+
+        parser = registry.get_parser(".js")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_default_registry_has_jsx(self):
+        """Test that default registry includes JSX parser."""
+        # Clear the lru_cache to get fresh registry
+        ParserRegistry.default.cache_clear()
+        
+        registry = ParserRegistry.default()
+
+        parser = registry.get_parser(".jsx")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
     def test_default_registry_singleton(self):
         """Test that default registry returns the same instance."""
+        # Clear the lru_cache first
+        ParserRegistry.default.cache_clear()
+        
         registry1 = ParserRegistry.default()
         registry2 = ParserRegistry.default()
 
@@ -110,9 +161,48 @@ class TestGetParserForFile:
 
     def test_get_parser_for_python_file(self):
         """Test getting parser for Python file."""
+        # Clear cache to ensure registry is fresh
+        ParserRegistry.default.cache_clear()
+        
         parser = get_parser_for_file("test.py")
         assert parser is not None
         assert isinstance(parser, PythonParser)
+
+    def test_get_parser_for_typescript_file(self):
+        """Test getting parser for TypeScript file."""
+        # Clear cache to ensure registry is fresh
+        ParserRegistry.default.cache_clear()
+        
+        parser = get_parser_for_file("test.ts")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_get_parser_for_tsx_file(self):
+        """Test getting parser for TSX file."""
+        # Clear cache to ensure registry is fresh
+        ParserRegistry.default.cache_clear()
+        
+        parser = get_parser_for_file("component.tsx")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_get_parser_for_javascript_file(self):
+        """Test getting parser for JavaScript file."""
+        # Clear cache to ensure registry is fresh
+        ParserRegistry.default.cache_clear()
+        
+        parser = get_parser_for_file("script.js")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
+
+    def test_get_parser_for_jsx_file(self):
+        """Test getting parser for JSX file."""
+        # Clear cache to ensure registry is fresh
+        ParserRegistry.default.cache_clear()
+        
+        parser = get_parser_for_file("component.jsx")
+        assert parser is not None
+        assert isinstance(parser, TypeScriptParser)
 
     def test_get_parser_for_unknown_file(self):
         """Test getting parser for unknown file type."""

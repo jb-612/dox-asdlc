@@ -134,4 +134,61 @@ describe('Header', () => {
 
     expect(setEnvironmentMock).toHaveBeenCalledWith('staging');
   });
+
+  it('displays current tenant in selector', () => {
+    (useTenantStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockTenantStore,
+      multiTenancyEnabled: true,
+      currentTenant: 'acme-corp',
+    });
+
+    renderWithRouter(<Header />);
+    expect(screen.getByText('acme-corp')).toBeInTheDocument();
+  });
+
+  it('calls setTenant when tenant is changed', async () => {
+    const setTenantMock = vi.fn();
+    (useTenantStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockTenantStore,
+      multiTenancyEnabled: true,
+      setTenant: setTenantMock,
+    });
+
+    renderWithRouter(<Header />);
+
+    // Click the tenant selector button
+    const tenantButton = screen.getByText('Tenant:').closest('button');
+    if (tenantButton) {
+      fireEvent.click(tenantButton);
+    }
+
+    // Select a different tenant
+    const tenantOption = await screen.findByText('tenant-a');
+    fireEvent.click(tenantOption);
+
+    expect(setTenantMock).toHaveBeenCalledWith('tenant-a');
+  });
+
+  it('shows all available tenants in dropdown', async () => {
+    (useTenantStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockTenantStore,
+      multiTenancyEnabled: true,
+      availableTenants: ['default', 'tenant-a', 'tenant-b', 'acme-corp'],
+    });
+
+    renderWithRouter(<Header />);
+
+    // Click the tenant selector button
+    const tenantButton = screen.getByText('Tenant:').closest('button');
+    if (tenantButton) {
+      fireEvent.click(tenantButton);
+    }
+
+    // All tenants should be visible in the dropdown (default appears twice: current + dropdown)
+    const defaultElements = await screen.findAllByText('default');
+    expect(defaultElements.length).toBeGreaterThanOrEqual(2); // Once in button, once in dropdown
+    expect(await screen.findByText('tenant-a')).toBeInTheDocument();
+    expect(await screen.findByText('tenant-b')).toBeInTheDocument();
+    expect(await screen.findByText('acme-corp')).toBeInTheDocument();
+  });
 });

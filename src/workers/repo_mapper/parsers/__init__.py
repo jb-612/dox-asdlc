@@ -93,16 +93,22 @@ class ParserRegistry:
         """Get the default parser registry with pre-registered parsers.
 
         Returns:
-            ParserRegistry with Python parser registered
+            ParserRegistry with Python and TypeScript parsers registered
         """
         from src.workers.repo_mapper.parsers.python_parser import PythonParser
+        from src.workers.repo_mapper.parsers.typescript_parser import TypeScriptParser
 
         registry = cls()
-        python_parser = PythonParser()
 
         # Register Python parser
+        python_parser = PythonParser()
         for ext in python_parser.get_supported_extensions():
             registry.register_parser(ext, python_parser)
+
+        # Register TypeScript parser for .ts, .tsx, .js, .jsx files
+        typescript_parser = TypeScriptParser()
+        for ext in typescript_parser.get_supported_extensions():
+            registry.register_parser(ext, typescript_parser)
 
         return registry
 

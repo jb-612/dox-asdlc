@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, XMarkIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { useGateDecision } from '@/api/gates';
+import { useSubmitFeedback } from '@/api/feedback';
+import type { FeedbackSubmission } from '@/api/feedback';
 import { Button } from '@/components/common';
+import FeedbackCapture, { type FeedbackData } from './FeedbackCapture';
 
 interface DecisionFormProps {
   gateId: string;
@@ -30,8 +33,22 @@ export default function DecisionForm({
   const [feedback, setFeedback] = useState('');
   const [reason, setReason] = useState('');
   const [severity, setSeverity] = useState<SeverityType>('major');
+  const [showFeedbackCapture, setShowFeedbackCapture] = useState(false);
+  const [structuredFeedback, setStructuredFeedback] = useState<FeedbackData | null>(null);
+  const startTimeRef = useRef(Date.now());
 
   const { mutate: submitDecision, isPending } = useGateDecision();
+  const { mutate: submitFeedback } = useSubmitFeedback();
+
+  // Handle structured feedback from FeedbackCapture
+  const handleFeedbackSubmit = useCallback((data: FeedbackData) => {
+    setStructuredFeedback(data);
+    setShowFeedbackCapture(false);
+  }, []);
+
+  const handleFeedbackSkip = useCallback(() => {
+    setShowFeedbackCapture(false);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,17 +60,38 @@ export default function DecisionForm({
       return;
     }
 
+    // Calculate review duration
+    const durationSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
+
+    // Build reason with severity info for rejection
+    const reasonWithSeverity = decision === 'reject' && reason
+      ? `[${severity.toUpperCase()}] ${reason}`
+      : undefined;
+
     submitDecision(
       {
         gate_id: gateId,
         decision: decision,
         decided_by: 'operator', // TODO: Get from auth context
-        reason: decision === 'reject' ? reason : undefined,
-        severity: decision === 'reject' ? severity : undefined,
+        reason: reasonWithSeverity,
         feedback: feedback || undefined,
       },
       {
         onSuccess: () => {
+          // Submit structured feedback if available
+          if (structuredFeedback) {
+            const feedbackPayload: FeedbackSubmission = {
+              gateId,
+              decision: decision === 'approve' ? 'approved' : 'rejected',
+              tags: structuredFeedback.tags,
+              summary: structuredFeedback.summary,
+              severity: structuredFeedback.severity,
+              considerForImprovement: structuredFeedback.considerForImprovement,
+              durationSeconds: structuredFeedback.durationSeconds || durationSeconds,
+              reviewerComment: feedback || undefined,
+            };
+            submitFeedback(feedbackPayload);
+          }
           onSuccess?.();
           navigate('/gates');
         },
@@ -163,6 +201,65 @@ export default function DecisionForm({
           placeholder="Any additional notes or feedback..."
           className="input-field w-full resize-none"
         />
+      </div>
+
+      {/* Structured Feedback Capture */}
+      <div className="border-t border-bg-tertiary pt-4">
+        <button
+          type="button"
+          onClick={() => setShowFeedbackCapture(!showFeedbackCapture)}
+          className="flex items-center gap-2 text-sm text-accent-blue hover:text-accent-blue/80 transition-colors"
+          data-testid="toggle-feedback-capture"
+        >
+          {showFeedbackCapture ? (
+            <ChevronUpIcon className="h-4 w-4" />
+          ) : (
+            <ChevronDownIcon className="h-4 w-4" />
+          )}
+          {structuredFeedback
+            ? 'Feedback captured - click to edit'
+            : 'Add structured feedback for system improvement'}
+        </button>
+
+        {showFeedbackCapture && (
+          <div className="mt-4">
+            <FeedbackCapture
+              optional
+              onSubmit={handleFeedbackSubmit}
+              onSkip={handleFeedbackSkip}
+            />
+          </div>
+        )}
+
+        {structuredFeedback && !showFeedbackCapture && (
+          <div className="mt-2 p-3 bg-bg-tertiary rounded-lg text-sm" data-testid="feedback-summary">
+            <div className="flex flex-wrap gap-2 mb-2">
+              {structuredFeedback.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 bg-accent-blue/20 text-accent-blue rounded-full text-xs"
+                >
+                  {tag}
+                </span>
+              ))}
+              <span className={`px-2 py-0.5 rounded-full text-xs ${
+                structuredFeedback.severity === 'high'
+                  ? 'bg-status-error/20 text-status-error'
+                  : structuredFeedback.severity === 'medium'
+                  ? 'bg-status-warning/20 text-status-warning'
+                  : 'bg-status-success/20 text-status-success'
+              }`}>
+                {structuredFeedback.severity} severity
+              </span>
+            </div>
+            <p className="text-text-secondary line-clamp-2">{structuredFeedback.summary}</p>
+            {structuredFeedback.considerForImprovement && (
+              <p className="text-xs text-accent-blue mt-1">
+                Marked for system improvement
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Actions */}

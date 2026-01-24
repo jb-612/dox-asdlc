@@ -111,6 +111,7 @@ export interface ArtifactContentResponse {
 export interface GatesQueryParams {
   session_id?: string;
   type?: GateType;
+  tenant_id?: string;
   limit?: number;
 }
 

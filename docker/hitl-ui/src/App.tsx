@@ -11,6 +11,7 @@ import ArtifactsPage from './pages/ArtifactsPage';
 import ArtifactDetailPage from './pages/ArtifactDetailPage';
 import DocsPage from './pages/DocsPage';
 import StudioDiscoveryPage from './pages/StudioDiscoveryPage';
+import RuleProposalsPage from './pages/RuleProposalsPage';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="artifacts/:artifactId" element={<ArtifactDetailPage />} />
           <Route path="docs" element={<DocsPage />} />
           <Route path="studio" element={<StudioDiscoveryPage />} />
+          <Route path="rules" element={<RuleProposalsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
