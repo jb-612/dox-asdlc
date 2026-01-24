@@ -67,3 +67,6 @@ chroma_data/
 # RepoMapper AST cache (generated during tests/runtime)
 context/packs/.cache/
 context/packs/*.json
+
+# Wiki (separate git repo, cloned locally for VS Code visibility)
+wiki/
