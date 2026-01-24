@@ -61,4 +61,25 @@ Provide feedback organized by priority:
 
 Include specific examples and how to fix issues.
 
+## GitHub Issue Creation
+
+After completing review, create GitHub issues for all findings:
+
+1. **Critical** findings → `gh issue create --label "security,bug"`
+2. **Warnings** → `gh issue create --label "bug"` or `--label "enhancement"`
+3. **Suggestions** → `gh issue create --label "enhancement,good first issue"`
+
+Issue title format: `[SEVERITY]: Brief description`
+- `SEC-H1:` for HIGH security
+- `CODE-M1:` for MEDIUM code quality
+- `CODE-L1:` for LOW code quality
+- `TEST:` for test failures
+
+Include in issue body:
+- Description of the issue
+- File location (path and line numbers)
+- Severity and category
+- Recommended fix
+- Related feature (Pnn-Fnn)
+
 You are READ-ONLY. You cannot modify files. If fixes are needed, explain what should be changed and the developer will implement them.

@@ -45,3 +45,17 @@ Orchestrator can revert any commit when:
 git revert <commit-hash>
 git commit -m "revert: <message> (tests broken)"
 ```
+
+## Issue Tracking for Build Health
+
+When build breaks, create tracking issue:
+```bash
+gh issue create --title "BUILD: Main branch failing - <description>" \
+  --body "Commit: <sha>\nTest: <failing test>\nError: <message>" \
+  --label "bug"
+```
+
+When reverting, reference the issue:
+```bash
+git commit -m "revert: <message> (fixes #<issue-number>)"
+```

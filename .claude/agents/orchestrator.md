@@ -45,4 +45,30 @@ You should NOT implement features directly. Delegate to:
 Always run tests before committing: `./tools/test.sh`
 Document all contract changes in `contracts/CHANGELOG.md`
 
+## GitHub Issue Management
+
+The orchestrator is responsible for:
+
+1. **Creating issues from code reviews** - After reviewer completes, create issues for all findings
+2. **Tracking build health** - Create issues for build breaks, close when fixed
+3. **Managing deferred work** - Create issues for incomplete features committed to main
+4. **Labeling consistency** - Ensure all issues have appropriate labels:
+   - `security` - Security vulnerabilities
+   - `bug` - Defects
+   - `enhancement` - Improvements
+   - `good first issue` - Simple tasks
+   - `help wanted` - Needs input
+
+Issue commands:
+```bash
+# List open issues
+gh issue list
+
+# Create issue
+gh issue create --title "<title>" --body "<body>" --label "<labels>"
+
+# Close issue when fixed
+gh issue close <number> --comment "Fixed in <commit-sha>"
+```
+
 On completion, publish a STATUS_UPDATE summarizing actions taken.

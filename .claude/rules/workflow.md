@@ -33,6 +33,32 @@ A feature is complete when:
 - `./tools/lint.sh` passes
 - Progress shows 100%
 
+## Issue Tracking
+
+After code review, create GitHub issues for findings:
+
+**Security/Critical Issues:**
+```bash
+gh issue create --title "SEC: <title>" --body "<description>" --label "security,bug"
+```
+
+**Code Quality Issues:**
+```bash
+gh issue create --title "CODE: <title>" --body "<description>" --label "bug" # or "enhancement"
+```
+
+**Deferred Work** (when committing at <100%):
+```bash
+gh issue create --title "DEFERRED: <Pnn-Fnn> <remaining task>" --body "<description>" --label "enhancement"
+```
+
+Label by severity:
+- `security` - Security vulnerabilities (HIGH priority)
+- `bug` - Defects that need fixing
+- `enhancement` - Improvements and new features
+- `good first issue` - Simple fixes for newcomers
+- `help wanted` - Needs external input
+
 ## Commit Protocol
 
 Commit to main when feature reaches 100%:

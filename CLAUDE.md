@@ -7,6 +7,7 @@ Agentic Software Development Lifecycle using Claude Agent SDK, Redis coordinatio
 1. **YOU MUST plan before code** - Create `.workitems/Pnn-Fnn-name/` with design.md, user_stories.md, tasks.md BEFORE any implementation
 2. **YOU MUST use TDD** - Write failing test first, then implement, then refactor
 3. **YOU MUST commit only complete features** - All tests pass, 100% task completion
+4. **YOU MUST create issues for review findings** - All code review findings become GitHub issues
 
 ## Commands
 
@@ -22,14 +23,19 @@ Agentic Software Development Lifecycle using Claude Agent SDK, Redis coordinatio
 
 # Completion
 ./scripts/check-completion.sh P01-F02-feature-name
+
+# Issue Tracking
+gh issue list                    # List open issues
+gh issue create --title "..."    # Create new issue
+gh issue close <num>             # Close resolved issue
 ```
 
 ## Subagents
 
 Use role-specific subagents in `.claude/agents/`:
 
-| Task | Subagent |
-|------|----------|
+| Task                      | Subagent      |
+| ------------------------- | ------------- |
 | Backend (workers, infra) | `backend` |
 | Frontend (HITL UI) | `frontend` |
 | Meta files, contracts | `orchestrator` |
@@ -42,7 +48,7 @@ Use role-specific subagents in `.claude/agents/`:
 
 ## Work Item Format
 
-```
+```text
 .workitems/Pnn-Fnn-{description}/
 ├── design.md        # Technical approach, interfaces
 ├── user_stories.md  # Acceptance criteria
