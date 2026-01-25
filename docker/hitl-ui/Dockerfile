@@ -6,6 +6,14 @@
 # Stage 1: Build the React application
 FROM node:20-alpine AS builder
 
+# Build-time arguments for Vite environment variables
+ARG VITE_USE_MOCKS=false
+ARG VITE_API_BASE_URL=/api
+
+# Set environment variables for the build
+ENV VITE_USE_MOCKS=$VITE_USE_MOCKS
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 WORKDIR /app
 
 # Copy package files
@@ -17,7 +25,7 @@ RUN npm ci
 # Copy source files
 COPY docker/hitl-ui/ ./
 
-# Build the application
+# Build the application (Vite will embed VITE_* env vars at build time)
 RUN npm run build
 
 # Stage 2: Production server
