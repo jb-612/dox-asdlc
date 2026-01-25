@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from elasticsearch import AsyncElasticsearch, ElasticsearchException, NotFoundError
+from elasticsearch import ApiError, AsyncElasticsearch, NotFoundError
 
 from src.core.config import get_tenant_config
 from src.core.exceptions import (
@@ -151,7 +151,7 @@ class ElasticsearchStore:
                     body=INDEX_MAPPING,
                 )
             self._index_exists_cache[index_name] = True
-        except ElasticsearchException as e:
+        except ApiError as e:
             logger.error(f"Failed to ensure index exists: {e}")
             raise BackendConnectionError(
                 f"Failed to create/check index: {e}",
@@ -227,7 +227,7 @@ class ElasticsearchStore:
             logger.debug(f"Indexed document: {document.doc_id}")
             return document.doc_id
 
-        except ElasticsearchException as e:
+        except ApiError as e:
             logger.error(f"Failed to index document {document.doc_id}: {e}")
             raise IndexingError(
                 f"Failed to index document: {e}",
@@ -296,7 +296,7 @@ class ElasticsearchStore:
             logger.debug(f"Search returned {len(results)} results")
             return results
 
-        except ElasticsearchException as e:
+        except ApiError as e:
             logger.error(f"Search failed: {e}")
             raise SearchError(
                 f"Search failed: {e}",
@@ -338,7 +338,7 @@ class ElasticsearchStore:
 
         except NotFoundError:
             return None
-        except ElasticsearchException as e:
+        except ApiError as e:
             logger.error(f"Failed to get document {doc_id}: {e}")
             raise BackendConnectionError(
                 f"Failed to retrieve document: {e}",
@@ -374,7 +374,7 @@ class ElasticsearchStore:
 
         except NotFoundError:
             return False
-        except ElasticsearchException as e:
+        except ApiError as e:
             logger.error(f"Failed to delete document {doc_id}: {e}")
             raise BackendConnectionError(
                 f"Failed to delete document: {e}",

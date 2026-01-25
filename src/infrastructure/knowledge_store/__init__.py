@@ -77,6 +77,8 @@ __all__ = [
     "SearchResult",
     # Configuration
     "KnowledgeStoreConfig",
+    # MCP Server
+    "KnowledgeStoreMCPServer",
 ]
 
 
@@ -92,4 +94,10 @@ def __getattr__(name: str):
         from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
 
         return ChromaDBStore
+    elif name == "KnowledgeStoreMCPServer":
+        from src.infrastructure.knowledge_store.mcp_server import (
+            KnowledgeStoreMCPServer,
+        )
+
+        return KnowledgeStoreMCPServer
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

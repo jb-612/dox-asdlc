@@ -237,3 +237,23 @@ class RLMToolError(RLMError):
 
 class RLMCacheError(RLMError):
     """Raised when RLM cache operations fail."""
+
+
+# Repo Ingestion errors
+class IngestionError(ASDLCError):
+    """Error during repository ingestion.
+
+    Attributes:
+        file_path: Path to the file that caused the error (if applicable).
+        cause: The underlying exception that caused this error.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        file_path: str | None = None,
+        cause: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.file_path = file_path
+        self.cause = cause
