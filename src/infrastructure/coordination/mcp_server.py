@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 import sys
 from typing import Any
 
@@ -20,6 +21,14 @@ from src.infrastructure.coordination.config import CoordinationConfig
 from src.infrastructure.coordination.types import MessageQuery, MessageType
 
 logger = logging.getLogger(__name__)
+
+# Mapping of known git emails to instance IDs
+EMAIL_TO_INSTANCE: dict[str, str] = {
+    "claude-backend@asdlc.local": "backend",
+    "claude-frontend@asdlc.local": "frontend",
+    "claude-orchestrator@asdlc.local": "orchestrator",
+    "claude-devops@asdlc.local": "devops",
+}
 
 
 class CoordinationMCPServer:
@@ -35,10 +44,64 @@ class CoordinationMCPServer:
     """
 
     def __init__(self) -> None:
-        """Initialize the MCP server."""
+        """Initialize the MCP server.
+
+        Raises:
+            RuntimeError: If instance identity cannot be determined from
+                CLAUDE_INSTANCE_ID environment variable or git user.email.
+        """
         self._client: CoordinationClient | None = None
-        self._instance_id = os.environ.get("CLAUDE_INSTANCE_ID", "unknown")
         self._config = CoordinationConfig.from_env()
+
+        # Resolve identity at startup (fail-fast)
+        self._instance_id = self._resolve_instance_id()
+        logger.info(f"Coordination MCP server initialized with identity: {self._instance_id}")
+
+    def _resolve_instance_id(self) -> str:
+        """Resolve instance identity from environment or git config.
+
+        Priority:
+        1. CLAUDE_INSTANCE_ID environment variable (if not empty or "unknown")
+        2. Derive from git user.email
+        3. Raise error if neither available
+
+        Returns:
+            Instance ID string (e.g., "backend", "frontend", "orchestrator", "devops")
+
+        Raises:
+            RuntimeError: If instance identity cannot be determined
+        """
+        # Check environment variable first
+        env_id = os.environ.get("CLAUDE_INSTANCE_ID")
+        if env_id and env_id != "unknown":
+            return env_id
+
+        # Try to derive from git user.email
+        try:
+            result = subprocess.run(
+                ["git", "config", "user.email"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                cwd=os.getcwd(),
+            )
+            email = result.stdout.strip()
+
+            # Map email to instance ID
+            if email in EMAIL_TO_INSTANCE:
+                return EMAIL_TO_INSTANCE[email]
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout reading git config user.email")
+        except subprocess.SubprocessError as e:
+            logger.warning(f"Failed to read git config: {e}")
+
+        # Cannot determine identity
+        raise RuntimeError(
+            "Cannot determine instance identity. Set CLAUDE_INSTANCE_ID "
+            "environment variable or configure git user.email to a known "
+            "role (e.g., claude-backend@asdlc.local)"
+        )
 
     async def _get_client(self) -> CoordinationClient:
         """Get or create the coordination client."""
@@ -61,6 +124,9 @@ class CoordinationMCPServer:
     ) -> dict[str, Any]:
         """Publish a coordination message.
 
+        Validates sender identity before publishing. Messages with invalid
+        sender identity (None, empty string, or "unknown") are rejected.
+
         Args:
             msg_type: Message type (e.g., READY_FOR_REVIEW, GENERAL)
             subject: Brief subject line
@@ -69,7 +135,8 @@ class CoordinationMCPServer:
             requires_ack: Whether acknowledgment is required
 
         Returns:
-            Dict with success status and message details
+            Dict with success status and message details. On validation
+            failure, returns error dict with "error" and "hint" fields.
 
         Example response:
             {
@@ -80,6 +147,14 @@ class CoordinationMCPServer:
                 "to": "orchestrator"
             }
         """
+        # Validate sender identity before publishing
+        if self._instance_id in (None, "", "unknown"):
+            return {
+                "success": False,
+                "error": "Invalid sender identity. Cannot publish messages with unknown sender.",
+                "hint": "Set CLAUDE_INSTANCE_ID or configure git user.email",
+            }
+
         try:
             # Validate message type
             try:

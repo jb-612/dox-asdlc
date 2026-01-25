@@ -1,5 +1,6 @@
 """Tests for coordination MCP server."""
 
+import subprocess
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,6 +13,134 @@ from src.infrastructure.coordination.types import (
     MessageType,
     PresenceInfo,
 )
+
+
+class TestIdentityResolution:
+    """Tests for instance identity resolution."""
+
+    def test_identity_from_backend_git_email(self) -> None:
+        """Test identity resolution from backend git email."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-backend@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                server = CoordinationMCPServer()
+                assert server._instance_id == "backend"
+                mock_run.assert_called_once()
+
+    def test_identity_from_frontend_git_email(self) -> None:
+        """Test identity resolution from frontend git email."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-frontend@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run", return_value=mock_result):
+                server = CoordinationMCPServer()
+                assert server._instance_id == "frontend"
+
+    def test_identity_from_orchestrator_git_email(self) -> None:
+        """Test identity resolution from orchestrator git email."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-orchestrator@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run", return_value=mock_result):
+                server = CoordinationMCPServer()
+                assert server._instance_id == "orchestrator"
+
+    def test_identity_from_devops_git_email(self) -> None:
+        """Test identity resolution from devops git email."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-devops@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run", return_value=mock_result):
+                server = CoordinationMCPServer()
+                assert server._instance_id == "devops"
+
+    def test_env_var_takes_precedence_over_git_email(self) -> None:
+        """Test CLAUDE_INSTANCE_ID env var takes precedence over git email."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-backend@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "custom-instance"}):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                server = CoordinationMCPServer()
+                assert server._instance_id == "custom-instance"
+                # subprocess.run should NOT be called since env var is set
+                mock_run.assert_not_called()
+
+    def test_empty_env_var_is_ignored(self) -> None:
+        """Test empty CLAUDE_INSTANCE_ID env var falls through to git."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-backend@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": ""}):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                server = CoordinationMCPServer()
+                assert server._instance_id == "backend"
+                mock_run.assert_called_once()
+
+    def test_unknown_env_var_value_is_ignored(self) -> None:
+        """Test 'unknown' CLAUDE_INSTANCE_ID env var falls through to git."""
+        mock_result = MagicMock()
+        mock_result.stdout = "claude-frontend@asdlc.local\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "unknown"}):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                server = CoordinationMCPServer()
+                assert server._instance_id == "frontend"
+                mock_run.assert_called_once()
+
+    def test_unknown_git_email_raises_runtime_error(self) -> None:
+        """Test unknown git email raises RuntimeError with guidance."""
+        mock_result = MagicMock()
+        mock_result.stdout = "unknown-user@example.com\n"
+        mock_result.returncode = 0
+
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run", return_value=mock_result):
+                with pytest.raises(RuntimeError) as exc_info:
+                    CoordinationMCPServer()
+
+                error_message = str(exc_info.value)
+                assert "Cannot determine instance identity" in error_message
+                assert "CLAUDE_INSTANCE_ID" in error_message
+                assert "git user.email" in error_message
+
+    def test_git_config_failure_raises_runtime_error(self) -> None:
+        """Test git config subprocess failure raises RuntimeError."""
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "subprocess.run",
+                side_effect=subprocess.SubprocessError("git not found"),
+            ):
+                with pytest.raises(RuntimeError) as exc_info:
+                    CoordinationMCPServer()
+
+                error_message = str(exc_info.value)
+                assert "Cannot determine instance identity" in error_message
+
+    def test_git_config_timeout_raises_runtime_error(self) -> None:
+        """Test git config timeout raises RuntimeError with clear message."""
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="git", timeout=5),
+            ):
+                with pytest.raises(RuntimeError) as exc_info:
+                    CoordinationMCPServer()
+
+                error_message = str(exc_info.value)
+                assert "Cannot determine instance identity" in error_message
 
 
 class TestCoordinationMCPServerTools:
@@ -392,3 +521,332 @@ class TestCoordinationMCPServerRequestHandling:
         response = await server.handle_request(request)
 
         assert response is None
+
+
+class TestMessageValidation:
+    """Tests for message validation before publishing."""
+
+    @pytest.fixture
+    def server_with_valid_identity(self) -> CoordinationMCPServer:
+        """Create test server with valid identity."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            return CoordinationMCPServer()
+
+    @pytest.mark.asyncio
+    async def test_reject_unknown_sender(self) -> None:
+        """Test that 'unknown' sender is rejected with error response."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+            # Manually set invalid instance_id to test validation path
+            server._instance_id = "unknown"
+
+            result = await server.coord_publish_message(
+                msg_type="GENERAL",
+                subject="Test",
+                description="Test message",
+            )
+
+            assert result["success"] is False
+            assert "Invalid sender identity" in result["error"]
+            assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_reject_empty_string_sender(self) -> None:
+        """Test that empty string sender is rejected with error response."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+            # Manually set invalid instance_id to test validation path
+            server._instance_id = ""
+
+            result = await server.coord_publish_message(
+                msg_type="GENERAL",
+                subject="Test",
+                description="Test message",
+            )
+
+            assert result["success"] is False
+            assert "Invalid sender identity" in result["error"]
+            assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_reject_none_sender(self) -> None:
+        """Test that None sender is rejected with error response."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+            # Manually set invalid instance_id to test validation path
+            server._instance_id = None  # type: ignore[assignment]
+
+            result = await server.coord_publish_message(
+                msg_type="GENERAL",
+                subject="Test",
+                description="Test message",
+            )
+
+            assert result["success"] is False
+            assert "Invalid sender identity" in result["error"]
+            assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_accept_valid_sender(self) -> None:
+        """Test that valid sender publishes successfully."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+
+            mock_client = AsyncMock()
+            mock_message = CoordinationMessage(
+                id="msg-valid123",
+                type=MessageType.GENERAL,
+                from_instance="backend",
+                to_instance="orchestrator",
+                timestamp=datetime(2026, 1, 25, 12, 0, 0, tzinfo=timezone.utc),
+                requires_ack=True,
+                payload=MessagePayload(subject="Test", description="Test message"),
+            )
+            mock_client.publish_message = AsyncMock(return_value=mock_message)
+            server._client = mock_client
+
+            result = await server.coord_publish_message(
+                msg_type="GENERAL",
+                subject="Test",
+                description="Test message",
+            )
+
+            assert result["success"] is True
+            assert result["message_id"] == "msg-valid123"
+            mock_client.publish_message.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_error_response_includes_hint(self) -> None:
+        """Test that error response includes both error and hint fields."""
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+            # Manually set invalid instance_id to test validation path
+            server._instance_id = "unknown"
+
+            result = await server.coord_publish_message(
+                msg_type="GENERAL",
+                subject="Test",
+                description="Test message",
+            )
+
+            assert result["success"] is False
+            assert "error" in result
+            assert "hint" in result
+            assert "CLAUDE_INSTANCE_ID" in result["hint"]
+            assert "git user.email" in result["hint"]
+
+
+class TestMessageAttribution:
+    """Tests for message attribution via the 'from' field.
+
+    These tests verify that:
+    1. Published messages include the correct 'from' field matching the resolved identity
+    2. Messages can be queried/filtered by from_instance
+
+    This is critical for traceability and coordination between CLI instances.
+    """
+
+    @pytest.mark.asyncio
+    async def test_published_message_from_field_matches_instance_id(self) -> None:
+        """Test that the 'from' field in published message matches self._instance_id.
+
+        When a message is published, the returned message should have a 'from'
+        field that exactly matches the server's resolved _instance_id. This
+        ensures proper attribution of messages to their source.
+        """
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+
+            # Verify the server has the expected identity
+            assert server._instance_id == "backend"
+
+            mock_client = AsyncMock()
+            mock_message = CoordinationMessage(
+                id="msg-attribution-test",
+                type=MessageType.STATUS_UPDATE,
+                from_instance="backend",  # Should match server._instance_id
+                to_instance="orchestrator",
+                timestamp=datetime(2026, 1, 25, 14, 0, 0, tzinfo=timezone.utc),
+                requires_ack=False,
+                payload=MessagePayload(
+                    subject="Attribution Test",
+                    description="Testing message attribution",
+                ),
+            )
+            mock_client.publish_message = AsyncMock(return_value=mock_message)
+            server._client = mock_client
+
+            result = await server.coord_publish_message(
+                msg_type="STATUS_UPDATE",
+                subject="Attribution Test",
+                description="Testing message attribution",
+                to_instance="orchestrator",
+                requires_ack=False,
+            )
+
+            # Verify the response includes the correct 'from' field
+            assert result["success"] is True
+            assert "from" in result
+            assert result["from"] == "backend"
+            assert result["from"] == server._instance_id
+
+    @pytest.mark.asyncio
+    async def test_published_message_from_field_matches_different_identities(
+        self,
+    ) -> None:
+        """Test that 'from' field correctly reflects different instance identities.
+
+        Each CLI role (frontend, orchestrator, devops) should have its own
+        identity properly reflected in the 'from' field of published messages.
+        """
+        for instance_id in ["frontend", "orchestrator", "devops"]:
+            with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": instance_id}):
+                server = CoordinationMCPServer()
+                assert server._instance_id == instance_id
+
+                mock_client = AsyncMock()
+                mock_message = CoordinationMessage(
+                    id=f"msg-{instance_id}-test",
+                    type=MessageType.GENERAL,
+                    from_instance=instance_id,
+                    to_instance="backend",
+                    timestamp=datetime(2026, 1, 25, 14, 0, 0, tzinfo=timezone.utc),
+                    requires_ack=True,
+                    payload=MessagePayload(
+                        subject=f"Test from {instance_id}",
+                        description="Identity test",
+                    ),
+                )
+                mock_client.publish_message = AsyncMock(return_value=mock_message)
+                server._client = mock_client
+
+                result = await server.coord_publish_message(
+                    msg_type="GENERAL",
+                    subject=f"Test from {instance_id}",
+                    description="Identity test",
+                    to_instance="backend",
+                )
+
+                assert result["success"] is True
+                assert result["from"] == instance_id
+                assert result["from"] == server._instance_id
+
+    @pytest.mark.asyncio
+    async def test_query_by_from_instance_filter_returns_matching_messages(
+        self,
+    ) -> None:
+        """Test that querying with from_instance filter returns correctly filtered messages.
+
+        When filtering messages by from_instance, only messages from the
+        specified sender should be returned. This enables CLI instances to
+        retrieve messages from a specific source.
+        """
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "orchestrator"}):
+            server = CoordinationMCPServer()
+
+            # Create mock messages from different senders
+            mock_messages = [
+                CoordinationMessage(
+                    id="msg-from-backend",
+                    type=MessageType.READY_FOR_REVIEW,
+                    from_instance="backend",
+                    to_instance="orchestrator",
+                    timestamp=datetime(2026, 1, 25, 14, 0, 0, tzinfo=timezone.utc),
+                    requires_ack=True,
+                    payload=MessagePayload(
+                        subject="Backend ready",
+                        description="Backend work complete",
+                    ),
+                ),
+            ]
+
+            mock_client = AsyncMock()
+            mock_client.get_messages = AsyncMock(return_value=mock_messages)
+            server._client = mock_client
+
+            # Query messages from 'backend' specifically
+            result = await server.coord_check_messages(
+                from_instance="backend",
+                pending_only=True,
+            )
+
+            assert result["success"] is True
+            assert result["count"] == 1
+
+            # Verify the query was constructed with from_instance filter
+            call_args = mock_client.get_messages.call_args
+            query = call_args[0][0]
+            assert query.from_instance == "backend"
+
+            # Verify the returned message has the expected from field
+            # Note: to_dict() uses "from" as the key (not "from_instance")
+            assert len(result["messages"]) == 1
+            assert result["messages"][0]["from"] == "backend"
+
+    @pytest.mark.asyncio
+    async def test_query_by_from_instance_with_no_matches_returns_empty(self) -> None:
+        """Test that querying with from_instance filter returns empty when no matches.
+
+        When filtering by a from_instance that has no messages, the result
+        should indicate success with an empty message list and count of 0.
+        """
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "backend"}):
+            server = CoordinationMCPServer()
+
+            mock_client = AsyncMock()
+            mock_client.get_messages = AsyncMock(return_value=[])
+            server._client = mock_client
+
+            # Query messages from 'devops' when none exist
+            result = await server.coord_check_messages(
+                from_instance="devops",
+            )
+
+            assert result["success"] is True
+            assert result["count"] == 0
+            assert len(result["messages"]) == 0
+
+            # Verify the query included the from_instance filter
+            call_args = mock_client.get_messages.call_args
+            query = call_args[0][0]
+            assert query.from_instance == "devops"
+
+    @pytest.mark.asyncio
+    async def test_publish_passes_instance_id_to_client(self) -> None:
+        """Test that coord_publish_message passes self._instance_id to the client.
+
+        The from_instance parameter passed to the coordination client's
+        publish_message method should match the server's _instance_id.
+        This ensures the attribution is set correctly at the client level.
+        """
+        with patch.dict("os.environ", {"CLAUDE_INSTANCE_ID": "frontend"}):
+            server = CoordinationMCPServer()
+
+            mock_client = AsyncMock()
+            mock_message = CoordinationMessage(
+                id="msg-client-test",
+                type=MessageType.BLOCKING_ISSUE,
+                from_instance="frontend",
+                to_instance="backend",
+                timestamp=datetime(2026, 1, 25, 14, 0, 0, tzinfo=timezone.utc),
+                requires_ack=True,
+                payload=MessagePayload(
+                    subject="Blocked",
+                    description="Need backend support",
+                ),
+            )
+            mock_client.publish_message = AsyncMock(return_value=mock_message)
+            server._client = mock_client
+
+            await server.coord_publish_message(
+                msg_type="BLOCKING_ISSUE",
+                subject="Blocked",
+                description="Need backend support",
+                to_instance="backend",
+            )
+
+            # Verify the client was called with the correct from_instance
+            mock_client.publish_message.assert_awaited_once()
+            call_kwargs = mock_client.publish_message.call_args[1]
+            assert call_kwargs["from_instance"] == "frontend"
+            assert call_kwargs["from_instance"] == server._instance_id
