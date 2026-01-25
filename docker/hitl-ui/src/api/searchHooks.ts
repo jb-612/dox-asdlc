@@ -7,7 +7,7 @@
  * with automatic caching and refetching.
  */
 
-import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSearchService,
   getDefaultBackendMode,
@@ -18,6 +18,9 @@ import type {
   KSDocument,
   KSHealthStatus,
   SearchBackendMode,
+  ReindexRequest,
+  ReindexResponse,
+  ReindexStatus,
 } from './types';
 
 // Import service implementations to ensure they're registered
@@ -196,5 +199,91 @@ export function useKnowledgeHealth(options: UseKnowledgeHealthOptions = {}) {
     enabled,
     staleTime,
     refetchInterval,
+  });
+}
+
+// ============================================================================
+// Reindex Hooks
+// ============================================================================
+
+// Import reindex functions
+import { triggerReindex, getReindexStatus } from './searchREST';
+import { mockTriggerReindex, mockGetReindexStatus } from './mocks/search';
+
+/**
+ * Query key for reindex status
+ */
+export const reindexKeys = {
+  status: (mode: SearchBackendMode) => ['reindex', 'status', mode] as const,
+};
+
+/**
+ * Options for useReindexStatus hook
+ */
+export interface UseReindexStatusOptions {
+  mode?: SearchBackendMode;
+  enabled?: boolean;
+  refetchInterval?: number | false;
+}
+
+/**
+ * Hook for tracking reindex status
+ *
+ * @param options - Hook options
+ * @returns Query result with reindex status
+ */
+export function useReindexStatus(options: UseReindexStatusOptions = {}) {
+  const {
+    mode = getDefaultBackendMode(),
+    enabled = true,
+    refetchInterval = 1000, // Poll every second when running
+  } = options;
+
+  return useQuery<ReindexStatus, Error>({
+    queryKey: reindexKeys.status(mode),
+    queryFn: async () => {
+      if (mode === 'mock') {
+        return mockGetReindexStatus();
+      }
+      return getReindexStatus();
+    },
+    enabled,
+    refetchInterval,
+    staleTime: 500, // Consider stale quickly for live updates
+  });
+}
+
+/**
+ * Options for useTriggerReindex hook
+ */
+export interface UseTriggerReindexOptions {
+  mode?: SearchBackendMode;
+  onSuccess?: (data: ReindexResponse) => void;
+  onError?: (error: Error) => void;
+}
+
+/**
+ * Hook for triggering a reindex operation
+ *
+ * @param options - Hook options
+ * @returns Mutation for triggering reindex
+ */
+export function useTriggerReindex(options: UseTriggerReindexOptions = {}) {
+  const { mode = getDefaultBackendMode(), onSuccess, onError } = options;
+  const queryClient = useQueryClient();
+
+  return useMutation<ReindexResponse, Error, ReindexRequest>({
+    mutationFn: async (request: ReindexRequest) => {
+      if (mode === 'mock') {
+        return mockTriggerReindex(request);
+      }
+      return triggerReindex(request);
+    },
+    onSuccess: (data) => {
+      // Invalidate status query to start polling
+      queryClient.invalidateQueries({ queryKey: reindexKeys.status(mode) });
+      onSuccess?.(data);
+    },
+    onError,
   });
 }

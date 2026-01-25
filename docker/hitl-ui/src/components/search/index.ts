@@ -12,3 +12,4 @@ export { default as BackendSelector } from './BackendSelector';
 export { default as SearchHistory } from './SearchHistory';
 export { default as SearchPage } from './SearchPage';
 export { default as DocumentDetail } from './DocumentDetail';
+export { default as ReindexButton } from './ReindexButton';

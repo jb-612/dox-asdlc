@@ -524,6 +524,31 @@ export interface KSHealthStatus {
   document_count?: number;
 }
 
+// Reindex request
+export interface ReindexRequest {
+  path?: string;
+  force?: boolean;
+}
+
+// Reindex response
+export interface ReindexResponse {
+  status: 'started' | 'already_running' | 'completed';
+  job_id?: string;
+  message: string;
+}
+
+// Reindex status response
+export interface ReindexStatus {
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  job_id?: string;
+  progress?: number;      // 0-100
+  files_indexed?: number;
+  total_files?: number;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
 // Saved search
 export interface SavedSearch {
   id: string;

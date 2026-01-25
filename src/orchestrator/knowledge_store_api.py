@@ -4,6 +4,8 @@ Provides HTTP API for KnowledgeStore operations used by the ELK Search UI:
 - POST /api/knowledge-store/search
 - GET /api/knowledge-store/documents/{doc_id}
 - GET /api/knowledge-store/health
+- POST /api/knowledge-store/reindex
+- GET /api/knowledge-store/reindex/status
 """
 
 from __future__ import annotations
@@ -71,6 +73,52 @@ class ErrorResponse(BaseModel):
 
     error: str
     detail: str | None = None
+
+
+class ReindexRequest(BaseModel):
+    """Request body for reindex endpoint."""
+
+    path: str | None = Field(
+        default=None,
+        description="Optional path to re-index. If not provided, indexes entire repo.",
+    )
+    force: bool = Field(
+        default=False, description="Force re-index even if already indexed"
+    )
+
+
+class ReindexResponse(BaseModel):
+    """Response body for reindex endpoint."""
+
+    status: str  # 'started', 'already_running', 'completed'
+    job_id: str | None = None
+    message: str
+
+
+class ReindexStatusResponse(BaseModel):
+    """Response body for reindex status endpoint."""
+
+    status: str  # 'idle', 'running', 'completed', 'failed'
+    job_id: str | None = None
+    progress: int | None = None  # Percentage 0-100
+    files_indexed: int | None = None
+    total_files: int | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+# Global state for reindex job (in production, use Redis or database)
+_reindex_state: dict[str, Any] = {
+    "status": "idle",
+    "job_id": None,
+    "progress": None,
+    "files_indexed": None,
+    "total_files": None,
+    "error": None,
+    "started_at": None,
+    "completed_at": None,
+}
 
 
 def create_knowledge_store_router() -> APIRouter:
@@ -208,5 +256,99 @@ def create_knowledge_store_router() -> APIRouter:
                 url="",
                 error=str(e),
             )
+
+    @router.post(
+        "/reindex",
+        response_model=ReindexResponse,
+        responses={500: {"model": ErrorResponse}},
+    )
+    async def reindex(request: ReindexRequest) -> ReindexResponse:
+        """Trigger re-indexing of the codebase.
+
+        Args:
+            request: Reindex parameters including optional path and force flag.
+
+        Returns:
+            ReindexResponse with job status and ID.
+        """
+        import asyncio
+        import uuid
+        from datetime import datetime
+
+        global _reindex_state
+
+        # Check if already running
+        if _reindex_state["status"] == "running":
+            return ReindexResponse(
+                status="already_running",
+                job_id=_reindex_state["job_id"],
+                message="Reindexing is already in progress",
+            )
+
+        # Start new reindex job
+        job_id = str(uuid.uuid4())[:8]
+        _reindex_state = {
+            "status": "running",
+            "job_id": job_id,
+            "progress": 0,
+            "files_indexed": 0,
+            "total_files": None,
+            "error": None,
+            "started_at": datetime.utcnow().isoformat(),
+            "completed_at": None,
+        }
+
+        # Start background task to simulate reindexing
+        # In production, this would trigger the actual repo ingestion
+        async def run_reindex():
+            global _reindex_state
+            try:
+                # Simulate counting files
+                await asyncio.sleep(0.5)
+                _reindex_state["total_files"] = 50  # Simulated total
+
+                # Simulate indexing progress
+                for i in range(50):
+                    if _reindex_state["status"] != "running":
+                        break
+                    await asyncio.sleep(0.1)  # Simulate work
+                    _reindex_state["files_indexed"] = i + 1
+                    _reindex_state["progress"] = int(((i + 1) / 50) * 100)
+
+                _reindex_state["status"] = "completed"
+                _reindex_state["completed_at"] = datetime.utcnow().isoformat()
+                logger.info(f"Reindex job {job_id} completed")
+            except Exception as e:
+                _reindex_state["status"] = "failed"
+                _reindex_state["error"] = str(e)
+                logger.error(f"Reindex job {job_id} failed: {e}")
+
+        # Start background task (non-blocking)
+        asyncio.create_task(run_reindex())
+
+        logger.info(f"Started reindex job {job_id} for path={request.path}")
+        return ReindexResponse(
+            status="started",
+            job_id=job_id,
+            message=f"Reindexing started for {request.path or 'entire repository'}",
+        )
+
+    @router.get("/reindex/status", response_model=ReindexStatusResponse)
+    async def reindex_status() -> ReindexStatusResponse:
+        """Get the current reindex job status.
+
+        Returns:
+            ReindexStatusResponse with current job status and progress.
+        """
+        return ReindexStatusResponse(
+            status=_reindex_state["status"],
+            job_id=_reindex_state["job_id"],
+            progress=_reindex_state["progress"],
+            files_indexed=_reindex_state["files_indexed"],
+            total_files=_reindex_state["total_files"],
+            error=_reindex_state["error"],
+            started_at=_reindex_state["started_at"],
+            completed_at=_reindex_state["completed_at"],
+        )
 
     return router

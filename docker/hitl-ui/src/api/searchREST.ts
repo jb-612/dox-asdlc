@@ -14,6 +14,9 @@ import type {
   KSDocument,
   KSHealthStatus,
   KSSearchResult,
+  ReindexRequest,
+  ReindexResponse,
+  ReindexStatus,
 } from './types';
 
 // API response types with snake_case (as returned by Python backend)
@@ -144,3 +147,63 @@ export const restSearchService: SearchService = {
 
 // Register with factory
 registerSearchService('rest', restSearchService);
+
+// ============================================================================
+// Reindex API Functions (admin operations, not part of SearchService)
+// ============================================================================
+
+interface APIReindexResponse {
+  status: 'started' | 'already_running' | 'completed';
+  job_id: string | null;
+  message: string;
+}
+
+interface APIReindexStatus {
+  status: 'idle' | 'running' | 'completed' | 'failed';
+  job_id: string | null;
+  progress: number | null;
+  files_indexed: number | null;
+  total_files: number | null;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+/**
+ * Trigger a reindex of the knowledge store
+ */
+export async function triggerReindex(request: ReindexRequest = {}): Promise<ReindexResponse> {
+  const response = await apiClient.post<APIReindexResponse>(
+    '/knowledge-store/reindex',
+    {
+      path: request.path,
+      force: request.force ?? false,
+    }
+  );
+
+  return {
+    status: response.data.status,
+    job_id: response.data.job_id ?? undefined,
+    message: response.data.message,
+  };
+}
+
+/**
+ * Get the current reindex status
+ */
+export async function getReindexStatus(): Promise<ReindexStatus> {
+  const response = await apiClient.get<APIReindexStatus>(
+    '/knowledge-store/reindex/status'
+  );
+
+  return {
+    status: response.data.status,
+    job_id: response.data.job_id ?? undefined,
+    progress: response.data.progress ?? undefined,
+    files_indexed: response.data.files_indexed ?? undefined,
+    total_files: response.data.total_files ?? undefined,
+    error: response.data.error ?? undefined,
+    started_at: response.data.started_at ?? undefined,
+    completed_at: response.data.completed_at ?? undefined,
+  };
+}

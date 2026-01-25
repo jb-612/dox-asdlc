@@ -10,6 +10,9 @@ import type {
   SearchResponse,
   KSHealthStatus,
   SearchQuery,
+  ReindexRequest,
+  ReindexResponse,
+  ReindexStatus,
 } from '../types';
 import { registerSearchService, type SearchService } from '../searchService';
 
@@ -450,3 +453,109 @@ export const availableFileTypes = ['.py', '.ts', '.tsx', '.md', '.json'];
 // ============================================================================
 
 registerSearchService('mock', mockSearchService);
+
+// ============================================================================
+// Mock Reindex Functions
+// ============================================================================
+
+// Mock state for reindex simulation
+let mockReindexState: ReindexStatus = {
+  status: 'idle',
+  job_id: undefined,
+  progress: undefined,
+  files_indexed: undefined,
+  total_files: undefined,
+  error: undefined,
+  started_at: undefined,
+  completed_at: undefined,
+};
+
+let mockReindexTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Mock trigger reindex - simulates background indexing
+ */
+export async function mockTriggerReindex(_request: ReindexRequest = {}): Promise<ReindexResponse> {
+  await randomDelay(100, 200);
+
+  if (mockReindexState.status === 'running') {
+    return {
+      status: 'already_running',
+      job_id: mockReindexState.job_id,
+      message: 'Reindexing is already in progress',
+    };
+  }
+
+  // Start mock reindex
+  const jobId = `mock-${Date.now().toString(36)}`;
+  mockReindexState = {
+    status: 'running',
+    job_id: jobId,
+    progress: 0,
+    files_indexed: 0,
+    total_files: mockSearchResults.length,
+    error: undefined,
+    started_at: new Date().toISOString(),
+    completed_at: undefined,
+  };
+
+  // Simulate progress updates
+  let progress = 0;
+  const updateProgress = () => {
+    if (mockReindexState.status !== 'running') return;
+
+    progress += 10;
+    if (progress >= 100) {
+      mockReindexState = {
+        ...mockReindexState,
+        status: 'completed',
+        progress: 100,
+        files_indexed: mockSearchResults.length,
+        completed_at: new Date().toISOString(),
+      };
+    } else {
+      mockReindexState = {
+        ...mockReindexState,
+        progress,
+        files_indexed: Math.floor((progress / 100) * mockSearchResults.length),
+      };
+      mockReindexTimeout = setTimeout(updateProgress, 500);
+    }
+  };
+
+  mockReindexTimeout = setTimeout(updateProgress, 500);
+
+  return {
+    status: 'started',
+    job_id: jobId,
+    message: 'Mock reindexing started',
+  };
+}
+
+/**
+ * Mock get reindex status
+ */
+export async function mockGetReindexStatus(): Promise<ReindexStatus> {
+  await delay(50);
+  return { ...mockReindexState };
+}
+
+/**
+ * Reset mock reindex state (for testing)
+ */
+export function resetMockReindexState(): void {
+  if (mockReindexTimeout) {
+    clearTimeout(mockReindexTimeout);
+    mockReindexTimeout = null;
+  }
+  mockReindexState = {
+    status: 'idle',
+    job_id: undefined,
+    progress: undefined,
+    files_indexed: undefined,
+    total_files: undefined,
+    error: undefined,
+    started_at: undefined,
+    completed_at: undefined,
+  };
+}

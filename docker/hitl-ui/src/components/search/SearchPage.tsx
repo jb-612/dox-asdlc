@@ -22,6 +22,7 @@ import SearchFilters from './SearchFilters';
 import BackendSelector from './BackendSelector';
 import SearchHistory from './SearchHistory';
 import DocumentDetail from './DocumentDetail';
+import ReindexButton from './ReindexButton';
 
 export default function SearchPage() {
   // Local search state (not persisted)
@@ -146,14 +147,17 @@ export default function SearchPage() {
                 onClear={handleClear}
               />
             </div>
-            <BackendSelector
-              mode={selectedBackend}
-              onChange={setBackend}
-              disabled={isLoading}
-              showHealth
-              healthStatus={healthData?.status}
-              data-testid="backend-selector"
-            />
+            <div className="flex items-center gap-2">
+              <ReindexButton mode={selectedBackend} disabled={isLoading} />
+              <BackendSelector
+                mode={selectedBackend}
+                onChange={setBackend}
+                disabled={isLoading}
+                showHealth
+                healthStatus={healthData?.status}
+                data-testid="backend-selector"
+              />
+            </div>
           </div>
         </div>
       </div>
