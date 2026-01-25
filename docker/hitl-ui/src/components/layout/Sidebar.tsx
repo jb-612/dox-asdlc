@@ -12,6 +12,8 @@ import {
   ChevronRightIcon,
   LightBulbIcon,
   HomeIcon,
+  ServerIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -34,7 +36,9 @@ const navigationSections: NavSection[] = [
     items: [
       { name: 'Dashboard', href: '/', icon: HomeIcon },
       { name: 'Documentation', href: '/docs', icon: DocumentTextIcon },
+      { name: 'Knowledge Search', href: '/search', icon: MagnifyingGlassIcon },
       { name: 'Agent Cockpit', href: '/cockpit', icon: CpuChipIcon },
+      { name: 'Kubernetes', href: '/k8s', icon: ServerIcon },
       { name: 'Discovery Studio', href: '/studio', icon: ChatBubbleLeftRightIcon },
       { name: 'HITL Gates', href: '/gates', icon: ShieldCheckIcon },
       { name: 'Artifacts', href: '/artifacts', icon: FolderIcon },

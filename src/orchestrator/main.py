@@ -1,23 +1,26 @@
 """aSDLC Orchestrator Service Entry Point.
 
-Runs the orchestrator/governance service with health endpoints.
-Full implementation in P02 (Orchestration Core).
+Runs the orchestrator/governance service with health and KnowledgeStore API endpoints.
+Uses FastAPI for async HTTP handling.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import signal
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from threading import Thread
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import get_config
 from src.infrastructure.health import get_health_checker, HealthChecker
 from src.infrastructure.redis_streams import initialize_consumer_groups
+from src.orchestrator.knowledge_store_api import create_knowledge_store_router
 
 # Configure logging
 logging.basicConfig(
@@ -27,71 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class HealthHandler(BaseHTTPRequestHandler):
-    """HTTP handler for health check endpoints."""
-
-    health_checker: HealthChecker = None
-
-    def log_message(self, format: str, *args: Any) -> None:
-        """Override to use Python logging."""
-        logger.debug(f"HTTP: {format % args}")
-
-    def _send_json_response(self, data: dict, status: int = 200) -> None:
-        """Send JSON response."""
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, indent=2).encode())
-
-    def do_GET(self) -> None:
-        """Handle GET requests."""
-        if self.path == "/health":
-            self._handle_health()
-        elif self.path == "/health/live":
-            self._handle_liveness()
-        elif self.path == "/health/ready":
-            self._handle_readiness()
-        else:
-            self._send_json_response({"error": "Not Found"}, 404)
-
-    def _handle_health(self) -> None:
-        """Handle /health endpoint."""
-        loop = asyncio.new_event_loop()
-        try:
-            response = loop.run_until_complete(
-                self.health_checker.check_health()
-            )
-            self._send_json_response(
-                response.to_dict(), response.http_status_code()
-            )
-        finally:
-            loop.close()
-
-    def _handle_liveness(self) -> None:
-        """Handle /health/live endpoint."""
-        loop = asyncio.new_event_loop()
-        try:
-            response = loop.run_until_complete(
-                self.health_checker.check_liveness()
-            )
-            self._send_json_response(
-                response.to_dict(), response.http_status_code()
-            )
-        finally:
-            loop.close()
-
-    def _handle_readiness(self) -> None:
-        """Handle /health/ready endpoint."""
-        loop = asyncio.new_event_loop()
-        try:
-            response = loop.run_until_complete(
-                self.health_checker.check_health(include_dependencies=True)
-            )
-            self._send_json_response(
-                response.to_dict(), response.http_status_code()
-            )
-        finally:
-            loop.close()
+# Global health checker instance
+_health_checker: HealthChecker | None = None
 
 
 async def initialize_infrastructure() -> None:
@@ -107,60 +47,123 @@ async def initialize_infrastructure() -> None:
         raise
 
 
-def run_health_server(host: str, port: int, checker: HealthChecker) -> HTTPServer:
-    """Start the health check HTTP server."""
-    HealthHandler.health_checker = checker
-    server = HTTPServer((host, port), HealthHandler)
-    logger.info(f"Health server running on {host}:{port}")
-    return server
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Manage application lifecycle.
 
+    Initializes infrastructure on startup and cleans up on shutdown.
+    """
+    global _health_checker
 
-def main() -> None:
-    """Main entry point for orchestrator service."""
+    # Startup
     logger.info("Starting aSDLC Orchestrator Service")
 
     try:
         config = get_config()
         service_name = config.service.name
+    except Exception as e:
+        logger.warning(f"Config error, using defaults: {e}")
+        service_name = os.getenv("SERVICE_NAME", "orchestrator")
+
+    # Initialize health checker
+    _health_checker = get_health_checker(service_name)
+
+    # Initialize infrastructure
+    try:
+        await initialize_infrastructure()
+    except Exception as e:
+        logger.warning(f"Infrastructure init failed (non-fatal): {e}")
+
+    logger.info("Orchestrator service ready")
+    yield
+
+    # Shutdown
+    logger.info("Orchestrator service stopping")
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Returns:
+        FastAPI: Configured application instance.
+    """
+    app = FastAPI(
+        title="aSDLC Orchestrator",
+        description="Orchestrator and governance service for aSDLC",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+
+    # Add CORS middleware for frontend access
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Configure appropriately for production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Health endpoints
+    @app.get("/health")
+    async def health() -> dict:
+        """Health check endpoint."""
+        if _health_checker is None:
+            return {"status": "starting", "service": "orchestrator"}
+        response = await _health_checker.check_health()
+        return response.to_dict()
+
+    @app.get("/health/live")
+    async def liveness() -> dict:
+        """Liveness probe endpoint."""
+        if _health_checker is None:
+            return {"status": "starting", "service": "orchestrator"}
+        response = await _health_checker.check_liveness()
+        return response.to_dict()
+
+    @app.get("/health/ready")
+    async def readiness() -> dict:
+        """Readiness probe endpoint."""
+        if _health_checker is None:
+            return {"status": "starting", "service": "orchestrator"}
+        response = await _health_checker.check_health(include_dependencies=True)
+        return response.to_dict()
+
+    # KnowledgeStore API endpoints
+    knowledge_store_router = create_knowledge_store_router()
+    app.include_router(
+        knowledge_store_router,
+        prefix="/api/knowledge-store",
+    )
+
+    return app
+
+
+def main() -> None:
+    """Main entry point for orchestrator service."""
+    try:
+        config = get_config()
         port = config.service.port
         host = config.service.host
     except Exception as e:
         logger.warning(f"Config error, using defaults: {e}")
-        service_name = os.getenv("SERVICE_NAME", "orchestrator")
         port = int(os.getenv("SERVICE_PORT", "8080"))
         host = os.getenv("SERVICE_HOST", "0.0.0.0")
 
-    # Initialize health checker
-    health_checker = get_health_checker(service_name)
-
-    # Initialize infrastructure
-    try:
-        asyncio.get_event_loop().run_until_complete(initialize_infrastructure())
-    except Exception as e:
-        logger.warning(f"Infrastructure init failed (non-fatal): {e}")
-
-    # Start health server
-    server = run_health_server(host, port, health_checker)
+    logger.info(f"Starting server on {host}:{port}")
+    logger.info(f"Health check: http://localhost:{port}/health")
+    logger.info(f"KnowledgeStore API: http://localhost:{port}/api/knowledge-store/")
 
     # Handle shutdown signals
-    shutdown_event = asyncio.Event()
-
-    def signal_handler(signum, frame):
+    def signal_handler(signum: int, frame: object) -> None:
         logger.info(f"Received signal {signum}, shutting down...")
-        server.shutdown()
+        raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    logger.info(f"Orchestrator service ready on {host}:{port}")
-    logger.info(f"Health check: http://localhost:{port}/health")
-
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        logger.info("Orchestrator service stopped")
+    # Run the server
+    app = create_app()
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

@@ -463,6 +463,77 @@ export interface ArtifactsResponse {
 }
 
 // ============================================================================
+// KnowledgeStore Search Types (P05-F08)
+// ============================================================================
+
+// Backend mode selection
+export type SearchBackendMode = 'rest' | 'graphql' | 'mcp' | 'mock';
+
+// Search query parameters
+export interface SearchQuery {
+  query: string;
+  topK?: number;
+  filters?: SearchFilters;
+}
+
+// Filters for faceted search
+export interface SearchFilters {
+  fileTypes?: string[];       // e.g., ['.py', '.ts', '.md']
+  dateFrom?: string;          // ISO date
+  dateTo?: string;            // ISO date
+  metadata?: Record<string, unknown>;
+}
+
+// Search result from backend
+export interface KSSearchResult {
+  docId: string;
+  content: string;
+  metadata: {
+    file_path?: string;
+    file_type?: string;
+    language?: string;
+    line_start?: number;
+    line_end?: number;
+    indexed_at?: string;
+    [key: string]: unknown;
+  };
+  score: number;
+  source: string;
+}
+
+// Full document
+export interface KSDocument {
+  docId: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}
+
+// Search response wrapper
+export interface SearchResponse {
+  results: KSSearchResult[];
+  total: number;
+  query: string;
+  took_ms?: number;
+}
+
+// Health check response
+export interface KSHealthStatus {
+  status: 'healthy' | 'unhealthy';
+  backend: string;
+  index_count?: number;
+  document_count?: number;
+}
+
+// Saved search
+export interface SavedSearch {
+  id: string;
+  query: string;
+  filters?: SearchFilters;
+  timestamp: string;
+  isFavorite: boolean;
+}
+
+// ============================================================================
 // Documentation Types
 // ============================================================================
 
@@ -503,3 +574,9 @@ export interface DiagramContent {
   meta: DiagramMeta;
   content: string;
 }
+
+// ============================================================================
+// Kubernetes Types (re-export from types folder)
+// ============================================================================
+
+export * from './types/kubernetes';

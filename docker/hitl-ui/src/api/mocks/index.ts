@@ -58,6 +58,36 @@ export {
   filterMockDiagramsByCategory,
 } from './docs';
 
+// KnowledgeStore Search mocks (P05-F08)
+export {
+  mockSearchResults,
+  mockSearchService,
+  availableFileTypes,
+  delay,
+  randomDelay,
+} from './search';
+
+export type { SearchService } from './search';
+
+// Kubernetes Visibility Dashboard mocks (P05-F09)
+export {
+  mockClusterHealth,
+  mockNodes,
+  mockPods,
+  mockServices,
+  mockIngresses,
+  mockNamespaces,
+  mockClusterMetrics,
+  getMockMetricsHistory,
+  getMockCommandResponse,
+  mockHealthCheckResults,
+  getMockHealthCheckResult,
+  mockK8sEvents,
+  filterPods,
+  getNodeByName,
+  getPodByName,
+} from './kubernetes';
+
 // Helper to check if mocks are enabled
 export function useMocks(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';

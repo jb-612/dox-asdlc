@@ -15,6 +15,8 @@ import DiagramDetailPage from './pages/DiagramDetailPage';
 import DocDetailPage from './pages/DocDetailPage';
 import StudioDiscoveryPage from './pages/StudioDiscoveryPage';
 import RuleProposalsPage from './pages/RuleProposalsPage';
+import K8sPage from './pages/K8sPage';
+import SearchPage from './pages/SearchPage';
 import { initMermaid } from './config/mermaid';
 
 function App() {
@@ -35,6 +37,7 @@ function App() {
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="cockpit" element={<CockpitPage />} />
           <Route path="cockpit/runs/:runId" element={<RunDetailPage />} />
+          <Route path="k8s" element={<K8sPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
           <Route path="artifacts/:artifactId" element={<ArtifactDetailPage />} />
           <Route path="docs" element={<DocsPage />} />
@@ -43,6 +46,7 @@ function App() {
           <Route path="studio" element={<StudioDiscoveryPage />} />
           <Route path="studio/discovery" element={<Navigate to="/studio" replace />} />
           <Route path="rules" element={<RuleProposalsPage />} />
+          <Route path="search" element={<SearchPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
