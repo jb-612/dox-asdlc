@@ -92,12 +92,12 @@ flowchart LR
     H4 -->|Approved| Done
     H4 -.->|Rejected| D7
 
-    %% Styling
-    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef artifact fill:#faf5ff,stroke:#9333ea,stroke-width:2px
-    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
-    classDef auto fill:#DCFCE7,stroke:#16a34a,stroke-width:3px
-    classDef done fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef artifact fill:#faf5ff,stroke:#9333ea,stroke-width:2px,color:#1a1a1a
+    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px,color:#1a1a1a
+    classDef auto fill:#DCFCE7,stroke:#16a34a,stroke-width:3px,color:#1a1a1a
+    classDef done fill:#D0E8FF,stroke:#0b1559,stroke-width:2px,color:#1a1a1a
 
     class D1,D2,D3,D4,D5,D6,D7 agent
     class D1Art,D2Art,D3Art,D4Art,D5Art,D6Art,D7Art artifact

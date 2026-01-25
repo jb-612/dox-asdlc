@@ -1,10 +1,42 @@
 ---
-description: Trunk-based development workflow - all CLIs commit directly to main
+description: Trunk-based development workflow - orchestrator is primary commit agent
 ---
 
 # Trunk-Based Development
 
-All CLI roles commit directly to `main` branch.
+All work targets `main` branch directly. The orchestrator agent is the primary commit authority.
+
+## Commit Authority
+
+The **orchestrator agent** is the primary commit agent. Other agents prepare changes but do not commit directly.
+
+| Agent | Can Commit? | Notes |
+|-------|-------------|-------|
+| orchestrator | Yes | Primary commit authority |
+| devops | Yes | Infrastructure changes only |
+| backend | No | Prepares changes, orchestrator commits |
+| frontend | No | Prepares changes, orchestrator commits |
+| planner | No | Creates artifacts only |
+| reviewer | No | Read-only |
+
+## Protected Paths
+
+Commits to these paths require HITL confirmation:
+
+| Path | Reason |
+|------|--------|
+| `contracts/` | API contract changes affect consumers |
+| `.claude/` | Project configuration and rules |
+
+Before committing to protected paths, orchestrator must confirm:
+```
+Committing to protected path: [path]
+This affects project configuration.
+
+Confirm? (Y/N)
+```
+
+See `.claude/rules/hitl-gates.md` for full HITL gate specification.
 
 ## Core Rules
 

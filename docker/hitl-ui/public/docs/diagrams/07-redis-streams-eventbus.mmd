@@ -65,10 +65,10 @@ flowchart TB
     HITLConsumer -->|"show in UI"| SPA
     WSRelay -->|"WebSocket push"| SPA
 
-    %% Styling
-    classDef producer fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef stream fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
-    classDef consumer fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef producer fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef stream fill:#FEE2E2,stroke:#dc2626,stroke-width:2px,color:#1a1a1a
+    classDef consumer fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
 
     class Agents,Coord,HITLGw,SPA producer
     class Discovery,Design,Development,Test,Security,Validator,Deployment stream

@@ -24,7 +24,20 @@
       "Bash(.venv/bin/python:*)",
       "Bash(npm run:*)",
       "Bash(npm install)",
-      "Bash(npx:*)"
+      "Bash(npm test:*)",
+      "Bash(npx:*)",
+      "Bash(docker build:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(kubectl get:*)",
+      "Bash(kubectl describe:*)",
+      "Bash(kubectl logs:*)",
+      "Bash(helm list:*)",
+      "Bash(helm status:*)",
+      "mcp__coordination__coord_publish_message",
+      "mcp__coordination__coord_check_messages",
+      "mcp__coordination__coord_ack_message",
+      "mcp__coordination__coord_get_presence",
+      "mcp__coordination__coord_get_notifications"
     ],
     "deny": [
       "Read(./.env)",

@@ -24,14 +24,14 @@ Start(["User Request: Start Epic"])
     HITL2 -.->|Rejected| Coordinator
     HITL3 -.->|Rejected| Coordinator
 
-    %% Styling
-    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px;
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px,color:#1a1a1a;
     class HITL1,HITL2,HITL3 hitl;
-    classDef cli fill:#E6F0FF,stroke:#2563eb;
+    classDef cli fill:#E6F0FF,stroke:#2563eb,color:#1a1a1a;
     class DiscoveryCLI,DesignCLI,DevCLI cli;
-    classDef sdk fill:#FFF4E6,stroke:#eab308;
+    classDef sdk fill:#FFF4E6,stroke:#eab308,color:#1a1a1a;
     class CICD,Security,SRE,Observability sdk;
-    classDef art fill:#faf5ff,stroke:#9333ea;
+    classDef art fill:#faf5ff,stroke:#9333ea,color:#1a1a1a;
     class PRD,DesignDocs,Patch art;
-    classDef coord fill:#D0E8FF,stroke:#0b1559;
+    classDef coord fill:#D0E8FF,stroke:#0b1559,color:#1a1a1a;
     class Coordinator,Start,Done coord;

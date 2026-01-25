@@ -11,6 +11,7 @@ import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 import clsx from 'clsx';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { useUIStore } from '@/stores/uiStore';
 
 export interface DiagramThumbnailProps {
   /** Mermaid syntax content */
@@ -41,6 +42,7 @@ function DiagramThumbnail({
   ariaLabel = 'Diagram thumbnail',
   onError,
 }: DiagramThumbnailProps) {
+  const theme = useUIStore((state) => state.theme);
   const [isVisible, setIsVisible] = useState(false);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -71,12 +73,13 @@ function DiagramThumbnail({
     };
   }, []);
 
-  // Render mermaid when visible
+  // Render mermaid when visible or theme changes
   const renderDiagram = useCallback(async () => {
     if (!isVisible || !content.trim()) return;
 
     setLoading(true);
     setError(null);
+    setSvg(null); // Clear cached SVG to force re-render with new theme
 
     try {
       const timestamp = Date.now();
@@ -91,7 +94,7 @@ function DiagramThumbnail({
     } finally {
       setLoading(false);
     }
-  }, [isVisible, content, diagramId, onError]);
+  }, [isVisible, content, diagramId, onError, theme]);
 
   useEffect(() => {
     renderDiagram();
@@ -156,7 +159,11 @@ function DiagramThumbnail({
       {/* Rendered SVG */}
       {isVisible && svg && !loading && !error && (
         <div
-          className="origin-top-left"
+          className={clsx(
+            'origin-top-left',
+            // In dark mode, invert light backgrounds to dark
+            theme === 'dark' && 'diagram-dark-mode'
+          )}
           style={{ transform: `scale(${scale})` }}
           data-testid="thumbnail-content"
           dangerouslySetInnerHTML={{

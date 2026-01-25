@@ -61,14 +61,14 @@ flowchart TB
     RAG -->|"Prompt Caching"| Anthropic
     RAG <-->|embeddings| ChromaDB
 
-    %% Styling
-    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
-    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
-    classDef eventbus fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
-    classDef mcp fill:#FEF3C7,stroke:#d97706,stroke-width:2px
-    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef quality fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef infra fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px,color:#1a1a1a
+    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef eventbus fill:#FEE2E2,stroke:#dc2626,stroke-width:2px,color:#1a1a1a
+    classDef mcp fill:#FEF3C7,stroke:#d97706,stroke-width:2px,color:#1a1a1a
+    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef quality fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef infra fill:#F3E8FF,stroke:#9333ea,stroke-width:2px,color:#1a1a1a
 
     class SPA ui
     class Coordinator,HITLGateway,GitGateway orchestration

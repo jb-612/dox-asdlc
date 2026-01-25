@@ -13,7 +13,7 @@ flowchart TB
         subgraph SDK["Claude Agent SDK"]
             AgentLoop["Agent Loop\n(Claude Code CLI)"]
             BuiltInTools["Built-in Tools:\n• Read, Write, Edit\n• Bash, Glob, Grep\n• TodoWrite, Task"]
-            Subagents["Subagents:\n• test-first\n• implementer\n• debugger"]
+            Subagents["Subagents:\n• test-first\n• backend/frontend\n• debugger"]
         end
 
         subgraph MCP["MCP Servers (stdio)"]

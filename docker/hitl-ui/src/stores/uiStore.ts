@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { updateMermaidTheme } from '../config/mermaid';
 
 // Safe localStorage access for SSR/test environments
 const getStoredTheme = (): 'light' | 'dark' => {
@@ -61,6 +62,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ theme });
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', theme === 'dark');
+      // Update mermaid theme for diagram rendering
+      updateMermaidTheme(theme);
     }
   },
   toggleTheme: () => {

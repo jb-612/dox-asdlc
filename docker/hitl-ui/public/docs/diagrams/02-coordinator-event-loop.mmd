@@ -38,12 +38,12 @@ flowchart TD
     PublishHITL --> Loop
     LogEvent --> Loop
 
-    %% Styling
-    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
-    classDef process fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
-    classDef spawn fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef redis fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px,color:#1a1a1a
+    classDef process fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px,color:#1a1a1a
+    classDef spawn fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef redis fill:#FEE2E2,stroke:#dc2626,stroke-width:2px,color:#1a1a1a
 
     class Start,Loop start
     class Init,ProcessEvents,PhaseHandler,ApprovedHandler,RejectedHandler,EpicHandler process

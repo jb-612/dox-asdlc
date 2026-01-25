@@ -29,9 +29,9 @@ export function getMermaidConfig(theme: 'light' | 'dark' = 'dark'): MermaidConfi
 
   return {
     startOnLoad: false,
-    theme: 'base',
+    theme: isDark ? 'dark' : 'default',
     securityLevel: 'loose',
-    flowchart: { htmlLabels: false },
+    flowchart: { htmlLabels: true },
     fontFamily: 'Inter, system-ui, sans-serif',
     logLevel: 3, // Error level only
     themeVariables: isDark ? {
@@ -51,6 +51,22 @@ export function getMermaidConfig(theme: 'light' | 'dark' = 'dark'): MermaidConfi
       clusterBkg: '#141414',
       clusterBorder: '#2A7A8C',
       titleColor: '#FBFCFC',
+      // Additional text color variables for visibility
+      labelTextColor: '#FBFCFC',
+      actorTextColor: '#FBFCFC',
+      signalTextColor: '#FBFCFC',
+      loopTextColor: '#FBFCFC',
+      noteBkgColor: '#141414',
+      noteTextColor: '#FBFCFC',
+      activationBkgColor: '#1E5160',
+      sequenceNumberColor: '#FBFCFC',
+      sectionBkgColor: '#141414',
+      altSectionBkgColor: '#0a0a0a',
+      sectionBkgColor2: '#1E5160',
+      taskTextColor: '#FBFCFC',
+      taskTextDarkColor: '#FBFCFC',
+      taskTextOutsideColor: '#FBFCFC',
+      taskTextLightColor: '#FBFCFC',
     } : {
       primaryColor: '#0D9488',
       primaryTextColor: '#0F172A',

@@ -87,13 +87,13 @@ flowchart TB
     Job2 -->|"API calls"| Anthropic
     Job3 -->|"API calls"| Anthropic
 
-    %% Styling
-    classDef deployment fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
-    classDef job fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,stroke-dasharray: 5 5
-    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
-    classDef service fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef rbac fill:#FEF3C7,stroke:#d97706,stroke-width:2px
-    classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef deployment fill:#D0E8FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef job fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,stroke-dasharray: 5 5,color:#1a1a1a
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px,color:#1a1a1a
+    classDef service fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef rbac fill:#FEF3C7,stroke:#d97706,stroke-width:2px,color:#1a1a1a
+    classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px,color:#1a1a1a
 
     class CoordPod,HITLPod1,HITLPod2,RedisPod,ChromaPod deployment
     class Job1,Job2,Job3,JobN job

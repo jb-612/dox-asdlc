@@ -10,6 +10,7 @@ import mermaid from 'mermaid';
 import DOMPurify from 'dompurify';
 import clsx from 'clsx';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { useUIStore } from '@/stores/uiStore';
 
 export interface MermaidDiagramProps {
   /** Mermaid syntax content */
@@ -40,11 +41,13 @@ function MermaidDiagram({
   onRender,
   onError,
 }: MermaidDiagramProps) {
+  const theme = useUIStore((state) => state.theme);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef(content);
+  const themeRef = useRef(theme);
   const idRef = useRef<string>(`mermaid-${++diagramIdCounter}`);
 
   // Render mermaid diagram
@@ -59,11 +62,12 @@ function MermaidDiagram({
       return;
     }
 
-    // Skip if content hasn't changed
-    if (contentRef.current === content && svg) {
+    // Skip if content and theme haven't changed
+    if (contentRef.current === content && themeRef.current === theme && svg) {
       return;
     }
     contentRef.current = content;
+    themeRef.current = theme;
 
     setLoading(true);
     setError(null);
@@ -82,7 +86,7 @@ function MermaidDiagram({
     } finally {
       setLoading(false);
     }
-  }, [content, svg, onRender, onError]);
+  }, [content, svg, onRender, onError, theme]);
 
   // Render on mount and content change
   useEffect(() => {
@@ -143,7 +147,11 @@ function MermaidDiagram({
         <div
           role="img"
           aria-label={ariaLabel}
-          className="overflow-auto"
+          className={clsx(
+            'overflow-auto',
+            // In dark mode, invert light backgrounds to dark while preserving colors
+            theme === 'dark' && 'diagram-dark-mode'
+          )}
           dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true }, ADD_TAGS: ['foreignObject'] }) }}
         />
       )}

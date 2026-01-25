@@ -87,12 +87,12 @@ flowchart LR
     CreateIssue -->|"REST"| JiraAPI
     UpdateIssue -->|"REST"| JiraAPI
 
-    %% Styling
-    classDef agent fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
-    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef mcpclient fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef mcpserver fill:#FEF3C7,stroke:#d97706,stroke-width:2px
-    classDef external fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef agent fill:#D0E8FF,stroke:#0b1559,stroke-width:2px,color:#1a1a1a
+    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef mcpclient fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef mcpserver fill:#FEF3C7,stroke:#d97706,stroke-width:2px,color:#1a1a1a
+    classDef external fill:#F3E8FF,stroke:#9333ea,stroke-width:2px,color:#1a1a1a
 
     class Agent agent
     class Read,Write,Edit,Bash,Glob,Grep,Todo,Task builtin

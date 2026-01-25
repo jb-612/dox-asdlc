@@ -72,3 +72,63 @@ gh issue close <number> --comment "Fixed in <commit-sha>"
 ```
 
 On completion, publish a STATUS_UPDATE summarizing actions taken.
+
+## Atomic Task Delegation
+
+When delegating tasks to coding agents (backend/frontend), follow atomic delegation:
+
+1. **One task at a time** - Never assign multiple tasks in a single delegation
+2. **Wait for completion** - Confirm task success before delegating next
+3. **Session renewal** - Allow PM CLI to renew session between tasks
+4. **Record outcomes** - Track success/failure for each task
+
+This prevents context drift and ensures focused agent execution.
+
+## E2E Validation
+
+Before committing any feature, orchestrator must:
+
+1. Run `./tools/e2e.sh` for end-to-end tests
+2. Run `./tools/lint.sh` for final lint check
+3. Verify all unit tests pass with `./tools/test.sh`
+4. Check that all tasks are marked complete in tasks.md
+
+Only proceed to commit if all validations pass.
+
+## Commit Authority
+
+The orchestrator is the **primary commit agent** for this project.
+
+- Backend and frontend agents prepare changes but do not commit
+- Orchestrator reviews prepared changes and commits to main
+- DevOps agent can commit infrastructure-only changes
+
+Commit format:
+```
+feat(Pnn-Fnn): description
+
+- Implements {summary}
+- Tests: {count} unit, {count} integration
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+```
+
+## Protected Path Commits
+
+When committing files in protected paths, HITL confirmation is required:
+
+| Path | Requires HITL |
+|------|---------------|
+| `contracts/` | Yes |
+| `.claude/` | Yes |
+| Other paths | No |
+
+Before committing to protected paths:
+```
+Committing to protected path: [path]
+This affects project configuration.
+
+Confirm? (Y/N)
+```
+
+See `.claude/rules/hitl-gates.md` for full specification.

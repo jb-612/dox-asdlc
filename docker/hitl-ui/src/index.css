@@ -154,6 +154,17 @@
   }
 }
 
+/* Mermaid diagram dark mode styles */
+.diagram-dark-mode svg {
+  /* Invert light backgrounds to dark while preserving hue */
+  filter: invert(0.85) hue-rotate(180deg);
+}
+
+.diagram-dark-mode svg text {
+  /* Keep text readable after inversion */
+  filter: invert(1) hue-rotate(180deg);
+}
+
 /* Code/diff viewer styles */
 .diff-viewer {
   @apply font-mono text-sm;

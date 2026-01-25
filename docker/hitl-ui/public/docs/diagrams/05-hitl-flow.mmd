@@ -51,13 +51,13 @@ flowchart TD
     SpawnNext --> NextAgent["Next Phase\nAgent Container"]
     SpawnRetry --> RetryAgent["Same Phase\nAgent Container\n(with feedback)"]
 
-    %% Styling
-    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef coord fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
-    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
-    classDef decision fill:#FEF3C7,stroke:#d97706,stroke-width:2px
-    classDef outcome fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef reject fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef agent fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef coord fill:#D0E8FF,stroke:#0b1559,stroke-width:2px,color:#1a1a1a
+    classDef hitl fill:#FFF7ED,stroke:#EA580C,stroke-width:2px,color:#1a1a1a
+    classDef decision fill:#FEF3C7,stroke:#d97706,stroke-width:2px,color:#1a1a1a
+    classDef outcome fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef reject fill:#FEE2E2,stroke:#dc2626,stroke-width:2px,color:#1a1a1a
 
     class Agent,Complete,NextAgent,RetryAgent agent
     class Receive,CheckWF,SpawnNext,SpawnRetry coord

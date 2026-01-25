@@ -30,26 +30,35 @@ This index catalogs all configuration, rules, skills, hooks, and coordination sc
 | File | Description | Type |
 |------|-------------|------|
 | `coding-standards.md` | Python/TypeScript/Bash coding standards | Meta |
+| `hitl-gates.md` | HITL gate definitions - mandatory and advisory checkpoints | Meta |
+| `identity-selection.md` | Role subagent invocation rules | Meta |
 | `orchestrator.md` | Rules for orchestrator CLI (master agent) - review, merge, meta ownership | Meta |
 | `parallel-coordination.md` | Rules for 3-CLI parallel work - identity, paths, messaging | Meta |
-| `workflow.md` | TDD workflow rules - planning gate, completion checklist | Meta |
+| `permissions.md` | Environment-aware permissions for workstation vs container | Meta |
+| `pm-cli.md` | PM CLI behavior - main session as Project Manager | Meta |
+| `trunk-based-development.md` | Trunk-based development rules | Meta |
+| `workflow.md` | 11-step development workflow with HITL gates | Meta |
 
 ### .claude/skills/
 
 | File | Description | Type |
 |------|-------------|------|
 | `contract-update/SKILL.md` | Guide for proposing and publishing contract changes | Meta |
+| `diagram-builder/SKILL.md` | Mermaid diagram creation skill | Meta |
 | `feature-completion/SKILL.md` | Feature completion checklist and commit protocol | Meta |
 | `feature-planning/SKILL.md` | Feature planning workflow (design, stories, tasks) | Meta |
 | `tdd-execution/SKILL.md` | TDD execution workflow (red-green-refactor) | Meta |
 
-### .claude/subagents/
+### .claude/agents/
 
 | File | Description | Type |
 |------|-------------|------|
-| `implementer.md` | Subagent definition for code implementation tasks | Meta |
-| `planner.md` | Subagent definition for planning and design tasks | Meta |
-| `reviewer.md` | Subagent definition for code review tasks | Meta |
+| `backend.md` | Backend agent for workers, infrastructure (P01-P03, P06) | Meta |
+| `devops.md` | DevOps agent for Docker, K8s, cloud, GitHub Actions | Meta |
+| `frontend.md` | Frontend agent for HITL UI (P05) | Meta |
+| `orchestrator.md` | Orchestrator agent for meta files, commits, coordination | Meta |
+| `planner.md` | Planner agent for planning and design tasks | Meta |
+| `reviewer.md` | Reviewer agent for code review tasks | Meta |
 
 ---
 
@@ -119,16 +128,16 @@ This index catalogs all configuration, rules, skills, hooks, and coordination sc
 | Category | Files | Meta | Solution |
 |----------|-------|------|----------|
 | .claude/ config | 4 | 4 | 0 |
-| .claude/coordination/ | 1 | 1 | 0 |
-| .claude/rules/ | 4 | 4 | 0 |
-| .claude/skills/ | 4 | 4 | 0 |
-| .claude/subagents/ | 3 | 3 | 0 |
+| .claude/coordination/ | 3 | 3 | 0 |
+| .claude/rules/ | 9 | 9 | 0 |
+| .claude/skills/ | 5 | 5 | 0 |
+| .claude/agents/ | 6 | 6 | 0 |
 | scripts/coordination/ | 6 | 0 | 6 |
 | scripts/hooks/ | 3 | 0 | 3 |
 | scripts/orchestrator/ | 2 | 0 | 2 |
 | scripts/ top-level | 5 | 0 | 5 |
 | Project root | 5 | 2 | 3 |
-| **Total** | **37** | **18** | **19** |
+| **Total** | **48** | **29** | **19** |
 
 ---
 

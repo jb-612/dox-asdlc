@@ -44,14 +44,14 @@ flowchart TD
     RAGPath -.->|"~$0.001/query\n(cached)"| CostLow["💰 Low Cost"]
     RLMPath -.->|"~$0.05-0.50/query\n(thinking tokens)"| CostHigh["💰💰 Higher Cost"]
 
-    %% Styling
-    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
-    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px
-    classDef rag fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
-    classDef rlm fill:#FEF3C7,stroke:#d97706,stroke-width:2px
-    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
-    classDef direct fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
-    classDef cost fill:#FEE2E2,stroke:#dc2626,stroke-width:1px
+    %% Styling - explicit dark text color for visibility in both themes
+    classDef start fill:#D0E8FF,stroke:#0b1559,stroke-width:2px,color:#1a1a1a
+    classDef decision fill:#FFF7ED,stroke:#EA580C,stroke-width:2px,color:#1a1a1a
+    classDef rag fill:#DCFCE7,stroke:#16a34a,stroke-width:2px,color:#1a1a1a
+    classDef rlm fill:#FEF3C7,stroke:#d97706,stroke-width:2px,color:#1a1a1a
+    classDef builtin fill:#E6F0FF,stroke:#2563eb,stroke-width:2px,color:#1a1a1a
+    classDef direct fill:#F3E8FF,stroke:#9333ea,stroke-width:2px,color:#1a1a1a
+    classDef cost fill:#FEE2E2,stroke:#dc2626,stroke-width:1px,color:#1a1a1a
 
     class Start,Continue start
     class Decision decision
