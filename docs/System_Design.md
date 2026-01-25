@@ -75,9 +75,9 @@ This document specifies the technical architecture for an agentic SDLC system al
    - Coordination and pub/sub
 
 4. **Container 4: KnowledgeStore (RAG)**
-   - ChromaDB or Qdrant for vector search
+   - Elasticsearch for vector search with kNN
    - Abstract KnowledgeStore interface
-   - Replaceable with enterprise services (Anthology, Elasticsearch)
+   - Replaceable with enterprise services (OpenSearch, Azure AI Search)
 
 5. **Container 5: HITL Web UI**
    - Gate request viewer and evidence explorer
@@ -92,7 +92,7 @@ For a local prototype, Container 1 and Container 2 may be merged if Git branch p
 
 The system can be deployed to Kubernetes using Helm charts. This deployment model provides:
 - Namespace isolation (`dox-asdlc`)
-- StatefulSets for stateful services (Redis, ChromaDB)
+- StatefulSets for stateful services (Redis, Elasticsearch)
 - Deployments for stateless services (Orchestrator, Workers, HITL-UI)
 - HorizontalPodAutoscaler for worker scaling
 - ConfigMaps for environment configuration
@@ -104,7 +104,7 @@ All resources are deployed in a single namespace for logical isolation and simpl
 
 **StatefulSets:**
 - `redis` - Event streaming and state cache (1 replica)
-- `chromadb` - KnowledgeStore backend (1 replica)
+- `elasticsearch` - KnowledgeStore backend with kNN vector search (1 replica)
 
 Both use PersistentVolumeClaims for data durability.
 
@@ -126,7 +126,7 @@ helm/dox-asdlc/
 ├── values-minikube.yaml
 └── charts/
     ├── redis/
-    ├── chromadb/
+    ├── elasticsearch/
     ├── orchestrator/
     ├── workers/
     └── hitl-ui/
@@ -207,12 +207,12 @@ The prototype includes a retrieval layer for:
 - `get_by_id(doc_id) -> Document | None`
 - `delete(doc_id) -> bool`
 
-**Prototype backend**
-- Single-container ChromaDB or Qdrant.
+**Default backend**
+- Single-container Elasticsearch with kNN vector search.
 - All access routed through the KnowledgeStore interface, not direct backend calls.
 
 **Enterprise replacement path**
-- Elasticsearch or OpenSearch
+- OpenSearch (AWS-managed)
 - Google Vertex AI Search
 - Azure AI Search
 
@@ -385,7 +385,7 @@ Kubernetes Cluster
 │   ├── workers
 │   ├── hitl-ui
 │   ├── redis
-│   └── chromadb
+│   └── elasticsearch
 └── plane-ce namespace
     ├── plane-app-web
     ├── plane-app-api

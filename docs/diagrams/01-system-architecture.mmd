@@ -38,7 +38,7 @@ flowchart TB
 
     subgraph Infrastructure["Infrastructure"]
         PostgreSQL[("PostgreSQL\n(State)")]
-        ChromaDB[("ChromaDB\n(Embeddings)")]
+        Elasticsearch[("Elasticsearch\n(Vector Search)")]
         Git[("Git Repos\n(Artifacts)")]
         Anthropic["Anthropic API\n(Claude Models)"]
     end
@@ -59,7 +59,7 @@ flowchart TB
     %% MCP to external
     RLM -->|Extended Thinking| Anthropic
     RAG -->|Prompt Caching| Anthropic
-    RAG <-->|embeddings| ChromaDB
+    RAG <-->|kNN search| Elasticsearch
 
     %% Styling
     classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
@@ -76,4 +76,4 @@ flowchart TB
     class RLM,RAG,GitMCP,JiraMCP mcp
     class Discovery,Design,Development,Test agent
     class Security,Validator,Evaluator quality
-    class PostgreSQL,ChromaDB,Git,Anthropic infra
+    class PostgreSQL,Elasticsearch,Git,Anthropic infra

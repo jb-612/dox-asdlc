@@ -63,9 +63,9 @@
    - All exploration trajectories are persisted as audit artifacts.
 
 14. **RAG abstraction layer (KnowledgeStore interface)**
-   - Single retrieval interface for prototype context enrichment.
-   - Replaceable backends: Elasticsearch or OpenSearch, Google Vertex AI Search, Azure AI Search.
-   - Prototype default: single-container ChromaDB or Qdrant.
+   - Single retrieval interface for context enrichment.
+   - Default backend: Elasticsearch with kNN vector search.
+   - Replaceable backends: OpenSearch, Google Vertex AI Search, Azure AI Search.
    - Core operations: index_document, search, get_by_id, delete.
 
 ## E. Development acceleration and quality

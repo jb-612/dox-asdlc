@@ -16,8 +16,8 @@ flowchart TB
                 RedisPod["Pod: redis\n256Mi RAM\nredis:7-alpine"]
             end
 
-            subgraph ChromaDeploy["Deployment: chromadb"]
-                ChromaPod["Pod: chromadb\n1Gi RAM\nchromadb/chroma"]
+            subgraph ESDeploy["StatefulSet: elasticsearch"]
+                ESPod["Pod: elasticsearch\n1Gi RAM\nelasticsearch:8"]
             end
         end
 
@@ -30,13 +30,13 @@ flowchart TB
 
         subgraph Storage["Persistent Storage"]
             PVC1[("PVC: workspace-epic-001\n10Gi")]
-            PVC2[("PVC: chromadb-data\n10Gi")]
+            PVC2[("PVC: elasticsearch-data\n10Gi")]
         end
 
         subgraph Services["Services"]
             RedisSvc["Service: redis\nport: 6379"]
             HITLSvc["Service: hitl-gateway\nport: 8080"]
-            ChromaSvc["Service: chromadb\nport: 8000"]
+            ESSvc["Service: elasticsearch\nport: 9200"]
         end
 
         subgraph RBAC["RBAC"]
@@ -59,7 +59,7 @@ flowchart TB
     RedisPod --> RedisSvc
     HITLPod1 --> HITLSvc
     HITLPod2 --> HITLSvc
-    ChromaPod --> ChromaSvc
+    ESPod --> ESSvc
 
     %% Pod connections
     CoordPod -->|xread/xadd| RedisSvc
@@ -73,7 +73,7 @@ flowchart TB
     Job1 -->|mount| PVC1
     Job2 -->|mount| PVC1
     Job3 -->|mount| PVC1
-    ChromaPod -->|mount| PVC2
+    ESPod -->|mount| PVC2
 
     %% RBAC
     SA --> CoordPod
@@ -95,9 +95,9 @@ flowchart TB
     classDef rbac fill:#FEF3C7,stroke:#d97706,stroke-width:2px
     classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
 
-    class CoordPod,HITLPod1,HITLPod2,RedisPod,ChromaPod deployment
+    class CoordPod,HITLPod1,HITLPod2,RedisPod,ESPod deployment
     class Job1,Job2,Job3,JobN job
     class PVC1,PVC2 storage
-    class RedisSvc,HITLSvc,ChromaSvc,Ing service
+    class RedisSvc,HITLSvc,ESSvc,Ing service
     class SA,Role,RB rbac
     class User,Anthropic external

@@ -795,7 +795,7 @@ Per-agent configuration:
 
 | Setting | Value |
 |---------|-------|
-| Provider | ChromaDB (prototype) / Pinecone (enterprise) |
+| Provider | Elasticsearch (default) / OpenSearch (enterprise) |
 | Embedding model | text-embedding-3-small |
 | Index count | 3 (code, docs, feedback) |
 | Total vectors | 1,234,567 |

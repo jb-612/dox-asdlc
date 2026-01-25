@@ -11,7 +11,7 @@ flowchart TD
 
     subgraph RAGPath["RAG Path (Cost Efficient)"]
         RAGCall["mcp__rag__query_codebase(\n  question='How is auth implemented?'\n)"]
-        --> ChromaQuery["ChromaDB:\nEmbedding search"]
+        --> ESQuery["Elasticsearch:\nkNN vector search"]
         --> RetrieveChunks["Retrieve top-k\ncode chunks"]
         --> CachedLLM["Anthropic API:\nPrompt Caching\n(90% cost reduction)"]
         --> RAGResult["Return:\nAnswer + Sources"]
@@ -55,7 +55,7 @@ flowchart TD
 
     class Start,Continue start
     class Decision decision
-    class RAGCall,ChromaQuery,RetrieveChunks,CachedLLM,RAGResult rag
+    class RAGCall,ESQuery,RetrieveChunks,CachedLLM,RAGResult rag
     class RLMCall,ThinkingAPI,DeepAnalysis,RLMResult rlm
     class BuiltInCall,LocalOp,BuiltInResult builtin
     class DirectCall,DirectResult direct

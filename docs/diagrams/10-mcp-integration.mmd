@@ -52,7 +52,7 @@ flowchart LR
 
     subgraph External["External Services"]
         Anthropic["Anthropic API"]
-        ChromaDB[("ChromaDB")]
+        Elasticsearch[("Elasticsearch")]
         GitRepo[("Git Repository")]
         JiraAPI["Jira Cloud API"]
     end
@@ -78,8 +78,8 @@ flowchart LR
     ArchDecision -->|"Extended Thinking"| Anthropic
 
     QueryCode -->|"Prompt Caching"| Anthropic
-    QueryCode <-->|"embeddings"| ChromaDB
-    FindSimilar <-->|"embeddings"| ChromaDB
+    QueryCode <-->|"kNN search"| Elasticsearch
+    FindSimilar <-->|"kNN search"| Elasticsearch
 
     Commit -->|"git commands"| GitRepo
     Branch -->|"git commands"| GitRepo
@@ -98,4 +98,4 @@ flowchart LR
     class Read,Write,Edit,Bash,Glob,Grep,Todo,Task builtin
     class RLMClient,RAGClient,GitClient,JiraClient mcpclient
     class DeepAnalyze,SecurityAnalyze,ArchDecision,QueryCode,FindSimilar,SearchFiles,Commit,Branch,Diff,Push,CreateIssue,UpdateIssue,Transition mcpserver
-    class Anthropic,ChromaDB,GitRepo,JiraAPI external
+    class Anthropic,Elasticsearch,GitRepo,JiraAPI external

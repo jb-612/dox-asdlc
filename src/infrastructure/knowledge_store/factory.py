@@ -6,11 +6,9 @@ Provides singleton pattern for KnowledgeStore access with backend selection.
 from __future__ import annotations
 
 import logging
-import warnings
 from typing import TYPE_CHECKING, Union
 
 from src.core.exceptions import ConfigurationError
-from src.infrastructure.knowledge_store.chromadb_store import ChromaDBStore
 from src.infrastructure.knowledge_store.config import KnowledgeStoreConfig
 from src.infrastructure.knowledge_store.elasticsearch_store import ElasticsearchStore
 from src.infrastructure.knowledge_store.mock_anthology import MockAnthologyStore
@@ -21,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Type alias for supported store types
-StoreType = Union[ElasticsearchStore, ChromaDBStore, MockAnthologyStore]
+StoreType = Union[ElasticsearchStore, MockAnthologyStore]
 
 # Singleton instance
 _knowledge_store: StoreType | None = None
@@ -37,7 +35,6 @@ def get_knowledge_store(
 
     Supported backends:
         - "elasticsearch": Elasticsearch vector database (default, recommended)
-        - "chromadb": ChromaDB vector database (deprecated, use elasticsearch)
         - "mock_anthology": In-memory mock for testing
 
     Args:
@@ -75,29 +72,13 @@ def get_knowledge_store(
                 f"Connecting to Elasticsearch at {config.elasticsearch_url}"
             )
             _knowledge_store = ElasticsearchStore(config)
-        elif backend == "chromadb":
-            warnings.warn(
-                "ChromaDB backend is DEPRECATED and will be removed in 30 days. "
-                "Please migrate to Elasticsearch by setting "
-                "KNOWLEDGE_STORE_BACKEND=elasticsearch",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            logger.warning(
-                "ChromaDB backend is DEPRECATED. "
-                "Please migrate to Elasticsearch."
-            )
-            logger.info(
-                f"Connecting to ChromaDB at {config.host}:{config.port}"
-            )
-            _knowledge_store = ChromaDBStore(config)
         elif backend == "mock_anthology":
             logger.info("Using MockAnthologyStore (in-memory)")
             _knowledge_store = MockAnthologyStore(config)
         else:
             raise ConfigurationError(
                 f"Unsupported knowledge store backend: '{backend}'. "
-                f"Supported backends: elasticsearch, chromadb, mock_anthology"
+                f"Supported backends: elasticsearch, mock_anthology"
             )
 
     return _knowledge_store

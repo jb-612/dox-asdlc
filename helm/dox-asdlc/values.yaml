@@ -98,24 +98,6 @@ elasticsearch:
     javaOpts: "-Xms512m -Xmx512m"
     securityEnabled: false
 
-# ChromaDB subchart configuration (DEPRECATED - use elasticsearch instead)
-# This backend is deprecated and will be removed in 30 days.
-# Set chromadb.enabled=true and elasticsearch.enabled=false to use ChromaDB.
-chromadb:
-  enabled: false
-  replicas: 1
-  persistence:
-    enabled: true
-    size: 5Gi
-    storageClass: ""
-  resources:
-    requests:
-      memory: "512Mi"
-      cpu: "200m"
-    limits:
-      memory: "1Gi"
-      cpu: "1000m"
-
 # Orchestrator subchart configuration
 orchestrator:
   enabled: true

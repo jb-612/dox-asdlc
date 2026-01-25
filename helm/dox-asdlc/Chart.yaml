@@ -34,10 +34,6 @@ dependencies:
     version: "0.1.0"
     condition: elasticsearch.enabled
     repository: "file://charts/elasticsearch"
-  - name: chromadb
-    version: "0.1.0"
-    condition: chromadb.enabled
-    repository: "file://charts/chromadb"
   - name: orchestrator
     version: "0.1.0"
     condition: orchestrator.enabled

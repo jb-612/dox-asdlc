@@ -45,22 +45,6 @@ redis:
   aof:
     enabled: false  # Use RDB only for faster dev restarts
 
-# ChromaDB development configuration
-chromadb:
-  enabled: true
-  replicas: 1
-  persistence:
-    enabled: true
-    size: 1Gi
-    storageClass: "standard"
-  resources:
-    requests:
-      memory: "256Mi"
-      cpu: "100m"
-    limits:
-      memory: "512Mi"
-      cpu: "500m"
-
 # Orchestrator development configuration
 orchestrator:
   enabled: true
