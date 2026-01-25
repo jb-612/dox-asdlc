@@ -165,11 +165,15 @@ class ElasticsearchStore:
             filters: Dictionary of metadata field:value pairs.
 
         Returns:
-            List of Elasticsearch term filter clauses.
+            List of Elasticsearch term/terms filter clauses.
         """
         filter_clauses = []
         for key, value in filters.items():
-            filter_clauses.append({"term": {f"metadata.{key}": value}})
+            # Use 'terms' for list values, 'term' for single values
+            if isinstance(value, list):
+                filter_clauses.append({"terms": {f"metadata.{key}": value}})
+            else:
+                filter_clauses.append({"term": {f"metadata.{key}": value}})
         return filter_clauses
 
     async def index_document(self, document: Document) -> str:

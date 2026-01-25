@@ -132,6 +132,31 @@ helm/dox-asdlc/
     └── hitl-ui/
 ```
 
+### 4.4 GCP Cloud Run deployment
+
+For serverless deployment, the HITL-UI can be deployed to Google Cloud Run. This model provides:
+- Automatic scaling from zero to handle variable load
+- Pay-per-use pricing for cost efficiency
+- Managed TLS and custom domain support
+- No infrastructure management required
+
+**Mock Mode Deployment:**
+
+The HITL-UI supports a mock mode (`VITE_USE_MOCKS=true`) for standalone deployment without backend services. This is useful for:
+- UI development and testing
+- Demos and presentations
+- Evaluating the interface before full deployment
+
+**Production Deployment:**
+
+For production use, deploy all services:
+- HITL-UI connected to orchestrator API
+- Orchestrator as Cloud Run service
+- Redis via Cloud Memorystore
+- Elasticsearch via Elastic Cloud or self-managed
+
+See `docs/GCP_Deployment.md` for detailed deployment instructions.
+
 ## 5. Data and artifact model
 
 ### 5.1 Git repository layout
