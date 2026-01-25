@@ -88,3 +88,21 @@
 18. **Observability**
    - Per-agent counters, latency, failure reasons, and cost estimates.
    - Run logs and trajectories persisted for replay and audits.
+
+## G. Monitoring and Observability
+
+19. **VictoriaMetrics integration**
+   - Time-series database for metrics collection and storage.
+   - Prometheus-compatible scraping via vmagent.
+   - 30-day retention with efficient compression.
+
+20. **Metrics Dashboard**
+   - Real-time visualization of CPU, memory, request rate, and latency.
+   - Service filtering and time range selection.
+   - Runtime backend switching (Mock/VictoriaMetrics).
+   - Auto-refresh with manual refresh option.
+
+21. **Service instrumentation**
+   - Prometheus exposition format at `/metrics` endpoints.
+   - Standard metrics: process CPU, memory, HTTP requests, task duration.
+   - Histogram support for latency percentiles (p50, p95, p99).
