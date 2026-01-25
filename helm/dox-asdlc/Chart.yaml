@@ -46,3 +46,7 @@ dependencies:
     version: "0.1.0"
     condition: hitlUI.enabled
     repository: "file://charts/hitl-ui"
+  - name: victoriametrics
+    version: "0.1.0"
+    condition: victoriametrics.enabled
+    repository: "file://charts/victoriametrics"

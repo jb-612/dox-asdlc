@@ -1,0 +1,85 @@
+%% File: docs/diagrams/14-victoriametrics-monitoring.mmd
+%% Description: VictoriaMetrics monitoring stack architecture
+%% Updated: 2026-01-25
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph UI["HITL-UI SPA"]
+        MetricsPage["MetricsPage.tsx\n• Time series charts\n• Service selector\n• Time range selector"]
+    end
+
+    subgraph Monitoring["VictoriaMetrics Stack"]
+        subgraph VMStatefulSet["StatefulSet: victoriametrics"]
+            VM["VictoriaMetrics\nPort: 8428\n• TSDB storage\n• PromQL API\n• /api/v1/query_range"]
+            VMPVC[("PVC: vm-data\n10Gi")]
+        end
+
+        subgraph VMAgent["DaemonSet: vmagent"]
+            Agent1["vmagent\n(node-1)"]
+            Agent2["vmagent\n(node-2)"]
+            AgentN["vmagent\n(node-N)"]
+        end
+    end
+
+    subgraph Services["aSDLC Microservices"]
+        subgraph OrchestratorSvc["Orchestrator Service"]
+            OrcMetrics["/metrics :8080\n• asdlc_http_requests_total\n• asdlc_http_request_duration\n• asdlc_redis_connection"]
+        end
+
+        subgraph WorkersSvc["Workers Service"]
+            WrkMetrics["/metrics :8081\n• asdlc_active_workers\n• asdlc_events_processed\n• asdlc_process_memory"]
+        end
+
+        subgraph Exporters["Exporters"]
+            RedisExp["redis-exporter\n:9121/metrics"]
+            ESExp["elasticsearch-exporter\n:9114/metrics"]
+        end
+    end
+
+    subgraph K8sSvc["Kubernetes Services"]
+        VMSvc["Service: victoriametrics\nport: 8428"]
+    end
+
+    %% Data flow - Scraping (vmagent pulls from services)
+    Agent1 -->|scrape /metrics| OrcMetrics
+    Agent1 -->|scrape /metrics| WrkMetrics
+    Agent2 -->|scrape /metrics| RedisExp
+    AgentN -->|scrape /metrics| ESExp
+
+    %% Data flow - vmagent pushes to VM
+    Agent1 -->|remote_write| VM
+    Agent2 -->|remote_write| VM
+    AgentN -->|remote_write| VM
+
+    %% Storage
+    VM -->|persist| VMPVC
+
+    %% Service exposure
+    VM --> VMSvc
+
+    subgraph Backend["Backend Proxy"]
+        OrcProxy["Orchestrator\n/api/metrics/*\nProxy endpoints"]
+    end
+
+    %% UI queries backend proxy, not VM directly
+    MetricsPage -->|GET /api/metrics/query_range| OrcProxy
+    OrcProxy -->|PromQL queries| VMSvc
+
+    %% Styling
+    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef monitoring fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef agent fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef service fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef exporter fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class MetricsPage ui
+    class VM monitoring
+    class Agent1,Agent2,AgentN agent
+    class OrcMetrics,WrkMetrics service
+    class RedisExp,ESExp exporter
+    class VMPVC storage
+    class VMSvc service
+    class OrcProxy orchestration
+    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px

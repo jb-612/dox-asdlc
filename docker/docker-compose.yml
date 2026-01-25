@@ -122,6 +122,30 @@ services:
     networks:
       - asdlc-network
 
+  # Container 3c: VictoriaMetrics Time Series Database
+  # - Prometheus-compatible metrics storage
+  # - Stores aSDLC service metrics for monitoring
+  # - Query API for dashboards and alerting
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.96.0
+    container_name: asdlc-victoriametrics
+    hostname: victoriametrics
+    ports:
+      - "8428:8428"
+    command:
+      - -storageDataPath=/victoria-metrics-data
+      - -retentionPeriod=30d
+    volumes:
+      - victoriametrics-data:/victoria-metrics-data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - asdlc-network
+
   # Container 4: HITL Web UI
   # - Gate request viewer and evidence explorer
   # - Approval pushes responses back to Redis Streams
@@ -163,5 +187,7 @@ volumes:
     name: asdlc-redis-data
   elasticsearch-data:
     name: asdlc-elasticsearch-data
+  victoriametrics-data:
+    name: asdlc-victoriametrics-data
   git-credentials:
     name: asdlc-git-credentials

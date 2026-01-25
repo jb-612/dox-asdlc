@@ -1,0 +1,73 @@
+{{- if and .Values.enabled .Values.vmagent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "victoriametrics.vmagent.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "victoriametrics.vmagent.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "victoriametrics.vmagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "victoriametrics.vmagent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "victoriametrics.vmagent.fullname" . }}
+      containers:
+        - name: vmagent
+          image: "{{ .Values.vmagent.image.repository }}:{{ .Values.vmagent.image.tag }}"
+          imagePullPolicy: {{ .Values.vmagent.image.pullPolicy }}
+          args:
+            - -promscrape.config=/etc/vmagent/scrape.yml
+            - -remoteWrite.url=http://{{ include "victoriametrics.serviceName" . }}:{{ .Values.service.port }}/api/v1/write
+          ports:
+            - name: http
+              containerPort: 8429
+              protocol: TCP
+          {{- if .Values.vmagent.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.vmagent.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.vmagent.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.vmagent.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.vmagent.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.vmagent.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.vmagent.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.vmagent.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.vmagent.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.vmagent.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.vmagent.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.vmagent.readinessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.vmagent.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vmagent
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "victoriametrics.vmagent.fullname" . }}-config
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

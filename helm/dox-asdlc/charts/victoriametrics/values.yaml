@@ -1,0 +1,122 @@
+# Default values for victoriametrics subchart
+
+# Enable/disable VictoriaMetrics deployment
+enabled: true
+
+# VictoriaMetrics server configuration
+server:
+  # Number of replicas (single replica for prototype)
+  replicas: 1
+
+  # VictoriaMetrics image configuration
+  image:
+    repository: victoriametrics/victoria-metrics
+    tag: "v1.96.0"
+    pullPolicy: IfNotPresent
+
+  # Data retention period
+  retention: "30d"
+
+  # Resource configuration
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  # Mount path for VictoriaMetrics data
+  mountPath: "/victoria-metrics-data"
+
+# Service configuration
+# Named "metrics-store" to allow backend substitution
+service:
+  # Service name override (defaults to release-name-victoriametrics)
+  nameOverride: "metrics-store"
+  type: ClusterIP
+  port: 8428
+
+# Liveness probe configuration
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 5
+  # VictoriaMetrics health endpoint
+  path: /health
+
+# Readiness probe configuration
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  path: /health
+
+# vmagent configuration (DaemonSet for K8s scraping)
+vmagent:
+  enabled: true
+
+  # vmagent image configuration
+  image:
+    repository: victoriametrics/vmagent
+    tag: "v1.96.0"
+    pullPolicy: IfNotPresent
+
+  # Resource configuration
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+  # Liveness probe configuration
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+    path: /health
+
+  # Readiness probe configuration
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    path: /health
+
+# Scrape configuration
+scrape:
+  interval: "15s"
+  timeout: "10s"
+
+# Security context
+securityContext:
+  runAsNonRoot: false
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}

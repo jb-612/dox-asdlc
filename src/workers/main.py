@@ -15,9 +15,17 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
+from prometheus_client import REGISTRY, generate_latest, CONTENT_TYPE_LATEST
+
 from src.core.config import get_config
 from src.core.redis_client import get_redis_client
 from src.infrastructure.health import HealthChecker, get_health_checker
+from src.infrastructure.metrics import (
+    ProcessMetricsCollector,
+    RedisMetricsCollector,
+    WorkerPoolCollector,
+    initialize_service_info,
+)
 from src.infrastructure.redis_streams import initialize_consumer_groups
 from src.workers.agents.dispatcher import AgentDispatcher
 from src.workers.agents.stub_agent import StubAgent
@@ -64,6 +72,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             self._handle_readiness()
         elif self.path == "/stats":
             self._handle_stats()
+        elif self.path == "/metrics":
+            self._handle_metrics()
         else:
             self._send_json_response({"error": "Not Found"}, 404)
 
@@ -113,6 +123,14 @@ class HealthHandler(BaseHTTPRequestHandler):
             self._send_json_response(stats)
         else:
             self._send_json_response({"error": "Worker pool not initialized"}, 503)
+
+    def _handle_metrics(self) -> None:
+        """Handle /metrics endpoint for Prometheus scraping."""
+        output = generate_latest(REGISTRY)
+        self.send_response(200)
+        self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+        self.end_headers()
+        self.wfile.write(output)
 
 
 def run_health_server(
@@ -220,6 +238,18 @@ async def async_main() -> None:
     # Initialize health checker
     health_checker = get_health_checker(service_name)
 
+    # Initialize metrics
+    initialize_service_info(service_name=service_name, version="0.1.0")
+
+    # Register custom metrics collectors
+    try:
+        REGISTRY.register(RedisMetricsCollector(service_name, health_checker))
+        REGISTRY.register(WorkerPoolCollector(service_name, _worker_pool))
+        REGISTRY.register(ProcessMetricsCollector(service_name))
+        logger.info("Prometheus metrics collectors registered")
+    except Exception as e:
+        logger.warning(f"Failed to register metrics collectors: {e}")
+
     # Start health server in a thread
     _health_server = run_health_server(host, port, health_checker, _worker_pool)
     health_thread = threading.Thread(target=_health_server.serve_forever)
@@ -228,6 +258,7 @@ async def async_main() -> None:
 
     logger.info(f"Workers service ready on {host}:{port}")
     logger.info(f"Health check: http://localhost:{port}/health")
+    logger.info(f"Metrics: http://localhost:{port}/metrics")
     logger.info(f"Stats: http://localhost:{port}/stats")
 
     # Run worker pool

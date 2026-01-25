@@ -1,0 +1,16 @@
+apiVersion: v2
+name: victoriametrics
+description: VictoriaMetrics StatefulSet for aSDLC metrics collection and storage
+type: application
+
+version: 0.1.0
+appVersion: "v1.96.0"
+
+keywords:
+  - victoriametrics
+  - metrics
+  - monitoring
+  - time-series
+  - prometheus-compatible
+
+home: https://victoriametrics.com/

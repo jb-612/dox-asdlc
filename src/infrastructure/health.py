@@ -228,6 +228,26 @@ class HealthChecker:
             dependencies=dependencies,
         )
 
+    def check_redis_sync(self) -> bool:
+        """Synchronously check if Redis is healthy.
+
+        Used by Prometheus collectors that need synchronous access.
+
+        Returns:
+            bool: True if Redis is healthy, False otherwise.
+        """
+        try:
+            # Run the async health check in a new event loop
+            loop = asyncio.new_event_loop()
+            try:
+                health = loop.run_until_complete(check_redis_health())
+                return health.get("status") == "healthy"
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.warning(f"Redis sync health check failed: {e}")
+            return False
+
     async def check_liveness(self) -> HealthResponse:
         """Perform basic liveness check.
 

@@ -88,6 +88,19 @@ export {
   getPodByName,
 } from './kubernetes';
 
+// Metrics Dashboard mocks (P05-F10)
+export {
+  mockServices as mockMetricsServices,
+  getMockServices,
+  getMockCPUMetrics,
+  getMockMemoryMetrics,
+  getMockRequestRateMetrics,
+  getMockLatencyMetrics,
+  getMockActiveTasks,
+  generateMetricsTimeSeries,
+  simulateDelay,
+} from './metrics';
+
 // Helper to check if mocks are enabled
 export function useMocks(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';

@@ -152,6 +152,36 @@ multiTenancy:
   # HTTP header for tenant identification
   tenantHeader: "X-Tenant-ID"
 
+# VictoriaMetrics subchart configuration (Metrics backend)
+victoriametrics:
+  enabled: true
+  server:
+    replicas: 1
+    retention: "30d"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  vmagent:
+    enabled: true
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+  scrape:
+    interval: "15s"
+    timeout: "10s"
+
 # Shared environment variables (propagated to all services)
 sharedEnv:
   # Multi-tenancy settings (will be templated based on multiTenancy values)
@@ -163,3 +193,7 @@ sharedEnv:
   ELASTICSEARCH_URL: "http://knowledge-store:9200"
   ES_INDEX_PREFIX: "asdlc"
   ES_NUM_CANDIDATES: "100"
+  # VictoriaMetrics settings
+  VICTORIAMETRICS_URL: "http://metrics-store:8428"
+  METRICS_PUSH_ENABLED: "true"
+  METRICS_PUSH_INTERVAL: "15s"

@@ -16,11 +16,20 @@ from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import REGISTRY, generate_latest, CONTENT_TYPE_LATEST
 
 from src.core.config import get_config
 from src.infrastructure.health import get_health_checker, HealthChecker
+from src.infrastructure.metrics import (
+    PrometheusMiddleware,
+    ProcessMetricsCollector,
+    RedisMetricsCollector,
+    initialize_service_info,
+)
 from src.infrastructure.redis_streams import initialize_consumer_groups
 from src.orchestrator.knowledge_store_api import create_knowledge_store_router
+from src.orchestrator.routes.metrics_api import router as metrics_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +77,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize health checker
     _health_checker = get_health_checker(service_name)
 
+    # Initialize metrics
+    initialize_service_info(service_name=service_name, version="0.1.0")
+
+    # Register custom metrics collectors
+    try:
+        REGISTRY.register(RedisMetricsCollector(service_name, _health_checker))
+        REGISTRY.register(ProcessMetricsCollector(service_name))
+        logger.info("Prometheus metrics collectors registered")
+    except Exception as e:
+        logger.warning(f"Failed to register metrics collectors: {e}")
+
     # Initialize infrastructure
     try:
         await initialize_infrastructure()
@@ -103,6 +123,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add Prometheus middleware for HTTP metrics
+    app.add_middleware(PrometheusMiddleware, service_name="orchestrator")
+
     # Health endpoints
     @app.get("/health")
     async def health() -> dict:
@@ -128,12 +151,23 @@ def create_app() -> FastAPI:
         response = await _health_checker.check_health(include_dependencies=True)
         return response.to_dict()
 
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        """Prometheus metrics endpoint for scraping."""
+        return Response(
+            content=generate_latest(REGISTRY),
+            media_type=CONTENT_TYPE_LATEST,
+        )
+
     # KnowledgeStore API endpoints
     knowledge_store_router = create_knowledge_store_router()
     app.include_router(
         knowledge_store_router,
         prefix="/api/knowledge-store",
     )
+
+    # VictoriaMetrics proxy API endpoints (for metrics dashboard)
+    app.include_router(metrics_api_router)
 
     return app
 
@@ -151,7 +185,9 @@ def main() -> None:
 
     logger.info(f"Starting server on {host}:{port}")
     logger.info(f"Health check: http://localhost:{port}/health")
+    logger.info(f"Metrics: http://localhost:{port}/metrics")
     logger.info(f"KnowledgeStore API: http://localhost:{port}/api/knowledge-store/")
+    logger.info(f"Metrics API: http://localhost:{port}/api/metrics/")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:

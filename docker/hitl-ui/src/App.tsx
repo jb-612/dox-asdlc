@@ -16,6 +16,7 @@ import DocDetailPage from './pages/DocDetailPage';
 import StudioDiscoveryPage from './pages/StudioDiscoveryPage';
 import RuleProposalsPage from './pages/RuleProposalsPage';
 import K8sPage from './pages/K8sPage';
+import MetricsPage from './pages/MetricsPage';
 import SearchPage from './pages/SearchPage';
 import { initMermaid } from './config/mermaid';
 
@@ -38,6 +39,7 @@ function App() {
           <Route path="cockpit" element={<CockpitPage />} />
           <Route path="cockpit/runs/:runId" element={<RunDetailPage />} />
           <Route path="k8s" element={<K8sPage />} />
+          <Route path="metrics" element={<MetricsPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
           <Route path="artifacts/:artifactId" element={<ArtifactDetailPage />} />
           <Route path="docs" element={<DocsPage />} />
