@@ -28,6 +28,32 @@ PM CLI is the coordination layer between the user and specialized agents. It:
 | Make scope/priority decisions | Run devops without HITL confirmation |
 | Coordinate multi-CLI operations | Design feature architecture |
 | Handle blockers and escalations | Debug test failures directly |
+| **Use TaskCreate/TaskUpdate for visibility** | Start work without visible tasks |
+
+## Task Visibility (Mandatory)
+
+PM CLI MUST use TaskCreate/TaskUpdate tools to provide real-time progress visibility. See `.claude/rules/task-visibility.md` for full specification.
+
+**Before starting implementation:**
+1. Read tasks.md to understand phases
+2. Create one task per phase with TaskCreate
+3. Set dependencies with TaskUpdate (addBlockedBy)
+4. Update status as work progresses
+
+**Example pattern:**
+```
+TaskCreate: "Phase 1: Backend API (T01-T05)"
+TaskCreate: "Phase 2: Frontend components (T06-T10)"
+TaskUpdate: #2 addBlockedBy: [#1]
+
+TaskUpdate: #1 status: in_progress
+[delegate to backend agent]
+TaskUpdate: #1 status: completed
+TaskUpdate: #2 status: in_progress
+[delegate to frontend agent]
+```
+
+This ensures users always see what's running, what's blocked, and overall progress.
 
 ## Delegation Rules
 

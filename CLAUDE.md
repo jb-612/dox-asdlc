@@ -37,6 +37,9 @@ See `.claude/rules/workflow.md` for full step details and HITL gates.
 3. **Commit only complete features** - All tests pass, 100% task completion
 4. **Review findings become issues** - All code review findings become GitHub issues
 5. **Orchestrator owns meta files** - CLAUDE.md, docs/, contracts/, .claude/**
+6. **Task visibility required** - Use TaskCreate/TaskUpdate for all multi-step work to show progress
+
+See `.claude/rules/task-visibility.md` for the task tracking pattern.
 
 ## Roles
 
