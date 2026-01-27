@@ -73,30 +73,30 @@ describe('Services API', () => {
   });
 
   describe('getServicesHealth', () => {
-    it('calls correct API endpoint', async () => {
+    it('calls correct API endpoint when useMock is false', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockServicesHealthResponse });
 
-      await getServicesHealth();
+      await getServicesHealth({ useMock: false });
 
       expect(apiClient.get).toHaveBeenCalledWith('/metrics/services/health');
     });
 
-    it('returns services health response', async () => {
+    it('returns services health response from API', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockServicesHealthResponse });
 
-      const result = await getServicesHealth();
+      const result = await getServicesHealth({ useMock: false });
 
       expect(result).toEqual(mockServicesHealthResponse);
     });
 
-    it('falls back to mock data when API fails and useMock is true', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
-
+    it('returns mock data when useMock is true', async () => {
       const result = await getServicesHealth({ useMock: true });
 
       expect(result).toBeDefined();
       expect(result.services).toBeDefined();
       expect(Array.isArray(result.services)).toBe(true);
+      // Should not call API when using mocks
+      expect(apiClient.get).not.toHaveBeenCalled();
     });
 
     it('throws error when API fails and useMock is false', async () => {
@@ -110,7 +110,7 @@ describe('Services API', () => {
     it('calls correct API endpoint with service name and metric', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockSparklineResponse });
 
-      await getServiceSparkline('orchestrator', 'cpu');
+      await getServiceSparkline('orchestrator', 'cpu', { useMock: false });
 
       expect(apiClient.get).toHaveBeenCalledWith(
         '/metrics/services/orchestrator/sparkline',
@@ -118,22 +118,22 @@ describe('Services API', () => {
       );
     });
 
-    it('returns sparkline data', async () => {
+    it('returns sparkline data from API', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockSparklineResponse });
 
-      const result = await getServiceSparkline('orchestrator', 'cpu');
+      const result = await getServiceSparkline('orchestrator', 'cpu', { useMock: false });
 
       expect(result).toEqual(mockSparklineResponse);
     });
 
-    it('falls back to mock data when API fails and useMock is true', async () => {
-      vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
-
+    it('returns mock data when useMock is true', async () => {
       const result = await getServiceSparkline('orchestrator', 'cpu', { useMock: true });
 
       expect(result).toBeDefined();
       expect(result.dataPoints).toBeDefined();
       expect(Array.isArray(result.dataPoints)).toBe(true);
+      // Should not call API when using mocks
+      expect(apiClient.get).not.toHaveBeenCalled();
     });
   });
 
@@ -209,10 +209,10 @@ describe('Services Hooks', () => {
     createElement(QueryClientProvider, { client: queryClient }, children);
 
   describe('useServicesHealth', () => {
-    it('fetches services health data', async () => {
+    it('fetches services health data from API', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockServicesHealthResponse });
 
-      const { result } = renderHook(() => useServicesHealth(), { wrapper });
+      const { result } = renderHook(() => useServicesHealth({ useMock: false }), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true);
@@ -221,18 +221,17 @@ describe('Services Hooks', () => {
       expect(result.current.data).toEqual(mockServicesHealthResponse);
     });
 
-    it('has 30 second refetch interval', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: mockServicesHealthResponse });
-
-      const { result } = renderHook(() => useServicesHealth(), { wrapper });
+    it('uses mock data when useMock is true', async () => {
+      const { result } = renderHook(() => useServicesHealth({ useMock: true }), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      // Check refetch interval is configured (this is testing the hook config)
-      // The actual interval can be verified through the query options
       expect(result.current.data).toBeDefined();
+      expect(result.current.data?.services).toBeDefined();
+      // API should not be called
+      expect(apiClient.get).not.toHaveBeenCalled();
     });
 
     it('returns loading state initially', () => {
@@ -240,7 +239,7 @@ describe('Services Hooks', () => {
         () => new Promise(() => {}) // Never resolves
       );
 
-      const { result } = renderHook(() => useServicesHealth(), { wrapper });
+      const { result } = renderHook(() => useServicesHealth({ useMock: false }), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
     });
@@ -261,7 +260,7 @@ describe('Services Hooks', () => {
       vi.mocked(apiClient.get).mockResolvedValue({ data: mockSparklineResponse });
 
       const { result } = renderHook(
-        () => useServiceSparkline('orchestrator', 'cpu'),
+        () => useServiceSparkline('orchestrator', 'cpu', { useMock: false }),
         { wrapper }
       );
 
@@ -272,11 +271,9 @@ describe('Services Hooks', () => {
       expect(result.current.data).toEqual(mockSparklineResponse);
     });
 
-    it('has 1 minute refetch interval', async () => {
-      vi.mocked(apiClient.get).mockResolvedValue({ data: mockSparklineResponse });
-
+    it('uses mock data when useMock is true', async () => {
       const { result } = renderHook(
-        () => useServiceSparkline('orchestrator', 'cpu'),
+        () => useServiceSparkline('orchestrator', 'cpu', { useMock: true }),
         { wrapper }
       );
 
@@ -285,6 +282,9 @@ describe('Services Hooks', () => {
       });
 
       expect(result.current.data).toBeDefined();
+      expect(result.current.data?.dataPoints).toBeDefined();
+      // API should not be called
+      expect(apiClient.get).not.toHaveBeenCalled();
     });
 
     it('is disabled when service name is null', () => {

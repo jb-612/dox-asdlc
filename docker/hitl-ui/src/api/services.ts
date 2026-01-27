@@ -18,11 +18,22 @@ import type {
 } from './types/services';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Check if mocks should be used based on environment variable
+ */
+function shouldUseMocks(): boolean {
+  return import.meta.env.VITE_USE_MOCKS === 'true';
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
 export interface ServicesQueryOptions {
-  /** Use mock data instead of real API */
+  /** Use mock data instead of real API (defaults to VITE_USE_MOCKS env var) */
   useMock?: boolean;
 }
 
@@ -50,19 +61,18 @@ export const servicesQueryKeys = {
 export async function getServicesHealth(
   options?: ServicesQueryOptions
 ): Promise<ServicesHealthResponse> {
-  try {
-    const response = await apiClient.get<ServicesHealthResponse>(
-      '/metrics/services/health'
-    );
-    return response.data;
-  } catch (error) {
-    // Fall back to mock data if API fails and useMock is true
-    if (options?.useMock) {
-      await simulateDelay(50, 150);
-      return getMockServicesHealth();
-    }
-    throw error;
+  const useMock = options?.useMock ?? shouldUseMocks();
+
+  // Use mock data directly if mocks are enabled
+  if (useMock) {
+    await simulateDelay(50, 150);
+    return getMockServicesHealth();
   }
+
+  const response = await apiClient.get<ServicesHealthResponse>(
+    '/metrics/services/health'
+  );
+  return response.data;
 }
 
 /**
@@ -73,20 +83,19 @@ export async function getServiceSparkline(
   metric: string,
   options?: ServicesQueryOptions
 ): Promise<ServiceSparklineResponse> {
-  try {
-    const response = await apiClient.get<ServiceSparklineResponse>(
-      `/metrics/services/${serviceName}/sparkline`,
-      { params: { metric } }
-    );
-    return response.data;
-  } catch (error) {
-    // Fall back to mock data if API fails and useMock is true
-    if (options?.useMock) {
-      await simulateDelay(50, 150);
-      return getMockServiceSparkline(serviceName, metric);
-    }
-    throw error;
+  const useMock = options?.useMock ?? shouldUseMocks();
+
+  // Use mock data directly if mocks are enabled
+  if (useMock) {
+    await simulateDelay(50, 150);
+    return getMockServiceSparkline(serviceName, metric);
   }
+
+  const response = await apiClient.get<ServiceSparklineResponse>(
+    `/metrics/services/${serviceName}/sparkline`,
+    { params: { metric } }
+  );
+  return response.data;
 }
 
 // ============================================================================
@@ -99,17 +108,7 @@ export async function getServiceSparkline(
 export function useServicesHealth(options?: ServicesQueryOptions) {
   return useQuery({
     queryKey: servicesQueryKeys.health(),
-    queryFn: async () => {
-      try {
-        return await getServicesHealth(options);
-      } catch (error) {
-        // If useMock is enabled and API fails, return mock data
-        if (options?.useMock) {
-          return getMockServicesHealth();
-        }
-        throw error;
-      }
-    },
+    queryFn: () => getServicesHealth(options),
     refetchInterval: 30000, // 30 seconds
     staleTime: 15000, // 15 seconds
   });
@@ -132,15 +131,7 @@ export function useServiceSparkline(
       if (!serviceName || !metric) {
         throw new Error('Service name and metric are required');
       }
-      try {
-        return await getServiceSparkline(serviceName, metric, options);
-      } catch (error) {
-        // If useMock is enabled and API fails, return mock data
-        if (options?.useMock) {
-          return getMockServiceSparkline(serviceName, metric);
-        }
-        throw error;
-      }
+      return getServiceSparkline(serviceName, metric, options);
     },
     enabled: !!serviceName && !!metric,
     refetchInterval: 60000, // 1 minute
