@@ -75,6 +75,9 @@ redis:
     enabled: true
   aof:
     enabled: true
+  # MCP sidecar disabled in production (default)
+  mcpSidecar:
+    enabled: false
 
 # Elasticsearch subchart configuration (KnowledgeStore backend - DEFAULT)
 # Elasticsearch is the recommended production backend for KnowledgeStore
@@ -97,6 +100,9 @@ elasticsearch:
     discoveryType: "single-node"
     javaOpts: "-Xms512m -Xmx512m"
     securityEnabled: false
+  # MCP sidecar disabled in production (default)
+  mcpSidecar:
+    enabled: false
 
 # Orchestrator subchart configuration
 orchestrator:

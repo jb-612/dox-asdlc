@@ -88,6 +88,34 @@ spec:
             - name: data
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
+        {{- if .Values.mcpSidecar.enabled }}
+        - name: mcp-sidecar
+          image: "{{ .Values.mcpSidecar.image.repository }}:{{ .Values.mcpSidecar.image.tag }}"
+          imagePullPolicy: {{ .Values.mcpSidecar.image.pullPolicy }}
+          ports:
+            - name: mcp
+              containerPort: {{ .Values.mcpSidecar.port }}
+              protocol: TCP
+          env:
+            - name: ES_HOST
+              value: "localhost"
+            - name: ES_PORT
+              value: "9200"
+          resources:
+            {{- toYaml .Values.mcpSidecar.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.mcpSidecar.securityContext | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.mcpSidecar.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.mcpSidecar.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -16,6 +16,7 @@ set -euo pipefail
 #   --push            Push images to registry after building
 #   --minikube        Load images into minikube (for local k8s dev)
 #   --no-cache        Build without Docker cache
+#   --mcp             Build MCP sidecar images (mcp-redis, mcp-elasticsearch)
 #   --help            Show this help message
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,16 +28,40 @@ TAG="latest"
 PUSH=false
 MINIKUBE=false
 NO_CACHE=false
+BUILD_MCP=false
 
 # Services to build
-SERVICES=()
+SERVICES=""
 
-# Available services and their Dockerfile paths
-declare -A SERVICE_DOCKERFILES=(
-    ["orchestrator"]="docker/orchestrator/Dockerfile"
-    ["workers"]="docker/workers/Dockerfile"
-    ["hitl-ui"]="docker/hitl-ui/Dockerfile"
-)
+# Available services (space-separated)
+AVAILABLE_SERVICES="orchestrator workers hitl-ui"
+
+# MCP services (space-separated)
+MCP_SERVICES="mcp-redis mcp-elasticsearch"
+
+# Get Dockerfile path for a service
+get_dockerfile() {
+    local service=$1
+    case "$service" in
+        orchestrator) echo "docker/orchestrator/Dockerfile" ;;
+        workers) echo "docker/workers/Dockerfile" ;;
+        hitl-ui) echo "docker/hitl-ui/Dockerfile" ;;
+        mcp-redis) echo "docker/mcp-redis/Dockerfile" ;;
+        mcp-elasticsearch) echo "docker/mcp-elasticsearch/Dockerfile" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Check if service is valid
+is_valid_service() {
+    local service=$1
+    for s in $AVAILABLE_SERVICES; do
+        if [ "$s" = "$service" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
@@ -73,6 +98,10 @@ while [[ $# -gt 0 ]]; do
             NO_CACHE=true
             shift
             ;;
+        --mcp)
+            BUILD_MCP=true
+            shift
+            ;;
         --help|-h)
             show_help
             exit 0
@@ -84,11 +113,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             # Service name
-            if [[ -n "${SERVICE_DOCKERFILES[$1]:-}" ]]; then
-                SERVICES+=("$1")
+            if is_valid_service "$1"; then
+                SERVICES="$SERVICES $1"
             else
                 error "Unknown service: $1"
-                echo "Available services: ${!SERVICE_DOCKERFILES[*]}"
+                echo "Available services: $AVAILABLE_SERVICES"
                 exit 1
             fi
             shift
@@ -96,9 +125,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Default to all services if none specified
-if [ ${#SERVICES[@]} -eq 0 ]; then
-    SERVICES=("orchestrator" "workers" "hitl-ui")
+# Trim leading space from SERVICES
+SERVICES="${SERVICES# }"
+
+# Default to all services if none specified AND --mcp not used alone
+if [ -z "$SERVICES" ] && [ "$BUILD_MCP" = false ]; then
+    SERVICES="$AVAILABLE_SERVICES"
 fi
 
 # Check prerequisites
@@ -134,25 +166,55 @@ check_prerequisites() {
 # Build a single image
 build_image() {
     local service=$1
-    local dockerfile="${SERVICE_DOCKERFILES[$service]}"
+    local dockerfile
+    dockerfile=$(get_dockerfile "$service")
     local image_name="${REGISTRY}/${service}:${TAG}"
 
     log "Building $image_name..."
 
-    local build_args=(
-        build
-        -f "$PROJECT_ROOT/$dockerfile"
-        -t "$image_name"
-    )
+    local build_cmd="docker build -f $PROJECT_ROOT/$dockerfile -t $image_name"
 
     if [ "$NO_CACHE" = true ]; then
-        build_args+=(--no-cache)
+        build_cmd="$build_cmd --no-cache"
     fi
 
     # Add build context (project root)
-    build_args+=("$PROJECT_ROOT")
+    build_cmd="$build_cmd $PROJECT_ROOT"
 
-    if ! docker "${build_args[@]}"; then
+    if ! eval "$build_cmd"; then
+        error "Failed to build $image_name"
+        return 1
+    fi
+
+    log "Successfully built $image_name"
+
+    # Also tag as latest if using a different tag
+    if [ "$TAG" != "latest" ]; then
+        docker tag "$image_name" "${REGISTRY}/${service}:latest"
+        log "Also tagged as ${REGISTRY}/${service}:latest"
+    fi
+}
+
+# Build a single MCP image
+build_mcp_image() {
+    local service=$1
+    local dockerfile
+    dockerfile=$(get_dockerfile "$service")
+    local context_dir="$PROJECT_ROOT/docker/${service}"
+    local image_name="${REGISTRY}/${service}:${TAG}"
+
+    log "Building MCP image $image_name..."
+
+    local build_cmd="docker build -f $PROJECT_ROOT/$dockerfile -t $image_name"
+
+    if [ "$NO_CACHE" = true ]; then
+        build_cmd="$build_cmd --no-cache"
+    fi
+
+    # Add build context (the specific docker directory for MCP images)
+    build_cmd="$build_cmd $context_dir"
+
+    if ! eval "$build_cmd"; then
         error "Failed to build $image_name"
         return 1
     fi
@@ -200,9 +262,22 @@ load_into_minikube() {
 build_all() {
     local failed=0
 
-    for service in "${SERVICES[@]}"; do
+    for service in $SERVICES; do
         if ! build_image "$service"; then
-            ((failed++))
+            failed=$((failed + 1))
+        fi
+    done
+
+    return $failed
+}
+
+# Build all MCP images
+build_all_mcp() {
+    local failed=0
+
+    for service in $MCP_SERVICES; do
+        if ! build_mcp_image "$service"; then
+            failed=$((failed + 1))
         fi
     done
 
@@ -213,9 +288,22 @@ build_all() {
 push_all() {
     local failed=0
 
-    for service in "${SERVICES[@]}"; do
+    for service in $SERVICES; do
         if ! push_image "$service"; then
-            ((failed++))
+            failed=$((failed + 1))
+        fi
+    done
+
+    return $failed
+}
+
+# Push all MCP images
+push_all_mcp() {
+    local failed=0
+
+    for service in $MCP_SERVICES; do
+        if ! push_image "$service"; then
+            failed=$((failed + 1))
         fi
     done
 
@@ -226,9 +314,22 @@ push_all() {
 load_all_minikube() {
     local failed=0
 
-    for service in "${SERVICES[@]}"; do
+    for service in $SERVICES; do
         if ! load_into_minikube "$service"; then
-            ((failed++))
+            failed=$((failed + 1))
+        fi
+    done
+
+    return $failed
+}
+
+# Load all MCP images into minikube
+load_all_mcp_minikube() {
+    local failed=0
+
+    for service in $MCP_SERVICES; do
+        if ! load_into_minikube "$service"; then
+            failed=$((failed + 1))
         fi
     done
 
@@ -244,12 +345,23 @@ print_summary() {
     echo ""
     echo "Registry:  $REGISTRY"
     echo "Tag:       $TAG"
-    echo "Services:  ${SERVICES[*]}"
-    echo ""
-    echo "Images built:"
-    for service in "${SERVICES[@]}"; do
-        echo "  - ${REGISTRY}/${service}:${TAG}"
-    done
+
+    if [ -n "$SERVICES" ]; then
+        echo "Services:  $SERVICES"
+        echo ""
+        echo "Images built:"
+        for service in $SERVICES; do
+            echo "  - ${REGISTRY}/${service}:${TAG}"
+        done
+    fi
+
+    if [ "$BUILD_MCP" = true ]; then
+        echo ""
+        echo "MCP sidecar images built:"
+        for service in $MCP_SERVICES; do
+            echo "  - ${REGISTRY}/${service}:${TAG}"
+        done
+    fi
     echo ""
 
     if [ "$MINIKUBE" = true ]; then
@@ -275,27 +387,60 @@ print_summary() {
 # Main execution
 main() {
     log "Starting image build process..."
-    log "Services: ${SERVICES[*]}"
+    if [ -n "$SERVICES" ]; then
+        log "Services: $SERVICES"
+    fi
+    if [ "$BUILD_MCP" = true ]; then
+        log "MCP images: $MCP_SERVICES"
+    fi
     log "Tag: $TAG"
 
     check_prerequisites
 
-    if ! build_all; then
-        error "Some images failed to build."
-        exit 1
-    fi
-
-    if [ "$PUSH" = true ]; then
-        if ! push_all; then
-            error "Some images failed to push."
+    # Build regular services (unless only --mcp was specified)
+    if [ -n "$SERVICES" ]; then
+        if ! build_all; then
+            error "Some images failed to build."
             exit 1
         fi
     fi
 
-    if [ "$MINIKUBE" = true ]; then
-        if ! load_all_minikube; then
-            error "Some images failed to load into minikube."
+    # Build MCP images if --mcp flag was passed
+    if [ "$BUILD_MCP" = true ]; then
+        log "Building MCP sidecar images..."
+        if ! build_all_mcp; then
+            error "Some MCP images failed to build."
             exit 1
+        fi
+    fi
+
+    if [ "$PUSH" = true ]; then
+        if [ -n "$SERVICES" ]; then
+            if ! push_all; then
+                error "Some images failed to push."
+                exit 1
+            fi
+        fi
+        if [ "$BUILD_MCP" = true ]; then
+            if ! push_all_mcp; then
+                error "Some MCP images failed to push."
+                exit 1
+            fi
+        fi
+    fi
+
+    if [ "$MINIKUBE" = true ]; then
+        if [ -n "$SERVICES" ]; then
+            if ! load_all_minikube; then
+                error "Some images failed to load into minikube."
+                exit 1
+            fi
+        fi
+        if [ "$BUILD_MCP" = true ]; then
+            if ! load_all_mcp_minikube; then
+                error "Some MCP images failed to load into minikube."
+                exit 1
+            fi
         fi
     fi
 

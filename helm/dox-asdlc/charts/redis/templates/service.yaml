@@ -13,6 +13,12 @@ spec:
       targetPort: redis
       protocol: TCP
       name: redis
+    {{- if .Values.mcpSidecar.enabled }}
+    - port: {{ .Values.mcpSidecar.port }}
+      targetPort: mcp
+      protocol: TCP
+      name: mcp
+    {{- end }}
   selector:
     {{- include "redis.selectorLabels" . | nindent 4 }}
 {{- end }}

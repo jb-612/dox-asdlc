@@ -44,6 +44,9 @@ redis:
     enabled: true
   aof:
     enabled: false  # Use RDB only for faster dev restarts
+  # MCP sidecar enabled for development
+  mcpSidecar:
+    enabled: true
 
 # Orchestrator development configuration
 orchestrator:
@@ -94,6 +97,12 @@ multiTenancy:
   allowedTenants:
     - "*"
   tenantHeader: "X-Tenant-ID"
+
+# Elasticsearch development configuration
+elasticsearch:
+  # MCP sidecar enabled for development
+  mcpSidecar:
+    enabled: true
 
 # Shared environment variables (development overrides)
 sharedEnv:

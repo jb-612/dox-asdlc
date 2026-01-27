@@ -107,3 +107,24 @@ indexSettings:
   # kNN settings
   knn:
     numCandidates: 100
+
+# MCP Sidecar configuration
+mcpSidecar:
+  enabled: false
+  image:
+    repository: dox-asdlc/mcp-elasticsearch
+    tag: latest
+    pullPolicy: IfNotPresent
+  port: 9000
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false

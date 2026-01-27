@@ -92,6 +92,41 @@ spec:
             - name: data
               mountPath: /data
             {{- end }}
+        {{- if .Values.mcpSidecar.enabled }}
+        - name: mcp-sidecar
+          image: "{{ .Values.mcpSidecar.image.repository }}:{{ .Values.mcpSidecar.image.tag }}"
+          imagePullPolicy: {{ .Values.mcpSidecar.image.pullPolicy }}
+          ports:
+            - name: mcp
+              containerPort: {{ .Values.mcpSidecar.port }}
+              protocol: TCP
+          env:
+            - name: REDIS_HOST
+              value: "localhost"
+            - name: REDIS_PORT
+              value: "6379"
+            {{- if .Values.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (printf "%s-redis-auth" (include "redis.parentFullname" .)) }}
+                  key: {{ .Values.auth.existingSecretPasswordKey }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.mcpSidecar.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.mcpSidecar.securityContext | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.mcpSidecar.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.mcpSidecar.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        {{- end }}
       volumes:
         - name: config
           configMap:
