@@ -11,10 +11,11 @@
  * - Resource metrics (CPU, Memory)
  * - Request metrics (Rate, Latency percentiles)
  * - Active tasks gauge
+ * - DevOps activity section (T26)
  */
 
-import { useCallback } from "react";
-import { ArrowPathIcon, ChartBarIcon } from "@heroicons/react/24/outline";
+import { useCallback, useState } from "react";
+import { ArrowPathIcon, ChartBarIcon, ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,6 +26,7 @@ import {
   useActiveTasks,
   useMetricsHealth,
 } from "../api/metrics";
+import { useDevOpsActivity } from "../api/devops";
 import { useMetricsStore } from "../stores/metricsStore";
 import {
   ServiceSelector,
@@ -36,6 +38,7 @@ import {
   ActiveTasksGauge,
   MetricsBackendSelector,
 } from "../components/metrics";
+import { DevOpsActivityPanel } from "../components/devops";
 
 export interface MetricsPageProps {
   /** Custom class name */
@@ -55,6 +58,9 @@ export default function MetricsPage({ className }: MetricsPageProps) {
     setBackend,
     toggleAutoRefresh,
   } = useMetricsStore();
+
+  // DevOps activity collapsible state
+  const [devOpsExpanded, setDevOpsExpanded] = useState(true);
 
   // Calculate effective refresh interval
   const effectiveRefreshInterval = autoRefresh ? refreshInterval : undefined;
@@ -96,11 +102,32 @@ export default function MetricsPage({ className }: MetricsPageProps) {
     error: activeTasksError,
   } = useActiveTasks(effectiveRefreshInterval, backendOptions);
 
+  // DevOps activity
+  const {
+    data: devOpsActivityData,
+    isLoading: devOpsLoading,
+    refetch: refetchDevOps,
+  } = useDevOpsActivity({
+    enabled: true,
+    refetchInterval: autoRefresh ? 10000 : undefined,
+  });
+
   // Manual refresh handler
   const handleRefresh = useCallback(() => {
     // Invalidate all metrics queries to trigger refetch
     queryClient.invalidateQueries({ queryKey: ["metrics"] });
+    queryClient.invalidateQueries({ queryKey: ["devops"] });
   }, [queryClient]);
+
+  // DevOps refresh handler
+  const handleDevOpsRefresh = useCallback(() => {
+    refetchDevOps();
+  }, [refetchDevOps]);
+
+  // Toggle DevOps section
+  const toggleDevOpsSection = useCallback(() => {
+    setDevOpsExpanded((prev) => !prev);
+  }, []);
 
   // Aggregate loading and error states
   const isInitialLoading =
@@ -288,6 +315,32 @@ export default function MetricsPage({ className }: MetricsPageProps) {
                 <p className="text-xs text-status-error mt-2">Failed to load task metrics</p>
               )}
             </div>
+          </section>
+
+          {/* DevOps Activity Section */}
+          <section data-testid="devops-metrics-section">
+            <button
+              onClick={toggleDevOpsSection}
+              className="flex items-center gap-2 text-lg font-semibold text-text-primary mb-4 hover:text-accent-blue transition-colors"
+              aria-expanded={devOpsExpanded}
+              data-testid="devops-section-toggle"
+            >
+              DevOps Activity
+              {devOpsExpanded ? (
+                <ChevronUpIcon className="h-5 w-5" />
+              ) : (
+                <ChevronDownIcon className="h-5 w-5" />
+              )}
+            </button>
+            {devOpsExpanded && (
+              <div className="bg-bg-secondary rounded-lg border border-border-primary p-4">
+                <DevOpsActivityPanel
+                  activity={devOpsActivityData}
+                  isLoading={devOpsLoading}
+                  onRefresh={handleDevOpsRefresh}
+                />
+              </div>
+            )}
           </section>
         </div>
       </div>

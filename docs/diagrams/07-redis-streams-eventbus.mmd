@@ -1,3 +1,7 @@
+%% File: docs/diagrams/07-redis-streams-eventbus.mmd
+%% Description: Redis Streams event bus structure with DevOps coordination
+%% Updated: 2026-01-27
+
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#FEE2E2'}}}%%
 
 flowchart TB
@@ -6,6 +10,7 @@ flowchart TB
         Coord["Coordinator"]
         HITLGw["HITL Gateway"]
         SPA["SPA (User Actions)"]
+        DevOpsAgent["DevOps Agent\n(publish-progress.sh)"]
     end
 
     subgraph RedisStreams["Redis Streams"]
@@ -36,12 +41,20 @@ flowchart TB
             Completed["asdlc:epic:completed"]
             Failed["asdlc:epic:failed"]
         end
+
+        subgraph DevOpsStreams["DevOps Coordination (P06-F07)"]
+            DevOpsStarted["DEVOPS_STARTED\n• operation name\n• step list"]
+            DevOpsStep["DEVOPS_STEP_UPDATE\n• step name\n• status (running/completed/failed)"]
+            DevOpsComplete["DEVOPS_COMPLETE\n• duration\n• success status"]
+            DevOpsFailed["DEVOPS_FAILED\n• error message"]
+        end
     end
 
     subgraph Consumers["Event Consumers"]
         CoordConsumer["Coordinator\n(xread blocking)"]
         HITLConsumer["HITL Gateway\n(xread)"]
         WSRelay["WebSocket Relay\n(xread → push)"]
+        DevOpsAPI["DevOps Activity API\n/api/devops/activity"]
     end
 
     %% Producer connections
@@ -52,6 +65,12 @@ flowchart TB
     HITLGw -->|"GateApproved/Rejected"| Decisions
     SPA -->|"EpicCreated"| Created
 
+    %% DevOps producer connections
+    DevOpsAgent -->|"operation start"| DevOpsStarted
+    DevOpsAgent -->|"step updates"| DevOpsStep
+    DevOpsAgent -->|"success"| DevOpsComplete
+    DevOpsAgent -->|"failure"| DevOpsFailed
+
     %% Consumer connections
     PhaseStreams -->|xread| CoordConsumer
     Requests -->|xread| HITLConsumer
@@ -60,19 +79,27 @@ flowchart TB
     AgentStreams -->|xread| WSRelay
     HITLStreams -->|xread| WSRelay
 
+    %% DevOps consumer connections
+    DevOpsStreams -->|coord_check_messages| DevOpsAPI
+    DevOpsStreams -->|xread| WSRelay
+
     %% Consumer actions
     CoordConsumer -->|"spawn agent"| Agents
     HITLConsumer -->|"show in UI"| SPA
     WSRelay -->|"WebSocket push"| SPA
+    DevOpsAPI -->|"REST response"| SPA
 
     %% Styling
     classDef producer fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
     classDef stream fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
     classDef consumer fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef devops fill:#FEF3C7,stroke:#d97706,stroke-width:2px
 
     class Agents,Coord,HITLGw,SPA producer
+    class DevOpsAgent devops
     class Discovery,Design,Development,Test,Security,Validator,Deployment stream
     class Requests,Decisions,Questions stream
     class Progress,Todos,Tools stream
     class Created,Completed,Failed stream
-    class CoordConsumer,HITLConsumer,WSRelay consumer
+    class DevOpsStarted,DevOpsStep,DevOpsComplete,DevOpsFailed stream
+    class CoordConsumer,HITLConsumer,WSRelay,DevOpsAPI consumer

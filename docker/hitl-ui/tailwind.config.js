@@ -16,6 +16,7 @@ export default {
         // Accent colors
         'accent-teal': 'var(--accent-teal)',
         'accent-teal-light': 'var(--accent-teal-light)',
+        'accent-blue': '#3B82F6',
 
         // Text colors
         'text-primary': 'var(--text-primary)',
@@ -55,6 +56,19 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-in-down': 'slideInDown 0.3s ease-out',
+      },
+      keyframes: {
+        slideInDown: {
+          '0%': {
+            opacity: '0',
+            transform: 'translateY(-100%)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translateY(0)',
+          },
+        },
       },
     },
   },

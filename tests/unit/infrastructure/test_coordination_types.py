@@ -20,7 +20,7 @@ class TestMessageType:
     """Tests for MessageType enum."""
 
     def test_all_message_types_defined(self) -> None:
-        """Test that all 16 message types are defined."""
+        """Test that all 20 message types are defined."""
         expected_types = {
             "READY_FOR_REVIEW",
             "REVIEW_COMPLETE",
@@ -38,6 +38,11 @@ class TestMessageType:
             "STATUS_UPDATE",
             "HEARTBEAT",
             "NOTIFICATION",
+            # DevOps coordination
+            "DEVOPS_STARTED",
+            "DEVOPS_STEP_UPDATE",
+            "DEVOPS_COMPLETE",
+            "DEVOPS_FAILED",
         }
         actual_types = {t.value for t in MessageType}
         assert actual_types == expected_types
@@ -46,6 +51,100 @@ class TestMessageType:
         """Test that MessageType values are strings."""
         assert MessageType.READY_FOR_REVIEW.value == "READY_FOR_REVIEW"
         assert isinstance(MessageType.GENERAL.value, str)
+
+    def test_devops_message_types_exist(self) -> None:
+        """Test that all DevOps coordination message types are defined."""
+        assert MessageType.DEVOPS_STARTED.value == "DEVOPS_STARTED"
+        assert MessageType.DEVOPS_STEP_UPDATE.value == "DEVOPS_STEP_UPDATE"
+        assert MessageType.DEVOPS_COMPLETE.value == "DEVOPS_COMPLETE"
+        assert MessageType.DEVOPS_FAILED.value == "DEVOPS_FAILED"
+
+    def test_devops_started_in_coordination_message(self) -> None:
+        """Test that DEVOPS_STARTED can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-devops-test",
+            type=MessageType.DEVOPS_STARTED,
+            from_instance="devops",
+            to_instance="orchestrator",
+            timestamp=datetime(2026, 1, 27, 12, 0, 0, tzinfo=timezone.utc),
+            requires_ack=True,
+            payload=MessagePayload(
+                subject="K8s Deployment Started",
+                description="Starting deployment of helm chart"
+            ),
+        )
+        assert msg.type == MessageType.DEVOPS_STARTED
+        assert msg.to_dict()["type"] == "DEVOPS_STARTED"
+
+    def test_devops_step_update_in_coordination_message(self) -> None:
+        """Test that DEVOPS_STEP_UPDATE can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-devops-step",
+            type=MessageType.DEVOPS_STEP_UPDATE,
+            from_instance="devops",
+            to_instance="orchestrator",
+            timestamp=datetime(2026, 1, 27, 12, 1, 0, tzinfo=timezone.utc),
+            requires_ack=False,
+            payload=MessagePayload(
+                subject="Step: Apply manifests",
+                description="Applying Kubernetes manifests to cluster"
+            ),
+        )
+        assert msg.type == MessageType.DEVOPS_STEP_UPDATE
+        assert msg.to_dict()["type"] == "DEVOPS_STEP_UPDATE"
+
+    def test_devops_complete_in_coordination_message(self) -> None:
+        """Test that DEVOPS_COMPLETE can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-devops-done",
+            type=MessageType.DEVOPS_COMPLETE,
+            from_instance="devops",
+            to_instance="orchestrator",
+            timestamp=datetime(2026, 1, 27, 12, 5, 0, tzinfo=timezone.utc),
+            requires_ack=True,
+            payload=MessagePayload(
+                subject="Deployment Complete",
+                description="Successfully deployed helm chart to cluster"
+            ),
+        )
+        assert msg.type == MessageType.DEVOPS_COMPLETE
+        assert msg.to_dict()["type"] == "DEVOPS_COMPLETE"
+
+    def test_devops_failed_in_coordination_message(self) -> None:
+        """Test that DEVOPS_FAILED can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-devops-fail",
+            type=MessageType.DEVOPS_FAILED,
+            from_instance="devops",
+            to_instance="orchestrator",
+            timestamp=datetime(2026, 1, 27, 12, 3, 0, tzinfo=timezone.utc),
+            requires_ack=True,
+            payload=MessagePayload(
+                subject="Deployment Failed",
+                description="Error: insufficient resources in cluster"
+            ),
+        )
+        assert msg.type == MessageType.DEVOPS_FAILED
+        assert msg.to_dict()["type"] == "DEVOPS_FAILED"
+
+    def test_devops_message_json_serialization(self) -> None:
+        """Test that DEVOPS message types serialize to JSON correctly."""
+        msg = CoordinationMessage(
+            id="msg-devops-json",
+            type=MessageType.DEVOPS_STARTED,
+            from_instance="devops",
+            to_instance="all",
+            timestamp=datetime(2026, 1, 27, 12, 0, 0, tzinfo=timezone.utc),
+            requires_ack=False,
+            payload=MessagePayload(
+                subject="Operation started",
+                description="DevOps operation in progress"
+            ),
+        )
+        json_str = msg.to_json()
+        parsed = json.loads(json_str)
+        assert parsed["type"] == "DEVOPS_STARTED"
+        assert parsed["from"] == "devops"
 
 
 class TestMessagePayload:

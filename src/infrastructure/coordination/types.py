@@ -40,6 +40,12 @@ class MessageType(str, Enum):
     # Notifications
     NOTIFICATION = "NOTIFICATION"
 
+    # DevOps coordination
+    DEVOPS_STARTED = "DEVOPS_STARTED"
+    DEVOPS_STEP_UPDATE = "DEVOPS_STEP_UPDATE"
+    DEVOPS_COMPLETE = "DEVOPS_COMPLETE"
+    DEVOPS_FAILED = "DEVOPS_FAILED"
+
 
 class MessagePayload(BaseModel):
     """Payload content for coordination messages."""

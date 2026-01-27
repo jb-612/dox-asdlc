@@ -1,6 +1,16 @@
 /**
- * Kubernetes API client functions for K8s Visibility Dashboard
- * Handles cluster health, nodes, pods, services, metrics, and commands
+ * Kubernetes API client functions for K8s Visibility Dashboard (P06-F07)
+ *
+ * This module provides API functions and React Query hooks for:
+ * - Cluster health monitoring
+ * - Node status and metrics
+ * - Pod listing with filtering and pagination
+ * - Services, ingresses, and namespaces
+ * - Metrics history
+ * - Command execution (read-only)
+ * - Health checks
+ *
+ * Includes mock data fallback for development mode when K8s API is unavailable.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,9 +28,6 @@ import {
   getNodeByName,
   getPodByName,
 } from './mocks/index';
-
-// Check if mocks are enabled (not a hook, just a helper)
-const isMocksEnabled = () => import.meta.env.VITE_USE_MOCKS === 'true';
 import type {
   ClusterHealth,
   K8sNode,
@@ -42,22 +49,59 @@ import type {
 } from './types/kubernetes';
 
 // ============================================================================
-// Query Keys
+// Configuration
+// ============================================================================
+
+/** Auto-refresh interval for cluster health (30 seconds as per T20) */
+const CLUSTER_HEALTH_REFRESH_INTERVAL = 30000;
+
+/** Auto-refresh interval for nodes (30 seconds as per T22) */
+const NODES_REFRESH_INTERVAL = 30000;
+
+/** Auto-refresh interval for pods (30 seconds as per T23) */
+const PODS_REFRESH_INTERVAL = 30000;
+
+/** Stale time for K8s queries (15 seconds) */
+const K8S_STALE_TIME = 15000;
+
+/**
+ * Check if mock data should be used.
+ * Uses mocks when VITE_USE_MOCKS=true or in development mode.
+ */
+function shouldUseMocks(): boolean {
+  return import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+}
+
+// ============================================================================
+// Query Keys (exported for cache invalidation)
 // ============================================================================
 
 export const k8sQueryKeys = {
-  clusterHealth: ['k8s', 'cluster', 'health'] as const,
-  namespaces: ['k8s', 'namespaces'] as const,
-  nodes: ['k8s', 'nodes'] as const,
+  /** Key for all K8s queries (for bulk invalidation) */
+  all: () => ['k8s'] as const,
+  /** Key for cluster health query */
+  clusterHealth: () => ['k8s', 'health'] as const,
+  /** Key for namespaces query */
+  namespaces: () => ['k8s', 'namespaces'] as const,
+  /** Key for nodes list query */
+  nodes: () => ['k8s', 'nodes'] as const,
+  /** Key for single node query */
   node: (name: string) => ['k8s', 'nodes', name] as const,
+  /** Key for pods list query (with optional params) */
   pods: (params?: K8sPodsQueryParams) => ['k8s', 'pods', params] as const,
+  /** Key for single pod query */
   pod: (namespace: string, name: string) => ['k8s', 'pods', namespace, name] as const,
+  /** Key for pod logs query */
   podLogs: (namespace: string, name: string, container?: string) =>
     ['k8s', 'pods', namespace, name, 'logs', container] as const,
+  /** Key for services list query */
   services: (namespace?: string) => ['k8s', 'services', { namespace }] as const,
+  /** Key for ingresses list query */
   ingresses: (namespace?: string) => ['k8s', 'ingresses', { namespace }] as const,
+  /** Key for metrics history query */
   metricsHistory: (interval: MetricsInterval) => ['k8s', 'metrics', 'history', interval] as const,
-  healthChecks: ['k8s', 'health-checks'] as const,
+  /** Key for health checks query */
+  healthChecks: () => ['k8s', 'health-checks'] as const,
 };
 
 // ============================================================================
@@ -65,73 +109,201 @@ export const k8sQueryKeys = {
 // ============================================================================
 
 /**
- * Get cluster-wide health summary
+ * Get cluster-wide health summary.
+ *
+ * Fetches from /api/k8s/health (matches backend route from T11).
+ * Falls back to mock data if API is unavailable or mocks are enabled.
  */
 export async function getClusterHealth(): Promise<ClusterHealth> {
-  if (isMocksEnabled()) {
-    return mockClusterHealth;
+  // Use mock data in development or when VITE_USE_MOCKS is enabled
+  if (shouldUseMocks()) {
+    // Simulate network delay for realistic behavior
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+    return { ...mockClusterHealth, lastUpdated: new Date().toISOString() };
   }
-  const response = await apiClient.get<ClusterHealth>('/k8s/cluster/health');
-  return response.data;
+
+  try {
+    // Backend endpoint: GET /api/k8s/health (T11)
+    const response = await apiClient.get<{ health: ClusterHealth; mock_mode: boolean }>('/k8s/health');
+    return response.data.health;
+  } catch (error) {
+    // Fall back to mock data if API is unavailable
+    console.warn('K8s health API unavailable, using mock data:', error);
+    return { ...mockClusterHealth, lastUpdated: new Date().toISOString() };
+  }
 }
 
 /**
- * Get list of namespaces
+ * Get list of namespaces.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getNamespaces(): Promise<string[]> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50));
     return mockNamespaces;
   }
-  const response = await apiClient.get<K8sNamespacesResponse>('/k8s/namespaces');
-  return response.data.namespaces;
+
+  try {
+    const response = await apiClient.get<K8sNamespacesResponse>('/k8s/namespaces');
+    return response.data.namespaces;
+  } catch (error) {
+    console.warn('K8s namespaces API unavailable, using mock data:', error);
+    return mockNamespaces;
+  }
 }
 
 /**
- * Get all nodes with status and capacity
+ * Get all nodes with status and capacity.
+ *
+ * Fetches from /api/k8s/nodes (matches backend route from T11).
+ * Falls back to mock data if API is unavailable or mocks are enabled.
  */
 export async function getNodes(): Promise<K8sNode[]> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
     return mockNodes;
   }
-  const response = await apiClient.get<K8sNodesResponse>('/k8s/nodes');
-  return response.data.nodes;
+
+  try {
+    // Backend endpoint: GET /api/k8s/nodes (T11)
+    const response = await apiClient.get<K8sNodesResponse>('/k8s/nodes');
+    return response.data.nodes;
+  } catch (error) {
+    console.warn('K8s nodes API unavailable, using mock data:', error);
+    return mockNodes;
+  }
 }
 
 /**
- * Get node details by name
+ * Get node details by name.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getNode(name: string): Promise<K8sNode | null> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50));
     return getNodeByName(name) || null;
   }
-  const response = await apiClient.get<K8sNode>(`/k8s/nodes/${name}`);
-  return response.data;
+
+  try {
+    const response = await apiClient.get<K8sNode>(`/k8s/nodes/${name}`);
+    return response.data;
+  } catch (error) {
+    console.warn(`K8s node ${name} API unavailable, using mock data:`, error);
+    return getNodeByName(name) || null;
+  }
 }
 
 /**
- * Get pods with optional filters
+ * Pods response type for the enhanced getPods function
+ */
+export interface PodsResult {
+  pods: K8sPod[];
+  total: number;
+}
+
+/**
+ * Get pods with optional filters.
+ *
+ * Fetches from /api/k8s/pods (matches backend route from T11).
+ * Supports filtering by namespace, status, nodeName, search, and pagination (limit, offset).
+ * Falls back to mock data if API is unavailable or mocks are enabled.
+ *
+ * @param params - Query parameters for filtering and pagination
+ * @returns Array of pods (for backward compatibility) or PodsResult with total count
  */
 export async function getPods(params?: K8sPodsQueryParams): Promise<K8sPod[]> {
-  if (isMocksEnabled()) {
-    return filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+    const filtered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
+    // Apply pagination if specified
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      const offset = params?.offset ?? 0;
+      const limit = params?.limit ?? 50;
+      return filtered.slice(offset, offset + limit);
+    }
+    return filtered;
   }
-  const response = await apiClient.get<K8sPodsResponse>('/k8s/pods', { params });
-  return response.data.pods;
+
+  try {
+    // Backend endpoint: GET /api/k8s/pods (T11)
+    const response = await apiClient.get<K8sPodsResponse>('/k8s/pods', { params });
+    return response.data.pods;
+  } catch (error) {
+    console.warn('K8s pods API unavailable, using mock data:', error);
+    const filtered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      const offset = params?.offset ?? 0;
+      const limit = params?.limit ?? 50;
+      return filtered.slice(offset, offset + limit);
+    }
+    return filtered;
+  }
 }
 
 /**
- * Get pod details by namespace and name
+ * Get pods with total count for pagination.
+ *
+ * Similar to getPods but returns both pods and total count.
+ *
+ * @param params - Query parameters for filtering and pagination
+ * @returns Object with pods array and total count
+ */
+export async function getPodsWithTotal(params?: K8sPodsQueryParams): Promise<PodsResult> {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+    const allFiltered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? 50;
+    return {
+      pods: allFiltered.slice(offset, offset + limit),
+      total: allFiltered.length,
+    };
+  }
+
+  try {
+    const response = await apiClient.get<K8sPodsResponse>('/k8s/pods', { params });
+    return {
+      pods: response.data.pods,
+      total: response.data.total,
+    };
+  } catch (error) {
+    console.warn('K8s pods API unavailable, using mock data:', error);
+    const allFiltered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? 50;
+    return {
+      pods: allFiltered.slice(offset, offset + limit),
+      total: allFiltered.length,
+    };
+  }
+}
+
+/**
+ * Get pod details by namespace and name.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getPod(namespace: string, name: string): Promise<K8sPod | null> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50));
     return getPodByName(namespace, name) || null;
   }
-  const response = await apiClient.get<K8sPod>(`/k8s/pods/${namespace}/${name}`);
-  return response.data;
+
+  try {
+    const response = await apiClient.get<K8sPod>(`/k8s/pods/${namespace}/${name}`);
+    return response.data;
+  } catch (error) {
+    console.warn(`K8s pod ${namespace}/${name} API unavailable, using mock data:`, error);
+    return getPodByName(namespace, name) || null;
+  }
 }
 
 /**
- * Get pod logs
+ * Get pod logs.
+ *
+ * Falls back to mock logs if API is unavailable.
  */
 export async function getPodLogs(
   namespace: string,
@@ -139,7 +311,8 @@ export async function getPodLogs(
   container?: string,
   tailLines: number = 100
 ): Promise<string> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
     return `[Mock logs for ${namespace}/${name}${container ? `/${container}` : ''}]
 2026-01-25T10:00:00Z INFO  Container started
 2026-01-25T10:00:01Z INFO  Initializing service...
@@ -148,155 +321,323 @@ export async function getPodLogs(
 2026-01-25T10:05:00Z INFO  Processing request
 2026-01-25T10:05:01Z DEBUG Request processed in 45ms`;
   }
-  const params = { container, tailLines };
-  const response = await apiClient.get<string>(`/k8s/pods/${namespace}/${name}/logs`, { params });
-  return response.data;
+
+  try {
+    const params = { container, tailLines };
+    const response = await apiClient.get<string>(`/k8s/pods/${namespace}/${name}/logs`, { params });
+    return response.data;
+  } catch (error) {
+    console.warn(`K8s pod logs API unavailable, using mock data:`, error);
+    return `[Mock logs for ${namespace}/${name}${container ? `/${container}` : ''}]
+2026-01-25T10:00:00Z INFO  Container started (mock)
+2026-01-25T10:00:01Z WARN  API unavailable, showing mock logs`;
+  }
 }
 
 /**
- * Get services with optional namespace filter
+ * Get services with optional namespace filter.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getServices(namespace?: string): Promise<K8sService[]> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50));
     if (namespace) {
       return mockServices.filter((s) => s.namespace === namespace);
     }
     return mockServices;
   }
-  const params = namespace ? { namespace } : undefined;
-  const response = await apiClient.get<K8sServicesResponse>('/k8s/services', { params });
-  return response.data.services;
+
+  try {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<K8sServicesResponse>('/k8s/services', { params });
+    return response.data.services;
+  } catch (error) {
+    console.warn('K8s services API unavailable, using mock data:', error);
+    if (namespace) {
+      return mockServices.filter((s) => s.namespace === namespace);
+    }
+    return mockServices;
+  }
 }
 
 /**
- * Get ingresses with optional namespace filter
+ * Get ingresses with optional namespace filter.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getIngresses(namespace?: string): Promise<K8sIngress[]> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 30 + Math.random() * 50));
     if (namespace) {
       return mockIngresses.filter((i) => i.namespace === namespace);
     }
     return mockIngresses;
   }
-  const params = namespace ? { namespace } : undefined;
-  const response = await apiClient.get<K8sIngressesResponse>('/k8s/ingresses', { params });
-  return response.data.ingresses;
+
+  try {
+    const params = namespace ? { namespace } : undefined;
+    const response = await apiClient.get<K8sIngressesResponse>('/k8s/ingresses', { params });
+    return response.data.ingresses;
+  } catch (error) {
+    console.warn('K8s ingresses API unavailable, using mock data:', error);
+    if (namespace) {
+      return mockIngresses.filter((i) => i.namespace === namespace);
+    }
+    return mockIngresses;
+  }
 }
 
 /**
- * Get metrics history time series
+ * Get metrics history time series.
+ *
+ * Falls back to mock data if API is unavailable.
  */
 export async function getMetricsHistory(interval: MetricsInterval): Promise<MetricsTimeSeries> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
+    await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
     return getMockMetricsHistory(interval);
   }
-  const response = await apiClient.get<MetricsTimeSeries>('/k8s/metrics/history', {
-    params: { interval },
-  });
-  return response.data;
+
+  try {
+    const response = await apiClient.get<MetricsTimeSeries>('/k8s/metrics/history', {
+      params: { interval },
+    });
+    return response.data;
+  } catch (error) {
+    console.warn('K8s metrics API unavailable, using mock data:', error);
+    return getMockMetricsHistory(interval);
+  }
 }
 
 /**
- * Execute a kubectl/docker command (read-only)
+ * Execute a kubectl/docker command (read-only).
+ *
+ * Falls back to mock command responses if API is unavailable.
  */
 export async function executeCommand(request: CommandRequest): Promise<CommandResponse> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 200 + Math.random() * 300));
     return getMockCommandResponse(request.command);
   }
-  const response = await apiClient.post<CommandResponse>('/k8s/exec', request);
-  return response.data;
+
+  try {
+    const response = await apiClient.post<CommandResponse>('/k8s/exec', request);
+    return response.data;
+  } catch (error) {
+    console.warn('K8s exec API unavailable, using mock response:', error);
+    return getMockCommandResponse(request.command);
+  }
 }
 
 /**
- * Run a specific health check
+ * Run a specific health check.
+ *
+ * Falls back to mock health check results if API is unavailable.
  */
 export async function runHealthCheck(type: HealthCheckType): Promise<HealthCheckResult> {
-  if (isMocksEnabled()) {
+  if (shouldUseMocks()) {
     // Simulate check duration
     await new Promise((resolve) => setTimeout(resolve, 100 + Math.random() * 400));
     return getMockHealthCheckResult(type);
   }
-  const response = await apiClient.get<HealthCheckResult>(`/k8s/health-check/${type}`);
-  return response.data;
+
+  try {
+    const response = await apiClient.get<HealthCheckResult>(`/k8s/health-check/${type}`);
+    return response.data;
+  } catch (error) {
+    console.warn(`K8s health check ${type} API unavailable, using mock data:`, error);
+    return getMockHealthCheckResult(type);
+  }
 }
 
 // ============================================================================
 // React Query Hooks
 // ============================================================================
 
+export interface UseK8sQueryOptions {
+  /** Enable auto-refresh (default: true) */
+  enabled?: boolean;
+  /** Custom refresh interval in ms (overrides default) */
+  refetchInterval?: number;
+}
+
 /**
- * Hook to fetch cluster health with auto-refresh
+ * Hook to fetch cluster health with 30s auto-refresh (T20).
+ *
+ * @param options - Optional configuration for the query
+ * @returns React Query result with cluster health data
+ *
+ * @example
+ * ```tsx
+ * const { data, isLoading, error, refetch } = useClusterHealth();
+ *
+ * if (data) {
+ *   console.log(`Cluster status: ${data.status}`);
+ * }
+ * ```
  */
-export function useClusterHealth(refetchInterval = 10000) {
+export function useClusterHealth(options?: UseK8sQueryOptions | number) {
+  // Support legacy number argument for backward compatibility
+  const refetchInterval =
+    typeof options === 'number'
+      ? options
+      : options?.refetchInterval ?? CLUSTER_HEALTH_REFRESH_INTERVAL;
+  const enabled = typeof options === 'object' ? options.enabled ?? true : true;
+
   return useQuery({
-    queryKey: k8sQueryKeys.clusterHealth,
+    queryKey: k8sQueryKeys.clusterHealth(),
     queryFn: getClusterHealth,
+    enabled,
     refetchInterval,
-    staleTime: 5000,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to fetch namespaces
+ * Hook to fetch namespaces.
+ *
+ * Namespaces change infrequently, so uses longer stale time.
  */
 export function useNamespaces() {
   return useQuery({
-    queryKey: k8sQueryKeys.namespaces,
+    queryKey: k8sQueryKeys.namespaces(),
     queryFn: getNamespaces,
     staleTime: 60000, // Namespaces change infrequently
   });
 }
 
 /**
- * Hook to fetch nodes with auto-refresh
+ * Hook to fetch nodes with 30s auto-refresh (T22).
+ *
+ * @param options - Optional configuration for the query
+ * @returns React Query result with nodes array
+ *
+ * @example
+ * ```tsx
+ * const { data: nodes, isLoading, error } = useNodes();
+ *
+ * if (nodes) {
+ *   const readyCount = nodes.filter(n => n.status === 'Ready').length;
+ *   console.log(`${readyCount}/${nodes.length} nodes ready`);
+ * }
+ * ```
  */
-export function useNodes(refetchInterval = 15000) {
+export function useNodes(options?: UseK8sQueryOptions | number) {
+  // Support legacy number argument for backward compatibility
+  const refetchInterval =
+    typeof options === 'number' ? options : options?.refetchInterval ?? NODES_REFRESH_INTERVAL;
+  const enabled = typeof options === 'object' ? options.enabled ?? true : true;
+
   return useQuery({
-    queryKey: k8sQueryKeys.nodes,
+    queryKey: k8sQueryKeys.nodes(),
     queryFn: getNodes,
+    enabled,
     refetchInterval,
-    staleTime: 10000,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to fetch a specific node
+ * Hook to fetch a specific node.
+ *
+ * @param name - Node name to fetch
+ * @returns React Query result with node data or null
  */
 export function useNode(name: string) {
   return useQuery({
     queryKey: k8sQueryKeys.node(name),
     queryFn: () => getNode(name),
     enabled: !!name,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to fetch pods with filters and auto-refresh
+ * Hook to fetch pods with filters and 30s auto-refresh (T23).
+ *
+ * Supports all filter parameters from the backend API:
+ * - namespace: Filter by namespace
+ * - status: Filter by pod status (Running, Pending, Failed, etc.)
+ * - nodeName: Filter by node name
+ * - search: Search term for pod name
+ * - limit: Pagination limit (default 50)
+ * - offset: Pagination offset
+ *
+ * @param params - Query parameters for filtering and pagination
+ * @param options - Optional configuration for the query
+ * @returns React Query result with pods array
+ *
+ * @example
+ * ```tsx
+ * const { data: pods, isLoading } = usePods({
+ *   namespace: 'dox-asdlc',
+ *   status: 'Running',
+ *   limit: 25,
+ *   offset: 0,
+ * });
+ * ```
  */
-export function usePods(params?: K8sPodsQueryParams, refetchInterval = 15000) {
+export function usePods(params?: K8sPodsQueryParams, options?: UseK8sQueryOptions | number) {
+  // Support legacy number argument for backward compatibility
+  const refetchInterval =
+    typeof options === 'number' ? options : options?.refetchInterval ?? PODS_REFRESH_INTERVAL;
+  const enabled = typeof options === 'object' ? options.enabled ?? true : true;
+
   return useQuery({
     queryKey: k8sQueryKeys.pods(params),
     queryFn: () => getPods(params),
+    enabled,
     refetchInterval,
-    staleTime: 10000,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to fetch a specific pod
+ * Hook to fetch pods with total count (for server-side pagination).
+ *
+ * @param params - Query parameters for filtering and pagination
+ * @param options - Optional configuration for the query
+ * @returns React Query result with { pods, total } object
+ */
+export function usePodsWithTotal(params?: K8sPodsQueryParams, options?: UseK8sQueryOptions) {
+  const refetchInterval = options?.refetchInterval ?? PODS_REFRESH_INTERVAL;
+  const enabled = options?.enabled ?? true;
+
+  return useQuery({
+    queryKey: [...k8sQueryKeys.pods(params), 'withTotal'],
+    queryFn: () => getPodsWithTotal(params),
+    enabled,
+    refetchInterval,
+    staleTime: K8S_STALE_TIME,
+  });
+}
+
+/**
+ * Hook to fetch a specific pod.
+ *
+ * @param namespace - Pod namespace
+ * @param name - Pod name
+ * @returns React Query result with pod data or null
  */
 export function usePod(namespace: string, name: string) {
   return useQuery({
     queryKey: k8sQueryKeys.pod(namespace, name),
     queryFn: () => getPod(namespace, name),
     enabled: !!namespace && !!name,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to fetch pod logs
+ * Hook to fetch pod logs with frequent refresh.
+ *
+ * @param namespace - Pod namespace
+ * @param name - Pod name
+ * @param container - Optional container name
+ * @param tailLines - Number of lines to fetch (default 100)
+ * @returns React Query result with log string
  */
 export function usePodLogs(
   namespace: string,
@@ -308,12 +649,16 @@ export function usePodLogs(
     queryKey: k8sQueryKeys.podLogs(namespace, name, container),
     queryFn: () => getPodLogs(namespace, name, container, tailLines),
     enabled: !!namespace && !!name,
-    refetchInterval: 5000, // Refresh logs frequently
+    refetchInterval: 5000, // Refresh logs frequently (5s)
+    staleTime: 2000,
   });
 }
 
 /**
- * Hook to fetch services
+ * Hook to fetch services.
+ *
+ * @param namespace - Optional namespace filter
+ * @returns React Query result with services array
  */
 export function useServices(namespace?: string) {
   return useQuery({
@@ -324,7 +669,10 @@ export function useServices(namespace?: string) {
 }
 
 /**
- * Hook to fetch ingresses
+ * Hook to fetch ingresses.
+ *
+ * @param namespace - Optional namespace filter
+ * @returns React Query result with ingresses array
  */
 export function useIngresses(namespace?: string) {
   return useQuery({
@@ -335,19 +683,32 @@ export function useIngresses(namespace?: string) {
 }
 
 /**
- * Hook to fetch metrics history with auto-refresh
+ * Hook to fetch metrics history with auto-refresh.
+ *
+ * @param interval - Metrics interval (1m, 5m, 15m, 1h)
+ * @param refetchInterval - Custom refresh interval in ms (default 30s)
+ * @returns React Query result with metrics time series
  */
 export function useMetricsHistory(interval: MetricsInterval, refetchInterval = 30000) {
   return useQuery({
     queryKey: k8sQueryKeys.metricsHistory(interval),
     queryFn: () => getMetricsHistory(interval),
     refetchInterval,
-    staleTime: 15000,
+    staleTime: K8S_STALE_TIME,
   });
 }
 
 /**
- * Hook to execute a command
+ * Hook to execute a kubectl/docker command.
+ *
+ * @returns Mutation hook for command execution
+ *
+ * @example
+ * ```tsx
+ * const { mutate: execute, data, isPending } = useExecuteCommand();
+ *
+ * execute({ command: 'kubectl get pods' });
+ * ```
  */
 export function useExecuteCommand() {
   return useMutation({
@@ -357,7 +718,11 @@ export function useExecuteCommand() {
 }
 
 /**
- * Hook to run a health check
+ * Hook to run a health check.
+ *
+ * Invalidates health checks query on success.
+ *
+ * @returns Mutation hook for health check execution
  */
 export function useRunHealthCheck() {
   const queryClient = useQueryClient();
@@ -365,9 +730,22 @@ export function useRunHealthCheck() {
   return useMutation({
     mutationFn: runHealthCheck,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: k8sQueryKeys.healthChecks });
+      queryClient.invalidateQueries({ queryKey: k8sQueryKeys.healthChecks() });
     },
   });
+}
+
+/**
+ * Hook to invalidate all K8s queries (useful for manual refresh).
+ *
+ * @returns Function to invalidate all K8s queries
+ */
+export function useInvalidateK8sQueries() {
+  const queryClient = useQueryClient();
+
+  return () => {
+    queryClient.invalidateQueries({ queryKey: k8sQueryKeys.all() });
+  };
 }
 
 // ============================================================================

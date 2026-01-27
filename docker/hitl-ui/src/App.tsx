@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useCallback } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import Dashboard from "./pages/Dashboard";
 import GatesPage from "./pages/GatesPage";
@@ -19,6 +19,54 @@ import K8sPage from "./pages/K8sPage";
 import MetricsPage from "./pages/MetricsPage";
 import SearchPage from "./pages/SearchPage";
 import { initMermaid } from "./config/mermaid";
+import { DevOpsNotificationBanner } from "./components/devops";
+import { useDevOpsActivity } from "./api/devops";
+import { useDevOpsStore } from "./stores/devopsStore";
+
+/**
+ * DevOps notification banner wrapper component
+ * Must be inside BrowserRouter to use useNavigate
+ */
+function DevOpsNotificationWrapper() {
+  const navigate = useNavigate();
+  const { data } = useDevOpsActivity();
+  const { bannerDismissed, setBannerDismissed, resetBannerForActivity } = useDevOpsStore();
+
+  // Extract current activity ID for dependency tracking
+  const currentActivityId = data?.current?.id;
+
+  // Reset banner when a new activity starts
+  useEffect(() => {
+    if (currentActivityId) {
+      resetBannerForActivity(currentActivityId);
+    }
+  }, [currentActivityId, resetBannerForActivity]);
+
+  // Handle dismiss
+  const handleDismiss = useCallback(() => {
+    setBannerDismissed(true);
+  }, [setBannerDismissed]);
+
+  // Handle click to navigate to metrics page
+  const handleClick = useCallback(() => {
+    navigate("/metrics");
+  }, [navigate]);
+
+  // Only show banner if there's a current activity and it hasn't been dismissed
+  const showBanner = data?.current && !bannerDismissed;
+
+  if (!showBanner || !data?.current) {
+    return null;
+  }
+
+  return (
+    <DevOpsNotificationBanner
+      activity={data.current}
+      onDismiss={handleDismiss}
+      onClick={handleClick}
+    />
+  );
+}
 
 function App() {
   // Initialize theme on app load
@@ -34,6 +82,9 @@ function App() {
         v7_relativeSplatPath: true,
       }}
     >
+      {/* Global DevOps notification banner */}
+      <DevOpsNotificationWrapper />
+
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />

@@ -1,12 +1,13 @@
 %% File: docs/diagrams/14-victoriametrics-monitoring.mmd
-%% Description: VictoriaMetrics monitoring stack architecture
-%% Updated: 2026-01-25
+%% Description: VictoriaMetrics monitoring stack architecture with Service Health Dashboard
+%% Updated: 2026-01-27
 
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
 
 flowchart TB
     subgraph UI["HITL-UI SPA"]
         MetricsPage["MetricsPage.tsx\n• Time series charts\n• Service selector\n• Time range selector"]
+        ServiceDashboard["ServiceHealthDashboard.tsx\n• ServiceTopologyMap\n• ServiceCards with sparklines\n• Auto-refresh (30s)"]
     end
 
     subgraph Monitoring["VictoriaMetrics Stack"]
@@ -31,6 +32,10 @@ flowchart TB
             WrkMetrics["/metrics :8081\n• asdlc_active_workers\n• asdlc_events_processed\n• asdlc_process_memory"]
         end
 
+        subgraph HITLUISvc["HITL-UI Service"]
+            HITLMetrics["/metrics :3000\n• process_cpu_seconds\n• process_memory_bytes\n• http_requests_total"]
+        end
+
         subgraph Exporters["Exporters"]
             RedisExp["redis-exporter\n:9121/metrics"]
             ESExp["elasticsearch-exporter\n:9114/metrics"]
@@ -44,6 +49,7 @@ flowchart TB
     %% Data flow - Scraping (vmagent pulls from services)
     Agent1 -->|scrape /metrics| OrcMetrics
     Agent1 -->|scrape /metrics| WrkMetrics
+    Agent1 -->|scrape /metrics| HITLMetrics
     Agent2 -->|scrape /metrics| RedisExp
     AgentN -->|scrape /metrics| ESExp
 
@@ -58,13 +64,17 @@ flowchart TB
     %% Service exposure
     VM --> VMSvc
 
-    subgraph Backend["Backend Proxy"]
-        OrcProxy["Orchestrator\n/api/metrics/*\nProxy endpoints"]
+    subgraph Backend["Backend API (Orchestrator)"]
+        OrcProxy["Proxy Endpoints\n/api/metrics/query_range\n/api/metrics/cpu, /memory, etc."]
+        ServiceHealthAPI["Service Health API (P06-F07)\n/api/metrics/services/health\n/api/metrics/services/{name}/sparkline"]
     end
 
     %% UI queries backend proxy, not VM directly
     MetricsPage -->|GET /api/metrics/query_range| OrcProxy
+    ServiceDashboard -->|GET /api/metrics/services/health| ServiceHealthAPI
+    ServiceDashboard -->|GET /api/metrics/services/{name}/sparkline| ServiceHealthAPI
     OrcProxy -->|PromQL queries| VMSvc
+    ServiceHealthAPI -->|PromQL queries| VMSvc
 
     %% Styling
     classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
@@ -73,13 +83,13 @@ flowchart TB
     classDef service fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
     classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
     classDef exporter fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
 
-    class MetricsPage ui
+    class MetricsPage,ServiceDashboard ui
     class VM monitoring
     class Agent1,Agent2,AgentN agent
-    class OrcMetrics,WrkMetrics service
+    class OrcMetrics,WrkMetrics,HITLMetrics service
     class RedisExp,ESExp exporter
     class VMPVC storage
     class VMSvc service
-    class OrcProxy orchestration
-    classDef orchestration fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    class OrcProxy,ServiceHealthAPI orchestration

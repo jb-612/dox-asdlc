@@ -1,0 +1,66 @@
+%% File: docs/diagrams/21-devops-activity-coordination.mmd
+%% Description: DevOps Activity Monitoring coordination flow (P06-F07)
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#FEF3C7', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#d97706', 'lineColor': '#64748b'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant DevOps as DevOps Agent<br/>(CLI)
+    participant Script as publish-progress.sh
+    participant CoordMCP as Coordination MCP<br/>(Redis)
+    participant Backend as Backend API<br/>/api/devops/activity
+    participant UI as HITL-UI<br/>DevOpsActivityPanel
+
+    Note over DevOps,UI: DevOps Operation: "Deploy workers chart v2.1.0"
+
+    %% Start operation
+    DevOps->>Script: start "Deploy workers" "pull-images,create-pods,wait-rollout"
+    Script->>CoordMCP: DEVOPS_STARTED<br/>{operation, steps[], timestamp}
+    CoordMCP-->>UI: WebSocket notification
+    UI->>UI: Show DevOpsNotificationBanner<br/>(blue: in-progress)
+
+    %% Step 1: Pull images
+    DevOps->>Script: step "pull-images" "running"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "pull-images", status: "running"}
+    Note over DevOps: ... pulling images ...
+    DevOps->>Script: step "pull-images" "completed"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "pull-images", status: "completed"}
+
+    %% Step 2: Create pods
+    DevOps->>Script: step "create-pods" "running"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "create-pods", status: "running"}
+    Note over DevOps: ... creating pods ...
+    DevOps->>Script: step "create-pods" "completed"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "create-pods", status: "completed"}
+
+    %% Step 3: Wait for rollout
+    DevOps->>Script: step "wait-rollout" "running"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "wait-rollout", status: "running"}
+    Note over DevOps: ... waiting for rollout ...
+    DevOps->>Script: step "wait-rollout" "completed"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "wait-rollout", status: "completed"}
+
+    %% Complete operation
+    DevOps->>Script: complete
+    Script->>CoordMCP: DEVOPS_COMPLETE<br/>{duration: "45s", success: true}
+    CoordMCP-->>UI: WebSocket notification
+    UI->>UI: Update banner (green: completed)<br/>Auto-hide after 10s
+
+    %% UI polling for activity
+    loop Every 10 seconds
+        UI->>Backend: GET /api/devops/activity
+        Backend->>CoordMCP: coord_check_messages<br/>(DEVOPS_* types)
+        CoordMCP-->>Backend: Current + recent activities
+        Backend-->>UI: {current: Activity, recent: Activity[]}
+        UI->>UI: Update DevOpsActivityPanel
+    end
+
+    %% Error scenario
+    Note over DevOps,UI: Error Scenario
+    DevOps->>Script: step "deploy" "failed" "ImagePullBackOff"
+    Script->>CoordMCP: DEVOPS_STEP_UPDATE<br/>{step: "deploy", status: "failed", error: "ImagePullBackOff"}
+    DevOps->>Script: failed "Deployment failed: ImagePullBackOff"
+    Script->>CoordMCP: DEVOPS_FAILED<br/>{error: "ImagePullBackOff"}
+    CoordMCP-->>UI: WebSocket notification
+    UI->>UI: Show banner (red: failed)

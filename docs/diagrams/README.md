@@ -58,7 +58,7 @@ flowchart TD
 | File | Description |
 |------|-------------|
 | `06-rlm-vs-rag-decision.mmd` | When to use RLM vs RAG |
-| `07-redis-streams-eventbus.mmd` | Redis Streams event bus structure |
+| `07-redis-streams-eventbus.mmd` | Redis Streams event bus structure (includes DevOps coordination) |
 
 ### Sequence Diagrams
 
@@ -83,8 +83,15 @@ flowchart TD
 
 | File | Description |
 |------|-------------|
-| `14-victoriametrics-monitoring.mmd` | VictoriaMetrics monitoring stack |
+| `14-victoriametrics-monitoring.mmd` | VictoriaMetrics monitoring stack with Service Health API |
 | `18-prometheus-annotation-scrape.mmd` | Prometheus annotation-based scraping |
+
+### Service Health & DevOps Monitoring (P06-F07)
+
+| File | Description |
+|------|-------------|
+| `20-service-health-dashboard.mmd` | Service Health Dashboard topology and data flow |
+| `21-devops-activity-coordination.mmd` | DevOps activity progress publishing sequence |
 
 ---
 

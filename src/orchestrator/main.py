@@ -28,6 +28,8 @@ from src.infrastructure.metrics import (
     initialize_service_info,
 )
 from src.infrastructure.redis_streams import initialize_consumer_groups
+from src.orchestrator.api.routes.devops import router as devops_api_router
+from src.orchestrator.api.routes.k8s import router as k8s_api_router
 from src.orchestrator.knowledge_store_api import create_knowledge_store_router
 from src.orchestrator.routes.metrics_api import router as metrics_api_router
 
@@ -169,6 +171,12 @@ def create_app() -> FastAPI:
     # VictoriaMetrics proxy API endpoints (for metrics dashboard)
     app.include_router(metrics_api_router)
 
+    # DevOps activity API endpoints (for DevOps monitoring dashboard)
+    app.include_router(devops_api_router)
+
+    # K8s cluster API endpoints (for K8s visibility dashboard)
+    app.include_router(k8s_api_router)
+
     return app
 
 
@@ -188,6 +196,7 @@ def main() -> None:
     logger.info(f"Metrics: http://localhost:{port}/metrics")
     logger.info(f"KnowledgeStore API: http://localhost:{port}/api/knowledge-store/")
     logger.info(f"Metrics API: http://localhost:{port}/api/metrics/")
+    logger.info(f"K8s API: http://localhost:{port}/api/k8s/")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:

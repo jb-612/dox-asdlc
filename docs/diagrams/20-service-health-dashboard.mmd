@@ -1,0 +1,61 @@
+%% File: docs/diagrams/20-service-health-dashboard.mmd
+%% Description: Service Health Dashboard architecture showing topology and data flow (P06-F07)
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph Dashboard["ServiceHealthDashboard Component"]
+        subgraph TopologySection["Service Topology Map"]
+            HITLUI["🟢 HITL-UI\n(healthy)"]
+            Orchestrator["🟢 Orchestrator\n(healthy)"]
+            Workers["🟡 Workers\n(degraded)"]
+            Redis["🟢 Redis\n(healthy)"]
+            ES["🟢 Elasticsearch\n(healthy)"]
+
+            HITLUI -->|HTTP| Orchestrator
+            Orchestrator -->|HTTP| Workers
+            Orchestrator -->|Redis| Redis
+            Workers -->|Redis| Redis
+            Orchestrator -->|ES| ES
+            Workers -->|ES| ES
+        end
+
+        subgraph CardsGrid["Service Cards Grid"]
+            Card1["ServiceCard: HITL-UI\n┌─────────────────┐\n│ CPU: ▁▂▃▄▅▆▇█  │\n│ Mem: ▂▂▃▃▄▄▅▅  │\n│ 12 req/s, 15ms │\n│ 2 pods         │\n└─────────────────┘"]
+            Card2["ServiceCard: Orchestrator\n┌─────────────────┐\n│ CPU: ▃▄▅▆▇▇▆▅  │\n│ Mem: ▅▅▆▆▆▇▇▇  │\n│ 45 req/s, 8ms  │\n│ 3 pods         │\n└─────────────────┘"]
+            Card3["ServiceCard: Workers\n┌─────────────────┐\n│ CPU: ▇▇▆▅▄▃▂▁  │\n│ Mem: ▆▆▇▇▇▇▇▇  │\n│ 3 active tasks │\n│ 5 pods         │\n└─────────────────┘"]
+            Card4["ServiceCard: Redis\n┌─────────────────┐\n│ CPU: ▂▂▂▃▃▂▂▂  │\n│ Mem: ▄▄▄▄▄▄▄▄  │\n│ 45 connections │\n│ 1 pod          │\n└─────────────────┘"]
+            Card5["ServiceCard: ES\n┌─────────────────┐\n│ CPU: ▃▃▄▄▅▅▆▆  │\n│ Mem: ▇▇▇▇▇▇▇▇  │\n│ 3 indices      │\n│ 1 pod          │\n└─────────────────┘"]
+        end
+    end
+
+    subgraph Backend["Backend API Layer"]
+        HealthEndpoint["/api/metrics/services/health\nReturns: ServiceHealthInfo[]\n• name, status, cpu, memory\n• podCount, requestRate, latencyP50"]
+        SparklineEndpoint["/api/metrics/services/{name}/sparkline\nReturns: SparklineDataPoint[]\n• 15 minutes history\n• 1-minute intervals"]
+        ServiceHealthSvc["ServiceHealthService\n• Aggregates VM metrics\n• Determines health status\n• Caches results (5min TTL)"]
+    end
+
+    subgraph DataSources["Data Sources"]
+        VM["VictoriaMetrics\n• process_cpu_seconds_total\n• process_resident_memory_bytes\n• http_requests_total\n• http_request_duration_seconds"]
+    end
+
+    %% Data flow
+    Dashboard -->|"useServicesHealth()\n30s refresh"| HealthEndpoint
+    Dashboard -->|"useServiceSparkline()\n1min refresh"| SparklineEndpoint
+    HealthEndpoint --> ServiceHealthSvc
+    SparklineEndpoint --> ServiceHealthSvc
+    ServiceHealthSvc -->|PromQL queries| VM
+
+    %% Styling
+    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef backend fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef datasource fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef healthy fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef degraded fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+
+    class Dashboard,TopologySection,CardsGrid ui
+    class HealthEndpoint,SparklineEndpoint,ServiceHealthSvc backend
+    class VM datasource
+    class HITLUI,Orchestrator,Redis,ES healthy
+    class Workers degraded

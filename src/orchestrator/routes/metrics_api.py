@@ -6,6 +6,8 @@ abstracting the TSDB connection from the frontend dashboard (P05-F10).
 Endpoints:
 - GET /api/metrics/health - Check VictoriaMetrics connectivity
 - GET /api/metrics/services - List services with health status
+- GET /api/metrics/services/health - Get detailed health for all aSDLC services (P06-F07)
+- GET /api/metrics/services/{name}/sparkline - Get sparkline data for a service (P06-F07)
 - GET /api/metrics/cpu - CPU usage time series
 - GET /api/metrics/memory - Memory usage time series
 - GET /api/metrics/requests - Request rate time series
@@ -20,8 +22,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import BaseModel
+
+from src.orchestrator.api.models.service_health import (
+    ServicesHealthResponse,
+    ServiceSparklineResponse,
+)
+from src.orchestrator.services.service_health import (
+    VALID_SERVICES,
+    get_service_health_service,
+)
 
 # VictoriaMetrics URL from environment or default for docker-compose
 VICTORIAMETRICS_URL = os.environ.get(
@@ -250,6 +261,58 @@ async def list_services() -> ServicesResponse:
                 ServiceInfo(name=k, displayName=v, healthy=True)
                 for k, v in known_services.items()
             ])
+
+
+# =============================================================================
+# Service Health Endpoints (P06-F07)
+# =============================================================================
+
+
+@router.get("/services/health", response_model=ServicesHealthResponse)
+async def get_services_health() -> ServicesHealthResponse:
+    """Get detailed health information for all aSDLC services.
+
+    Returns health status, CPU/memory usage, pod count, request rate,
+    and latency for each of the 5 aSDLC services:
+    - hitl-ui
+    - orchestrator
+    - workers
+    - redis
+    - elasticsearch
+
+    Returns:
+        ServicesHealthResponse: Health data for all services.
+    """
+    service = get_service_health_service()
+    return await service.get_all_services_health()
+
+
+@router.get("/services/{name}/sparkline", response_model=ServiceSparklineResponse)
+async def get_service_sparkline(
+    name: str = Path(..., description="Service name"),
+    metric: str = Query("cpu", description="Metric type: cpu, memory, requests, latency"),
+) -> ServiceSparklineResponse:
+    """Get 15-minute sparkline data for a service metric.
+
+    Args:
+        name: Service name (hitl-ui, orchestrator, workers, redis, elasticsearch).
+        metric: Metric type (cpu, memory, requests, latency).
+
+    Returns:
+        ServiceSparklineResponse: Time series data for the sparkline chart.
+
+    Raises:
+        HTTPException: 400 if service name is invalid.
+    """
+    # Validate service name
+    if name not in VALID_SERVICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid service name '{name}'. Valid services: {', '.join(sorted(VALID_SERVICES))}",
+        )
+
+    service = get_service_health_service()
+    return await service.get_service_sparkline(name, metric)
 
 
 @router.get("/cpu", response_model=VMMetricsTimeSeries)

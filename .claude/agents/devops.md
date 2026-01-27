@@ -98,3 +98,153 @@ DevOps can commit infrastructure-only changes directly.
 5. Publish status updates using mcp__coordination__coord_publish_message
 
 On completion, publish a `STATUS_UPDATE` message summarizing actions taken.
+
+## Progress Publishing Pattern
+
+DevOps operations should publish progress updates via the coordination MCP to provide visibility into long-running infrastructure operations.
+
+### Message Types
+
+| Type | When to Publish | Purpose |
+|------|-----------------|---------|
+| `DEVOPS_STARTED` | At operation start | Announce operation beginning, list planned steps |
+| `DEVOPS_STEP_UPDATE` | On each step transition | Report step status changes (running/completed/failed) |
+| `DEVOPS_COMPLETE` | On successful completion | Confirm operation finished successfully |
+| `DEVOPS_FAILED` | On operation failure | Report failure with error details |
+
+### Message Payload Formats
+
+#### DEVOPS_STARTED
+
+```json
+{
+  "subject": "Operation name",
+  "description": "Starting: Operation name",
+  "payload_data": {
+    "operation": "Deploy workers chart v2.1.0",
+    "steps": ["pull-images", "create-pods", "wait-rollout"],
+    "timestamp": "2026-01-27T10:30:00Z"
+  }
+}
+```
+
+#### DEVOPS_STEP_UPDATE
+
+```json
+{
+  "subject": "Step: step-name",
+  "description": "Step status update",
+  "payload_data": {
+    "step": "pull-images",
+    "status": "running|completed|failed",
+    "error": null,
+    "timestamp": "2026-01-27T10:31:00Z"
+  }
+}
+```
+
+#### DEVOPS_COMPLETE
+
+```json
+{
+  "subject": "Operation completed",
+  "description": "Completed: Operation name",
+  "payload_data": {
+    "operation": "Deploy workers chart v2.1.0",
+    "duration_seconds": 120,
+    "timestamp": "2026-01-27T10:32:00Z"
+  }
+}
+```
+
+#### DEVOPS_FAILED
+
+```json
+{
+  "subject": "Operation failed",
+  "description": "Failed: Operation name - error message",
+  "payload_data": {
+    "operation": "Deploy workers chart v2.1.0",
+    "error": "Pod health check timeout after 60s",
+    "timestamp": "2026-01-27T10:32:00Z"
+  }
+}
+```
+
+### Helper Script
+
+Use the `scripts/devops/publish-progress.sh` script for easy progress publishing:
+
+```bash
+# Start an operation with planned steps
+publish-progress.sh start "Deploy workers chart v2.1.0" "pull-images,create-pods,wait-rollout"
+
+# Update step status
+publish-progress.sh step "pull-images" "running"
+publish-progress.sh step "pull-images" "completed"
+publish-progress.sh step "create-pods" "running"
+# ... do the work ...
+publish-progress.sh step "create-pods" "failed" "ImagePullBackOff: registry timeout"
+
+# Complete operation (success)
+publish-progress.sh complete
+
+# Or mark operation as failed
+publish-progress.sh failed "Pod health check timeout after 60s"
+```
+
+### Integration Example
+
+A typical DevOps operation should follow this pattern:
+
+```bash
+#!/bin/bash
+# Example: Deploying a Helm chart with progress tracking
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROGRESS="$SCRIPT_DIR/../devops/publish-progress.sh"
+
+# Start operation
+$PROGRESS start "Deploy workers chart v2.1.0" "pull-images,create-pods,wait-rollout"
+
+# Step 1: Pull images
+$PROGRESS step "pull-images" "running"
+if helm template workers ./helm/workers | kubectl apply --dry-run=client -f - ; then
+    $PROGRESS step "pull-images" "completed"
+else
+    $PROGRESS step "pull-images" "failed" "Helm template validation failed"
+    $PROGRESS failed "Helm template validation failed"
+    exit 1
+fi
+
+# Step 2: Create pods
+$PROGRESS step "create-pods" "running"
+if helm upgrade --install workers ./helm/workers ; then
+    $PROGRESS step "create-pods" "completed"
+else
+    $PROGRESS step "create-pods" "failed" "Helm upgrade failed"
+    $PROGRESS failed "Helm upgrade failed"
+    exit 1
+fi
+
+# Step 3: Wait for rollout
+$PROGRESS step "wait-rollout" "running"
+if kubectl rollout status deployment/workers --timeout=300s ; then
+    $PROGRESS step "wait-rollout" "completed"
+    $PROGRESS complete
+else
+    $PROGRESS step "wait-rollout" "failed" "Rollout timeout"
+    $PROGRESS failed "Rollout timeout after 300s"
+    exit 1
+fi
+```
+
+### When to Use Progress Publishing
+
+Use progress publishing for operations that:
+- Take more than 30 seconds to complete
+- Have multiple discrete steps
+- May be monitored by the HITL UI or PM CLI
+- Benefit from audit trail visibility
+
+Short operations (single kubectl command, quick docker build) may skip progress publishing and simply publish a final `STATUS_UPDATE` on completion.

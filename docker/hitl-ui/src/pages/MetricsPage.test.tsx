@@ -15,6 +15,28 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
+// Mock the DevOps API module
+vi.mock('../api/devops', () => ({
+  useDevOpsActivity: () => ({
+    data: {
+      current: {
+        id: 'op-123',
+        operation: 'Helm Upgrade',
+        status: 'in_progress',
+        startedAt: new Date().toISOString(),
+        steps: [
+          { name: 'Fetch chart', status: 'completed', startedAt: new Date().toISOString() },
+          { name: 'Apply values', status: 'running', startedAt: new Date().toISOString() },
+        ],
+      },
+      recent: [],
+    },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 // Mock the API module
 vi.mock('../api/metrics', async () => {
   const actual = await vi.importActual('../api/metrics');
@@ -251,6 +273,40 @@ describe('MetricsPage', () => {
     it('renders metrics grid', () => {
       renderWithProviders();
       expect(screen.getByTestId('metrics-grid')).toBeInTheDocument();
+    });
+  });
+
+  describe('DevOps Activity Section', () => {
+    it('renders DevOps section', () => {
+      renderWithProviders();
+      expect(screen.getByTestId('devops-metrics-section')).toBeInTheDocument();
+    });
+
+    it('renders DevOps section toggle', () => {
+      renderWithProviders();
+      expect(screen.getByTestId('devops-section-toggle')).toBeInTheDocument();
+    });
+
+    it('DevOps section is expanded by default', () => {
+      renderWithProviders();
+      const toggle = screen.getByTestId('devops-section-toggle');
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('toggles DevOps section on click', () => {
+      renderWithProviders();
+      const toggle = screen.getByTestId('devops-section-toggle');
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('renders DevOps activity panel when expanded', () => {
+      renderWithProviders();
+      expect(screen.getByTestId('devops-activity-panel')).toBeInTheDocument();
     });
   });
 });

@@ -7,14 +7,14 @@
 **Estimate:** 0.5 hours
 **Agent:** backend
 
-- [ ] Modify `src/infrastructure/coordination/types.py`
-- [ ] Add `DEVOPS_STARTED = "DEVOPS_STARTED"` to `MessageType` enum
-- [ ] Add `DEVOPS_STEP_UPDATE = "DEVOPS_STEP_UPDATE"` to `MessageType` enum
-- [ ] Add `DEVOPS_COMPLETE = "DEVOPS_COMPLETE"` to `MessageType` enum
-- [ ] Add `DEVOPS_FAILED = "DEVOPS_FAILED"` to `MessageType` enum
-- [ ] Add comment block grouping these as "# DevOps coordination"
-- [ ] Run existing coordination tests to ensure no regressions
-- [ ] Add unit tests for new message types in test file
+- [x] Modify `src/infrastructure/coordination/types.py`
+- [x] Add `DEVOPS_STARTED = "DEVOPS_STARTED"` to `MessageType` enum
+- [x] Add `DEVOPS_STEP_UPDATE = "DEVOPS_STEP_UPDATE"` to `MessageType` enum
+- [x] Add `DEVOPS_COMPLETE = "DEVOPS_COMPLETE"` to `MessageType` enum
+- [x] Add `DEVOPS_FAILED = "DEVOPS_FAILED"` to `MessageType` enum
+- [x] Add comment block grouping these as "# DevOps coordination"
+- [x] Run existing coordination tests to ensure no regressions
+- [x] Add unit tests for new message types in test file
 
 ---
 
@@ -25,27 +25,27 @@
 **Estimate:** 0.5 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/api/types/services.ts`
-- [ ] Define `ServiceHealthStatus` type ('healthy' | 'degraded' | 'unhealthy')
-- [ ] Define `ServiceHealthInfo` interface (name, status, cpuPercent, memoryPercent, podCount, requestRate, latencyP50, lastRestart)
-- [ ] Define `ServiceConnection` interface (from, to, type)
-- [ ] Define `SparklineDataPoint` interface (timestamp, value)
-- [ ] Define `ServicesHealthResponse` interface
-- [ ] Define `ServiceSparklineResponse` interface
-- [ ] Export all types
+- [x] Create `docker/hitl-ui/src/api/types/services.ts`
+- [x] Define `ServiceHealthStatus` type ('healthy' | 'degraded' | 'unhealthy')
+- [x] Define `ServiceHealthInfo` interface (name, status, cpuPercent, memoryPercent, podCount, requestRate, latencyP50, lastRestart)
+- [x] Define `ServiceConnection` interface (from, to, type)
+- [x] Define `SparklineDataPoint` interface (timestamp, value)
+- [x] Define `ServicesHealthResponse` interface
+- [x] Define `ServiceSparklineResponse` interface
+- [x] Export all types
 
 ### T02: Create DevOps activity TypeScript types
 **Story:** US-05, US-06, US-07, US-08
 **Estimate:** 0.5 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/api/types/devops.ts`
-- [ ] Define `DevOpsActivityStatus` type ('in_progress' | 'completed' | 'failed')
-- [ ] Define `DevOpsStepStatus` type ('pending' | 'running' | 'completed' | 'failed')
-- [ ] Define `DevOpsStep` interface (name, status, startedAt, completedAt, error)
-- [ ] Define `DevOpsActivity` interface (id, operation, status, startedAt, completedAt, steps)
-- [ ] Define `DevOpsActivityResponse` interface (current, recent)
-- [ ] Export all types
+- [x] Create `docker/hitl-ui/src/api/types/devops.ts`
+- [x] Define `DevOpsActivityStatus` type ('in_progress' | 'completed' | 'failed')
+- [x] Define `DevOpsStepStatus` type ('pending' | 'running' | 'completed' | 'failed')
+- [x] Define `DevOpsStep` interface (name, status, startedAt, completedAt, error)
+- [x] Define `DevOpsActivity` interface (id, operation, status, startedAt, completedAt, steps)
+- [x] Define `DevOpsActivityResponse` interface (current, recent)
+- [x] Export all types
 
 ---
 
@@ -56,39 +56,39 @@
 **Estimate:** 0.5 hours
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/api/models/service_health.py`
-- [ ] Define `ServiceHealthStatus` enum
-- [ ] Define `ServiceHealthInfo` model (matches TypeScript interface)
-- [ ] Define `SparklineDataPoint` model (timestamp, value)
-- [ ] Define `ServicesHealthResponse` model
-- [ ] Define `ServiceSparklineResponse` model
-- [ ] Add tests for model validation
+- [x] Create `src/orchestrator/api/models/service_health.py`
+- [x] Define `ServiceHealthStatus` enum
+- [x] Define `ServiceHealthInfo` model (matches TypeScript interface)
+- [x] Define `SparklineDataPoint` model (timestamp, value)
+- [x] Define `ServicesHealthResponse` model
+- [x] Define `ServiceSparklineResponse` model
+- [x] Add tests for model validation
 
 ### T04: Implement service health aggregation service
 **Story:** US-04
 **Estimate:** 1.5 hours
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/services/service_health.py`
-- [ ] Implement `get_service_health(service_name)` - query VictoriaMetrics for single service
-- [ ] Implement `get_all_services_health()` - aggregate health for 5 aSDLC services
-- [ ] Implement `get_service_sparkline(service_name, metric)` - 15-minute history
-- [ ] Define service name to pod label mappings
-- [ ] Add caching (5 minute TTL for health, 1 minute for sparkline)
-- [ ] Handle VictoriaMetrics unavailability gracefully
-- [ ] Add unit tests with mocked VM responses
+- [x] Create `src/orchestrator/services/service_health.py`
+- [x] Implement `get_service_health(service_name)` - query VictoriaMetrics for single service
+- [x] Implement `get_all_services_health()` - aggregate health for 5 aSDLC services
+- [x] Implement `get_service_sparkline(service_name, metric)` - 15-minute history
+- [x] Define service name to pod label mappings
+- [x] Add caching (5 minute TTL for health, 1 minute for sparkline)
+- [x] Handle VictoriaMetrics unavailability gracefully
+- [x] Add unit tests with mocked VM responses
 
 ### T05: Add service health endpoints to metrics_api.py
 **Story:** US-04
 **Estimate:** 1.0 hour
 **Agent:** backend
 
-- [ ] Modify existing `src/orchestrator/routes/metrics_api.py`
-- [ ] Implement `GET /api/metrics/services/health` endpoint
-- [ ] Implement `GET /api/metrics/services/{name}/sparkline` endpoint with metric query param
-- [ ] Add input validation for service names (hitl-ui, orchestrator, workers, redis, elasticsearch)
-- [ ] Add error handling with appropriate HTTP status codes
-- [ ] Add integration tests
+- [x] Modify existing `src/orchestrator/routes/metrics_api.py`
+- [x] Implement `GET /api/metrics/services/health` endpoint
+- [x] Implement `GET /api/metrics/services/{name}/sparkline` endpoint with metric query param
+- [x] Add input validation for service names (hitl-ui, orchestrator, workers, redis, elasticsearch)
+- [x] Add error handling with appropriate HTTP status codes
+- [x] Add integration tests
 
 ---
 
@@ -99,38 +99,38 @@
 **Estimate:** 0.5 hours
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/api/models/devops_activity.py`
-- [ ] Define `DevOpsStepStatus` enum
-- [ ] Define `DevOpsActivityStatus` enum
-- [ ] Define `DevOpsStep` model
-- [ ] Define `DevOpsActivity` model
-- [ ] Define `DevOpsActivityResponse` model
-- [ ] Add tests for model validation
+- [x] Create `src/orchestrator/api/models/devops_activity.py`
+- [x] Define `DevOpsStepStatus` enum
+- [x] Define `DevOpsActivityStatus` enum
+- [x] Define `DevOpsStep` model
+- [x] Define `DevOpsActivity` model
+- [x] Define `DevOpsActivityResponse` model
+- [x] Add tests for model validation
 
 ### T07: Implement DevOps activity service using coordination MCP
 **Story:** US-08
 **Estimate:** 1.0 hour
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/services/devops_activity.py`
-- [ ] Implement `get_current_activity()` - read DEVOPS_STARTED messages not yet completed
-- [ ] Implement `get_recent_activities(limit=10)` - read DEVOPS_COMPLETE/DEVOPS_FAILED messages
-- [ ] Use `mcp__coordination__coord_check_messages` to read coordination messages
-- [ ] Filter by message types: DEVOPS_STARTED, DEVOPS_STEP_UPDATE, DEVOPS_COMPLETE, DEVOPS_FAILED
-- [ ] Aggregate step updates into activity objects
-- [ ] Handle coordination MCP unavailability gracefully
-- [ ] Add unit tests with mocked coordination responses
+- [x] Create `src/orchestrator/services/devops_activity.py`
+- [x] Implement `get_current_activity()` - read DEVOPS_STARTED messages not yet completed
+- [x] Implement `get_recent_activities(limit=10)` - read DEVOPS_COMPLETE/DEVOPS_FAILED messages
+- [x] Use `mcp__coordination__coord_check_messages` to read coordination messages
+- [x] Filter by message types: DEVOPS_STARTED, DEVOPS_STEP_UPDATE, DEVOPS_COMPLETE, DEVOPS_FAILED
+- [x] Aggregate step updates into activity objects
+- [x] Handle coordination MCP unavailability gracefully
+- [x] Add unit tests with mocked coordination responses
 
 ### T08: Create DevOps activity API endpoint
 **Story:** US-08
 **Estimate:** 0.5 hours
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/api/routes/devops.py`
-- [ ] Implement `GET /api/devops/activity` endpoint
-- [ ] Add error handling with appropriate HTTP status codes
-- [ ] Register routes in main API router
-- [ ] Add integration tests
+- [x] Create `src/orchestrator/api/routes/devops.py`
+- [x] Implement `GET /api/devops/activity` endpoint
+- [x] Add error handling with appropriate HTTP status codes
+- [x] Register routes in main API router
+- [x] Add integration tests
 
 ---
 
@@ -141,44 +141,44 @@
 **Estimate:** 0.5 hours
 **Agent:** backend
 
-- [ ] Add `kubernetes>=28.0.0` to `requirements.txt`
-- [ ] Create `src/orchestrator/api/models/k8s.py`
-- [ ] Define models matching existing TypeScript interfaces in `kubernetes.ts`
-- [ ] Define `ClusterHealth` model
-- [ ] Define `K8sNode` model with nested types
-- [ ] Define `K8sPod` model with nested types
-- [ ] Define response wrapper models
-- [ ] Add tests for model validation
+- [x] Add `kubernetes>=28.0.0` to `requirements.txt`
+- [x] Create `src/orchestrator/api/models/k8s.py`
+- [x] Define models matching existing TypeScript interfaces in `kubernetes.ts`
+- [x] Define `ClusterHealth` model
+- [x] Define `K8sNode` model with nested types
+- [x] Define `K8sPod` model with nested types
+- [x] Define response wrapper models
+- [x] Add tests for model validation
 
 ### T10: Implement K8s cluster service with mock mode
 **Story:** US-13
 **Estimate:** 1.5 hours
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/services/k8s_cluster.py`
-- [ ] Implement config detection: check `KUBERNETES_SERVICE_HOST` for in-cluster config
-- [ ] Implement fallback: use local kubeconfig (`~/.kube/config`) for development
-- [ ] Implement mock mode: if neither available, return mock data (same pattern as VictoriaMetrics)
-- [ ] Implement `get_cluster_health()` - aggregate node/pod counts and resource usage
-- [ ] Implement `get_nodes()` - list all nodes with status and resource info
-- [ ] Implement `get_pods(namespace, status, nodeName, search, limit, offset)` - filtered pod list
-- [ ] Add caching (10 second TTL)
-- [ ] Handle K8s API unavailability gracefully
-- [ ] Add unit tests with mocked K8s client
+- [x] Create `src/orchestrator/services/k8s_cluster.py`
+- [x] Implement config detection: check `KUBERNETES_SERVICE_HOST` for in-cluster config
+- [x] Implement fallback: use local kubeconfig (`~/.kube/config`) for development
+- [x] Implement mock mode: if neither available, return mock data (same pattern as VictoriaMetrics)
+- [x] Implement `get_cluster_health()` - aggregate node/pod counts and resource usage
+- [x] Implement `get_nodes()` - list all nodes with status and resource info
+- [x] Implement `get_pods(namespace, status, nodeName, search, limit, offset)` - filtered pod list
+- [x] Add caching (10 second TTL)
+- [x] Handle K8s API unavailability gracefully
+- [x] Add unit tests with mocked K8s client
 
 ### T11: Create K8s cluster API endpoints
 **Story:** US-13
 **Estimate:** 1.0 hour
 **Agent:** backend
 
-- [ ] Create `src/orchestrator/api/routes/k8s.py`
-- [ ] Implement `GET /api/k8s/health` endpoint
-- [ ] Implement `GET /api/k8s/nodes` endpoint
-- [ ] Implement `GET /api/k8s/pods` endpoint with query params
-- [ ] Add input validation for query params
-- [ ] Add error handling with appropriate HTTP status codes
-- [ ] Register routes in main API router
-- [ ] Add integration tests
+- [x] Create `src/orchestrator/api/routes/k8s.py`
+- [x] Implement `GET /api/k8s/health` endpoint
+- [x] Implement `GET /api/k8s/nodes` endpoint
+- [x] Implement `GET /api/k8s/pods` endpoint with query params
+- [x] Add input validation for query params
+- [x] Add error handling with appropriate HTTP status codes
+- [x] Register routes in main API router
+- [x] Add integration tests
 
 ---
 
@@ -189,15 +189,15 @@
 **Estimate:** 1.5 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/services/SparklineChart.tsx`
-- [ ] Implement SVG-based line chart (80x30 pixels default)
-- [ ] Accept `data: SparklineDataPoint[]`, `color`, `height`, `width` props
-- [ ] Render smooth line path connecting data points
-- [ ] Handle missing data points (interpolate or gap)
-- [ ] Support color based on threshold (green/yellow/red)
-- [ ] Add hover tooltip showing timestamp and value
-- [ ] Add loading state (placeholder animation)
-- [ ] Create `SparklineChart.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/services/SparklineChart.tsx`
+- [x] Implement SVG-based line chart (80x30 pixels default)
+- [x] Accept `data: SparklineDataPoint[]`, `color`, `height`, `width` props
+- [x] Render smooth line path connecting data points
+- [x] Handle missing data points (interpolate or gap)
+- [x] Support color based on threshold (green/yellow/red)
+- [x] Add hover tooltip showing timestamp and value
+- [x] Add loading state (placeholder animation)
+- [x] Create `SparklineChart.test.tsx` with tests for:
   - Renders with full data
   - Handles empty data
   - Handles partial data
@@ -213,18 +213,18 @@
 **Estimate:** 1.5 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/services/ServiceCard.tsx`
-- [ ] Display service name as card header
-- [ ] Display health status indicator (colored badge)
-- [ ] Display CPU sparkline using SparklineChart
-- [ ] Display memory sparkline using SparklineChart
-- [ ] Display request rate (req/s) if available
-- [ ] Display latency p50 (ms) if available
-- [ ] Display pod count
-- [ ] Display last restart time if within 24 hours
-- [ ] Add click handler prop for opening detail view
-- [ ] Style with color-coded border based on health status
-- [ ] Create `ServiceCard.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/services/ServiceCard.tsx`
+- [x] Display service name as card header
+- [x] Display health status indicator (colored badge)
+- [x] Display CPU sparkline using SparklineChart
+- [x] Display memory sparkline using SparklineChart
+- [x] Display request rate (req/s) if available
+- [x] Display latency p50 (ms) if available
+- [x] Display pod count
+- [x] Display last restart time if within 24 hours
+- [x] Add click handler prop for opening detail view
+- [x] Style with color-coded border based on health status
+- [x] Create `ServiceCard.test.tsx` with tests for:
   - Renders all metrics
   - Shows correct status color
   - Hides optional metrics when null
@@ -239,16 +239,16 @@
 **Estimate:** 2.0 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/services/ServiceTopologyMap.tsx`
-- [ ] Define fixed layout for 5 services (positioned in diagram)
-- [ ] Render service nodes with health-colored circles/rectangles
-- [ ] Render connection lines between services
-- [ ] Color-code connections by type (HTTP: blue, Redis: red, Elasticsearch: yellow)
-- [ ] Add service name labels on each node
-- [ ] Add click handler for each service node
-- [ ] Add hover effect on nodes
-- [ ] Responsive sizing (scales with container)
-- [ ] Create `ServiceTopologyMap.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/services/ServiceTopologyMap.tsx`
+- [x] Define fixed layout for 5 services (positioned in diagram)
+- [x] Render service nodes with health-colored circles/rectangles
+- [x] Render connection lines between services
+- [x] Color-code connections by type (HTTP: blue, Redis: red, Elasticsearch: yellow)
+- [x] Add service name labels on each node
+- [x] Add click handler for each service node
+- [x] Add hover effect on nodes
+- [x] Responsive sizing (scales with container)
+- [x] Create `ServiceTopologyMap.test.tsx` with tests for:
   - Renders all 5 services
   - Renders connections
   - Click handler fires with correct service
@@ -263,14 +263,14 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/api/services.ts`
-- [ ] Implement `getServicesHealth()` function calling `/api/metrics/services/health`
-- [ ] Implement `getServiceSparkline(name, metric)` function calling `/api/metrics/services/{name}/sparkline`
-- [ ] Create `useServicesHealth()` hook with 30s auto-refresh
-- [ ] Create `useServiceSparkline(name, metric)` hook with 1min auto-refresh
-- [ ] Add mock data fallback for development mode
-- [ ] Add error handling
-- [ ] Export query keys for invalidation
+- [x] Create `docker/hitl-ui/src/api/services.ts`
+- [x] Implement `getServicesHealth()` function calling `/api/metrics/services/health`
+- [x] Implement `getServiceSparkline(name, metric)` function calling `/api/metrics/services/{name}/sparkline`
+- [x] Create `useServicesHealth()` hook with 30s auto-refresh
+- [x] Create `useServiceSparkline(name, metric)` hook with 1min auto-refresh
+- [x] Add mock data fallback for development mode
+- [x] Add error handling
+- [x] Export query keys for invalidation
 
 ---
 
@@ -281,14 +281,14 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/devops/DevOpsStepList.tsx`
-- [ ] Display list of steps in order
-- [ ] Show checkmark icon for completed steps (green)
-- [ ] Show spinner icon for running step (blue)
-- [ ] Show circle icon for pending steps (gray)
-- [ ] Show X icon for failed steps (red) with error message
-- [ ] Animate transitions between states (CSS transitions)
-- [ ] Create `DevOpsStepList.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/devops/DevOpsStepList.tsx`
+- [x] Display list of steps in order
+- [x] Show checkmark icon for completed steps (green)
+- [x] Show spinner icon for running step (blue)
+- [x] Show circle icon for pending steps (gray)
+- [x] Show X icon for failed steps (red) with error message
+- [x] Animate transitions between states (CSS transitions)
+- [x] Create `DevOpsStepList.test.tsx` with tests for:
   - Renders all step states correctly
   - Shows error message for failed step
   - Animations applied
@@ -298,15 +298,15 @@
 **Estimate:** 1.5 hours
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/devops/DevOpsActivityPanel.tsx`
-- [ ] Display current operation section (if any)
-- [ ] Show operation name and status badge
-- [ ] Include DevOpsStepList for current operation
-- [ ] Display recent operations section
-- [ ] Show operation name, status, duration for each recent
-- [ ] Add manual refresh button
-- [ ] Show empty state when no operations
-- [ ] Create `DevOpsActivityPanel.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/devops/DevOpsActivityPanel.tsx`
+- [x] Display current operation section (if any)
+- [x] Show operation name and status badge
+- [x] Include DevOpsStepList for current operation
+- [x] Display recent operations section
+- [x] Show operation name, status, duration for each recent
+- [x] Add manual refresh button
+- [x] Show empty state when no operations
+- [x] Create `DevOpsActivityPanel.test.tsx` with tests for:
   - Shows current operation
   - Shows recent operations
   - Empty state renders
@@ -317,15 +317,15 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/devops/DevOpsNotificationBanner.tsx`
-- [ ] Fixed position at top of viewport
-- [ ] Display operation name and current step
-- [ ] Color-code: blue (in-progress), green (completed), red (failed)
-- [ ] Add dismiss button (X icon)
-- [ ] Click banner to open DevOps activity (callback prop)
-- [ ] Slide-in animation on mount
-- [ ] Auto-hide after 10 seconds when completed
-- [ ] Create `DevOpsNotificationBanner.test.tsx` with tests for:
+- [x] Create `docker/hitl-ui/src/components/devops/DevOpsNotificationBanner.tsx`
+- [x] Fixed position at top of viewport
+- [x] Display operation name and current step
+- [x] Color-code: blue (in-progress), green (completed), red (failed)
+- [x] Add dismiss button (X icon)
+- [x] Click banner to open DevOps activity (callback prop)
+- [x] Slide-in animation on mount
+- [x] Auto-hide after 10 seconds when completed
+- [x] Create `DevOpsNotificationBanner.test.tsx` with tests for:
   - Renders with correct color
   - Dismiss button works
   - Click handler fires
@@ -340,14 +340,14 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/api/devops.ts`
-- [ ] Implement `getDevOpsActivity()` function
-- [ ] Create `useDevOpsActivity()` hook with 10s auto-refresh
-- [ ] Create `docker/hitl-ui/src/stores/devopsStore.ts`
-- [ ] Add `bannerDismissed` state
-- [ ] Add `setBannerDismissed` action
-- [ ] Add mock data fallback for development mode
-- [ ] Export query keys for invalidation
+- [x] Create `docker/hitl-ui/src/api/devops.ts`
+- [x] Implement `getDevOpsActivity()` function
+- [x] Create `useDevOpsActivity()` hook with 10s auto-refresh
+- [x] Create `docker/hitl-ui/src/stores/devopsStore.ts`
+- [x] Add `bannerDismissed` state
+- [x] Add `setBannerDismissed` action
+- [x] Add mock data fallback for development mode
+- [x] Export query keys for invalidation
 
 ---
 
@@ -358,52 +358,52 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create or update `docker/hitl-ui/src/api/k8s.ts`
-- [ ] Implement `getClusterHealth()` function
-- [ ] Implement `getNodes()` function
-- [ ] Implement `getPods(params)` function with query params
-- [ ] Create `useClusterHealth()` hook with 30s auto-refresh
-- [ ] Create `useNodes()` hook with 30s auto-refresh
-- [ ] Create `usePods(params)` hook with 30s auto-refresh
-- [ ] Add mock data fallback for development mode (when K8s API unavailable)
-- [ ] Export query keys for invalidation
+- [x] Create or update `docker/hitl-ui/src/api/k8s.ts`
+- [x] Implement `getClusterHealth()` function
+- [x] Implement `getNodes()` function
+- [x] Implement `getPods(params)` function with query params
+- [x] Create `useClusterHealth()` hook with 30s auto-refresh
+- [x] Create `useNodes()` hook with 30s auto-refresh
+- [x] Create `usePods(params)` hook with 30s auto-refresh
+- [x] Add mock data fallback for development mode (when K8s API unavailable)
+- [x] Export query keys for invalidation
 
 ### T21: Update ClusterOverview to use real API
 **Story:** US-10
 **Estimate:** 0.5 hours
 **Agent:** frontend
 
-- [ ] Update `docker/hitl-ui/src/components/k8s/ClusterOverview.tsx`
-- [ ] Add `useClusterHealth()` hook call (optional, can be passed via props)
-- [ ] Update K8sPage or parent to fetch and pass data
-- [ ] Verify loading state works
-- [ ] Verify error state works
-- [ ] Update tests if needed
+- [x] Update `docker/hitl-ui/src/components/k8s/ClusterOverview.tsx`
+- [x] Add `useClusterHealth()` hook call (optional, can be passed via props)
+- [x] Update K8sPage or parent to fetch and pass data
+- [x] Verify loading state works
+- [x] Verify error state works
+- [x] Update tests if needed
 
 ### T22: Update NodesPanel to use real API
 **Story:** US-11
 **Estimate:** 0.5 hours
 **Agent:** frontend
 
-- [ ] Update `docker/hitl-ui/src/components/k8s/NodesPanel.tsx` or parent page
-- [ ] Add `useNodes()` hook call (optional, can be passed via props)
-- [ ] Update K8sPage or parent to fetch and pass data
-- [ ] Verify filtering works with real data
-- [ ] Verify loading state works
-- [ ] Update tests if needed
+- [x] Update `docker/hitl-ui/src/components/k8s/NodesPanel.tsx` or parent page
+- [x] Add `useNodes()` hook call (optional, can be passed via props)
+- [x] Update K8sPage or parent to fetch and pass data
+- [x] Verify filtering works with real data
+- [x] Verify loading state works
+- [x] Update tests if needed
 
 ### T23: Update PodsTable to use real API
 **Story:** US-12
 **Estimate:** 0.5 hours
 **Agent:** frontend
 
-- [ ] Update `docker/hitl-ui/src/components/k8s/PodsTable.tsx` or parent page
-- [ ] Add `usePods()` hook call (optional, can be passed via props)
-- [ ] Update K8sPage or parent to fetch and pass data
-- [ ] Verify filtering works with real data
-- [ ] Verify pagination works with real data
-- [ ] Verify sorting works with real data
-- [ ] Update tests if needed
+- [x] Update `docker/hitl-ui/src/components/k8s/PodsTable.tsx` or parent page
+- [x] Add `usePods()` hook call (optional, can be passed via props)
+- [x] Update K8sPage or parent to fetch and pass data
+- [x] Verify filtering works with real data
+- [x] Verify pagination works with real data
+- [x] Verify sorting works with real data
+- [x] Update tests if needed
 
 ---
 
@@ -414,18 +414,18 @@
 **Estimate:** 1.5 hours
 **Agent:** devops
 
-- [ ] Update `.claude/agents/devops.md` to document progress publishing
-- [ ] Create helper script `scripts/devops/publish-progress.sh`
-- [ ] Implement `publish_operation_start(operation, steps)` using `mcp__coordination__coord_publish_message`
+- [x] Update `.claude/agents/devops.md` to document progress publishing
+- [x] Create helper script `scripts/devops/publish-progress.sh`
+- [x] Implement `publish_operation_start(operation, steps)` using `mcp__coordination__coord_publish_message`
   - Message type: `DEVOPS_STARTED`
   - Payload: operation name, step list, timestamp
-- [ ] Implement `publish_step_update(step_name, status, error)` using `mcp__coordination__coord_publish_message`
+- [x] Implement `publish_step_update(step_name, status, error)` using `mcp__coordination__coord_publish_message`
   - Message type: `DEVOPS_STEP_UPDATE`
   - Payload: step name, status, error (if any), timestamp
-- [ ] Implement `publish_operation_complete(status)` using `mcp__coordination__coord_publish_message`
+- [x] Implement `publish_operation_complete(status)` using `mcp__coordination__coord_publish_message`
   - Message type: `DEVOPS_COMPLETE` or `DEVOPS_FAILED`
   - Payload: final status, duration, timestamp
-- [ ] Add documentation for DevOps agent integration
+- [x] Add documentation for DevOps agent integration
 
 ---
 
@@ -436,25 +436,25 @@
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Create `docker/hitl-ui/src/components/services/ServiceHealthDashboard.tsx`
-- [ ] Compose ServiceTopologyMap at top
-- [ ] Compose ServiceCards in grid below
-- [ ] Wire up data fetching with hooks
-- [ ] Handle loading and error states
-- [ ] Add auto-refresh indicator
-- [ ] Create index.ts to export all service components
+- [x] Create `docker/hitl-ui/src/components/services/ServiceHealthDashboard.tsx`
+- [x] Compose ServiceTopologyMap at top
+- [x] Compose ServiceCards in grid below
+- [x] Wire up data fetching with hooks
+- [x] Handle loading and error states
+- [x] Add auto-refresh indicator
+- [x] Create index.ts to export all service components
 
 ### T26: Add DevOps activity to MetricsPage or create dedicated page
 **Story:** US-05, US-07
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Decide: Add to MetricsPage or create DevOpsPage
-- [ ] Integrate DevOpsActivityPanel component
-- [ ] Integrate DevOpsNotificationBanner (at App level for global visibility)
-- [ ] Wire up data fetching with hooks
-- [ ] Handle loading and error states
-- [ ] Create index.ts to export all devops components
+- [x] Decide: Add to MetricsPage or create DevOpsPage
+- [x] Integrate DevOpsActivityPanel component
+- [x] Integrate DevOpsNotificationBanner (at App level for global visibility)
+- [x] Wire up data fetching with hooks
+- [x] Handle loading and error states
+- [x] Create index.ts to export all devops components
 
 ---
 
@@ -465,23 +465,23 @@
 **Estimate:** 1.0 hour
 **Agent:** backend
 
-- [ ] Test `/api/metrics/services/health` with mock VictoriaMetrics
-- [ ] Test `/api/metrics/services/{name}/sparkline` with mock VM
-- [ ] Test `/api/devops/activity` with mock coordination messages
-- [ ] Test `/api/k8s/health` with mock K8s client
-- [ ] Test `/api/k8s/nodes` with mock K8s client
-- [ ] Test `/api/k8s/pods` with pagination and filtering
+- [x] Test `/api/metrics/services/health` with mock VictoriaMetrics
+- [x] Test `/api/metrics/services/{name}/sparkline` with mock VM
+- [x] Test `/api/devops/activity` with mock coordination messages
+- [x] Test `/api/k8s/health` with mock K8s client
+- [x] Test `/api/k8s/nodes` with mock K8s client
+- [x] Test `/api/k8s/pods` with pagination and filtering
 
 ### T28: Frontend E2E tests
 **Story:** All
 **Estimate:** 1.0 hour
 **Agent:** frontend
 
-- [ ] Test ServiceHealthDashboard renders with mock data
-- [ ] Test ServiceCard interactions
-- [ ] Test DevOpsActivityPanel renders with mock data
-- [ ] Test DevOpsNotificationBanner appears and dismisses
-- [ ] Test K8s components with mock API
+- [x] Test ServiceHealthDashboard renders with mock data
+- [x] Test ServiceCard interactions
+- [x] Test DevOpsActivityPanel renders with mock data
+- [x] Test DevOpsNotificationBanner appears and dismisses
+- [x] Test K8s components with mock API
 
 ---
 
@@ -510,22 +510,22 @@
 
 ### Task Status
 
-- Phase 0: 0/1 tasks (0%)
-- Phase 1: 0/2 tasks (0%)
-- Phase 2: 0/3 tasks (0%)
-- Phase 3: 0/3 tasks (0%)
-- Phase 4: 0/3 tasks (0%)
-- Phase 5: 0/1 tasks (0%)
-- Phase 6: 0/1 tasks (0%)
-- Phase 7: 0/1 tasks (0%)
-- Phase 8: 0/1 tasks (0%)
-- Phase 9: 0/3 tasks (0%)
-- Phase 10: 0/1 tasks (0%)
-- Phase 11: 0/4 tasks (0%)
-- Phase 12: 0/1 tasks (0%)
-- Phase 13: 0/2 tasks (0%)
-- Phase 14: 0/2 tasks (0%)
-- **Total: 0/29 tasks (0%)**
+- Phase 0: 1/1 tasks (100%)
+- Phase 1: 2/2 tasks (100%)
+- Phase 2: 3/3 tasks (100%)
+- Phase 3: 3/3 tasks (100%)
+- Phase 4: 3/3 tasks (100%)
+- Phase 5: 1/1 tasks (100%)
+- Phase 6: 1/1 tasks (100%)
+- Phase 7: 1/1 tasks (100%)
+- Phase 8: 1/1 tasks (100%)
+- Phase 9: 3/3 tasks (100%)
+- Phase 10: 1/1 tasks (100%)
+- Phase 11: 4/4 tasks (100%)
+- Phase 12: 1/1 tasks (100%)
+- Phase 13: 2/2 tasks (100%)
+- Phase 14: 2/2 tasks (100%)
+- **Total: 29/29 tasks (100%)**
 
 ---
 

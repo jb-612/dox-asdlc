@@ -101,6 +101,25 @@ export {
   simulateDelay,
 } from './metrics';
 
+// DevOps Activity mocks (P06-F07)
+export {
+  mockCurrentActivity as mockDevOpsCurrentActivity,
+  mockRecentActivities as mockDevOpsRecentActivities,
+  getMockDevOpsActivity,
+  getMockEmptyDevOpsActivity,
+  simulateDevOpsDelay,
+} from './devops';
+
+// Service Health Dashboard mocks (P06-F07)
+export {
+  mockServiceHealthData,
+  mockServiceConnections,
+  mockSparklineData,
+  getMockServicesHealth,
+  getMockServiceSparkline,
+  simulateDelay as simulateServiceDelay,
+} from './services';
+
 // Helper to check if mocks are enabled
 export function useMocks(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
