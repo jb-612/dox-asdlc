@@ -1,0 +1,75 @@
+%% File: docs/diagrams/19-mcp-sidecar-helm-toggle.mmd
+%% Description: Helm values toggle for MCP sidecar injection
+%% Feature: P06-F08 MCP Sidecars
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart LR
+    subgraph Values["Helm Values Files"]
+        subgraph ProdValues["values.yaml (Production)"]
+            ProdRedis["redis:<br/>  mcpSidecar:<br/>    enabled: false"]
+            ProdES["elasticsearch:<br/>  mcpSidecar:<br/>    enabled: false"]
+        end
+
+        subgraph DevValues["values-minikube.yaml (Development)"]
+            DevRedis["redis:<br/>  mcpSidecar:<br/>    enabled: true<br/>    resources:<br/>      requests:<br/>        memory: 64Mi"]
+            DevES["elasticsearch:<br/>  mcpSidecar:<br/>    enabled: true<br/>    resources:<br/>      requests:<br/>        memory: 64Mi"]
+        end
+    end
+
+    subgraph Templates["Helm Templates"]
+        subgraph RedisTemplate["redis/statefulset.yaml"]
+            RedisCondition["{{- if .Values.mcpSidecar.enabled }}<br/>- name: mcp-sidecar<br/>  image: mcp/redis:latest<br/>  ports:<br/>    - containerPort: 9000<br/>  ...<br/>{{- end }}"]
+        end
+
+        subgraph ESTemplate["elasticsearch/statefulset.yaml"]
+            ESCondition["{{- if .Values.mcpSidecar.enabled }}<br/>- name: mcp-sidecar<br/>  image: mcp/elasticsearch:latest<br/>  ports:<br/>    - containerPort: 9000<br/>  ...<br/>{{- end }}"]
+        end
+
+        subgraph ServiceTemplate["*/service.yaml"]
+            SvcCondition["{{- if .Values.mcpSidecar.enabled }}<br/>- port: 9000<br/>  name: mcp<br/>  targetPort: mcp<br/>{{- end }}"]
+        end
+    end
+
+    subgraph Output["Rendered Manifests"]
+        subgraph ProdOutput["Production Deploy"]
+            ProdRedisPod["redis-0<br/>────────────<br/>Containers: 1<br/>• redis :6379"]
+            ProdESPod["elasticsearch-0<br/>────────────<br/>Containers: 1<br/>• elasticsearch :9200"]
+            ProdSvc["Services<br/>────────────<br/>redis: 6379<br/>knowledge-store: 9200"]
+        end
+
+        subgraph DevOutput["Minikube Deploy"]
+            DevRedisPod["redis-0<br/>────────────<br/>Containers: 2<br/>• redis :6379<br/>• mcp-sidecar :9000"]
+            DevESPod["elasticsearch-0<br/>────────────<br/>Containers: 2<br/>• elasticsearch :9200<br/>• mcp-sidecar :9000"]
+            DevSvc["Services<br/>────────────<br/>redis: 6379, 9000<br/>knowledge-store: 9200, 9000"]
+        end
+    end
+
+    subgraph Commands["Deployment Commands"]
+        ProdCmd["helm upgrade dox-asdlc ./helm/dox-asdlc<br/>(uses values.yaml)"]
+        DevCmd["helm upgrade dox-asdlc ./helm/dox-asdlc<br/>-f values-minikube.yaml"]
+    end
+
+    %% Production flow
+    ProdValues -->|"enabled: false"| Templates
+    Templates -->|"conditionals skip sidecar"| ProdOutput
+    ProdCmd -.-> ProdValues
+
+    %% Development flow
+    DevValues -->|"enabled: true"| Templates
+    Templates -->|"conditionals include sidecar"| DevOutput
+    DevCmd -.-> DevValues
+
+    %% Styling
+    classDef prod fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef dev fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef template fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef output fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef command fill:#F3E8FF,stroke:#9333ea,stroke-width:1px
+
+    class ProdRedis,ProdES prod
+    class DevRedis,DevES dev
+    class RedisCondition,ESCondition,SvcCondition template
+    class ProdRedisPod,ProdESPod,ProdSvc,DevRedisPod,DevESPod,DevSvc output
+    class ProdCmd,DevCmd command

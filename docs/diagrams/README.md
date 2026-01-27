@@ -35,6 +35,7 @@ flowchart TD
 |------|-------------|
 | `01-system-architecture.mmd` | Complete system overview with all components |
 | `09-kubernetes-topology.mmd` | Kubernetes deployment structure |
+| `15-k8s-cluster-complete.mmd` | Complete K8s cluster with MCP sidecars and monitoring |
 
 ### Coordinator & Orchestration
 
@@ -66,6 +67,24 @@ flowchart TD
 | `11-sequence-a2a-transition.mmd` | Step-by-step A2A transition |
 | `12-sequence-hitl-flow.mmd` | Step-by-step HITL approval |
 | `13-sequence-mcp-calls.mmd` | MCP tool call sequences |
+| `17-sequence-mcp-sidecar-lifecycle.mmd` | MCP sidecar startup, health, and degradation |
+
+### MCP Sidecars (P06-F08)
+
+| File | Description |
+|------|-------------|
+| `15-k8s-cluster-complete.mmd` | Complete K8s cluster with all pods, sidecars, and networking |
+| `16-mcp-sidecar-pod-internals.mmd` | Pod-level view of main container + MCP sidecar |
+| `17-sequence-mcp-sidecar-lifecycle.mmd` | Sidecar lifecycle and graceful degradation |
+| `18-prometheus-annotation-scrape.mmd` | Prometheus annotation-based service discovery |
+| `19-mcp-sidecar-helm-toggle.mmd` | Helm values toggle for sidecar injection |
+
+### Monitoring
+
+| File | Description |
+|------|-------------|
+| `14-victoriametrics-monitoring.mmd` | VictoriaMetrics monitoring stack |
+| `18-prometheus-annotation-scrape.mmd` | Prometheus annotation-based scraping |
 
 ---
 

@@ -1,0 +1,79 @@
+%% File: docs/diagrams/17-sequence-mcp-sidecar-lifecycle.mmd
+%% Description: MCP sidecar lifecycle - startup, health checks, and graceful degradation
+%% Feature: P06-F08 MCP Sidecars
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryTextColor': '#1e3a5f', 'lineColor': '#64748b'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant K8s as Kubernetes
+    participant Main as Main Container<br/>(redis/elasticsearch)
+    participant Sidecar as MCP Sidecar<br/>(:9000)
+    participant Kubelet as Kubelet
+    participant CLI as Claude CLI
+
+    Note over K8s,CLI: Pod Startup Sequence
+
+    rect rgb(220, 252, 231)
+        Note over K8s,Sidecar: Normal Startup
+        K8s->>Main: Start container
+        K8s->>Sidecar: Start container (parallel)
+        Main->>Main: Initialize service
+        Sidecar->>Sidecar: Initialize MCP server
+        Sidecar->>Main: Connect localhost:6379/9200
+        Main-->>Sidecar: Connection established
+
+        Kubelet->>Sidecar: Readiness probe (TCP :9000)
+        Sidecar-->>Kubelet: Port open ✓
+        Kubelet->>K8s: Pod Ready (2/2)
+    end
+
+    Note over K8s,CLI: Health Check Loop
+
+    rect rgb(230, 240, 255)
+        Note over Kubelet,Sidecar: Periodic Health Checks
+        loop Every 10s (readiness) / 20s (liveness)
+            Kubelet->>Sidecar: TCP socket check :9000
+            Sidecar-->>Kubelet: Port responding ✓
+        end
+    end
+
+    Note over K8s,CLI: Claude CLI Interaction
+
+    rect rgb(254, 243, 199)
+        Note over CLI,Sidecar: MCP Tool Call
+        CLI->>Sidecar: MCP request (via Service :9000)
+        Sidecar->>Main: Backend operation (localhost)
+        Main-->>Sidecar: Result
+        Sidecar-->>CLI: MCP response
+    end
+
+    Note over K8s,CLI: Sidecar Failure Scenario
+
+    rect rgb(254, 226, 226)
+        Note over Main,Sidecar: Graceful Degradation
+        Sidecar->>Sidecar: Crash / OOM / Error
+        Kubelet->>Sidecar: Liveness probe fails
+        Kubelet->>K8s: Restart sidecar container
+
+        Note over Main: Main container UNAFFECTED<br/>Continues serving :6379/9200
+
+        CLI->>Sidecar: MCP request
+        Sidecar--xCLI: Connection refused
+        CLI->>CLI: Handle gracefully<br/>(fallback or retry)
+
+        K8s->>Sidecar: Restart container
+        Sidecar->>Main: Reconnect localhost
+        Kubelet->>Sidecar: Readiness probe ✓
+        Note over K8s: Pod back to 2/2 Ready
+    end
+
+    Note over K8s,CLI: Main Container Failure
+
+    rect rgb(243, 232, 255)
+        Note over K8s,Main: Full Pod Restart
+        Main->>Main: Fatal error
+        K8s->>K8s: Pod restart (both containers)
+        Note over Main,Sidecar: Both containers restart together
+    end

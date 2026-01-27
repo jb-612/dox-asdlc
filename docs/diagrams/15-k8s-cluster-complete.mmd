@@ -1,0 +1,120 @@
+%% File: docs/diagrams/15-k8s-cluster-complete.mmd
+%% Description: Complete K8s cluster topology with MCP sidecars and monitoring
+%% Feature: P06-F08 MCP Sidecars
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph K8s["Kubernetes Cluster (namespace: dox-asdlc)"]
+
+        subgraph Deployments["Deployments"]
+            subgraph OrcDeploy["orchestrator"]
+                OrcPod["Pod: orchestrator<br/>:8080 /metrics<br/>prometheus.io/scrape: true"]
+            end
+
+            subgraph WrkDeploy["workers"]
+                WrkPod["Pod: workers<br/>:8081 /metrics<br/>prometheus.io/scrape: true"]
+            end
+
+            subgraph HITLDeploy["hitl-ui"]
+                HITLPod["Pod: hitl-ui<br/>:80 nginx<br/>(React SPA)"]
+            end
+        end
+
+        subgraph StatefulSets["StatefulSets (with MCP Sidecars)"]
+            subgraph RedisSS["redis"]
+                subgraph RedisPod["Pod: redis-0"]
+                    RedisMain["redis<br/>:6379"]
+                    RedisMCP["mcp-redis<br/>:9000"]
+                end
+            end
+
+            subgraph ESSS["elasticsearch"]
+                subgraph ESPod["Pod: elasticsearch-0"]
+                    ESMain["elasticsearch<br/>:9200, :9300"]
+                    ESMCP["mcp-elasticsearch<br/>:9000"]
+                end
+            end
+        end
+
+        subgraph Monitoring["VictoriaMetrics Stack"]
+            subgraph VMSS["victoriametrics"]
+                VMPod["Pod: victoriametrics<br/>:8428"]
+                VMPVC[("PVC: vm-data<br/>10Gi")]
+            end
+
+            subgraph VMAgentDS["vmagent (DaemonSet)"]
+                VMAgent1["vmagent<br/>(per node)"]
+            end
+        end
+
+        subgraph Services["Services (ClusterIP)"]
+            OrcSvc["orchestrator<br/>:8080"]
+            WrkSvc["workers<br/>:8081"]
+            HITLSvc["hitl-ui<br/>:80"]
+            RedisSvc["redis<br/>:6379, :9000 (mcp)"]
+            ESSvc["knowledge-store<br/>:9200, :9000 (mcp)"]
+            VMSvc["metrics-store<br/>:8428"]
+        end
+
+        subgraph Storage["Persistent Storage"]
+            RedisPVC[("PVC: redis-data")]
+            ESPVC[("PVC: es-data<br/>10Gi")]
+        end
+    end
+
+    subgraph External["External Access"]
+        User["User Browser"]
+        ClaudeCLI["Claude CLI Tools"]
+    end
+
+    %% Pod to Service connections
+    OrcPod --> OrcSvc
+    WrkPod --> WrkSvc
+    HITLPod --> HITLSvc
+    RedisPod --> RedisSvc
+    ESPod --> ESSvc
+    VMPod --> VMSvc
+
+    %% Storage mounts
+    VMPod --> VMPVC
+    RedisMain --> RedisPVC
+    ESMain --> ESPVC
+
+    %% Internal communication
+    OrcPod -->|"events"| RedisSvc
+    WrkPod -->|"events"| RedisSvc
+    OrcPod -->|"search"| ESSvc
+
+    %% MCP sidecar localhost communication
+    RedisMain <-.->|"localhost"| RedisMCP
+    ESMain <-.->|"localhost"| ESMCP
+
+    %% Monitoring scrape flow
+    VMAgent1 -->|"scrape :8080/metrics"| OrcPod
+    VMAgent1 -->|"scrape :8081/metrics"| WrkPod
+    VMAgent1 -->|"remote_write"| VMPod
+
+    %% External access
+    User -->|"HTTPS"| HITLSvc
+    User -->|"metrics API"| OrcSvc
+    ClaudeCLI -->|"MCP :9000"| RedisSvc
+    ClaudeCLI -->|"MCP :9000"| ESSvc
+
+    %% Styling
+    classDef deployment fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef statefulset fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef sidecar fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef service fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef monitoring fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class OrcPod,WrkPod,HITLPod deployment
+    class RedisMain,ESMain statefulset
+    class RedisMCP,ESMCP sidecar
+    class OrcSvc,WrkSvc,HITLSvc,RedisSvc,ESSvc,VMSvc service
+    class RedisPVC,ESPVC,VMPVC storage
+    class VMPod,VMAgent1 monitoring
+    class User,ClaudeCLI external

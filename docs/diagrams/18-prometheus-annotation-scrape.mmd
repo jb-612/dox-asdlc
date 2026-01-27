@@ -1,0 +1,85 @@
+%% File: docs/diagrams/18-prometheus-annotation-scrape.mmd
+%% Description: Prometheus annotation-based service discovery and scraping
+%% Feature: P06-F08 MCP Sidecars
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph K8s["Kubernetes Cluster"]
+        subgraph AnnotatedPods["Pods with Prometheus Annotations"]
+            subgraph OrcPod["orchestrator Pod"]
+                OrcAnnotations["annotations:<br/>  prometheus.io/scrape: 'true'<br/>  prometheus.io/port: '8080'<br/>  prometheus.io/path: '/metrics'"]
+                OrcMetrics["/metrics endpoint<br/>────────────<br/>• asdlc_http_requests_total<br/>• asdlc_http_request_duration<br/>• asdlc_redis_connection<br/>• process_cpu_seconds"]
+            end
+
+            subgraph WrkPod["workers Pod"]
+                WrkAnnotations["annotations:<br/>  prometheus.io/scrape: 'true'<br/>  prometheus.io/port: '8081'<br/>  prometheus.io/path: '/metrics'"]
+                WrkMetrics["/metrics endpoint<br/>────────────<br/>• asdlc_active_workers<br/>• asdlc_events_processed<br/>• asdlc_task_duration<br/>• process_memory_bytes"]
+            end
+        end
+
+        subgraph NonAnnotated["Pods WITHOUT Prometheus Annotations"]
+            HITLPod["hitl-ui Pod<br/>────────────<br/>React SPA (nginx)<br/>No /metrics endpoint<br/>❌ Not scraped"]
+
+            RedisPod["redis Pod<br/>────────────<br/>No exporter configured<br/>❌ Not scraped"]
+
+            ESPod["elasticsearch Pod<br/>────────────<br/>No exporter configured<br/>❌ Not scraped"]
+        end
+
+        subgraph VMAgent["vmagent DaemonSet"]
+            Agent["vmagent<br/>────────────<br/>Scrape Config:<br/>kubernetes_sd_configs<br/>- role: pod"]
+
+            subgraph ScrapeConfig["Scrape Configuration"]
+                Config["relabel_configs:<br/>────────────<br/>• Keep if prometheus.io/scrape='true'<br/>• Use prometheus.io/port for target<br/>• Use prometheus.io/path for metrics"]
+            end
+        end
+
+        subgraph VMStore["VictoriaMetrics"]
+            VM["VictoriaMetrics<br/>:8428<br/>────────────<br/>• Time series storage<br/>• PromQL queries<br/>• 30-day retention"]
+            VMPVC[("PVC: vm-data")]
+        end
+    end
+
+    subgraph Discovery["Service Discovery Flow"]
+        Step1["1. vmagent watches K8s API"]
+        Step2["2. Discovers pods with annotations"]
+        Step3["3. Builds scrape targets"]
+        Step4["4. Scrapes /metrics endpoints"]
+        Step5["5. remote_write to VM"]
+    end
+
+    %% Annotation to Agent discovery
+    OrcAnnotations -.->|"discovered"| Agent
+    WrkAnnotations -.->|"discovered"| Agent
+
+    %% Scrape flow
+    Agent -->|"GET :8080/metrics"| OrcMetrics
+    Agent -->|"GET :8081/metrics"| WrkMetrics
+
+    %% Write to VM
+    Agent -->|"remote_write"| VM
+    VM --> VMPVC
+
+    %% Config relationship
+    Agent --- ScrapeConfig
+
+    %% Discovery flow
+    Step1 --> Step2 --> Step3 --> Step4 --> Step5
+
+    %% Styling
+    classDef annotated fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef nonannotated fill:#F3F4F6,stroke:#9ca3af,stroke-width:1px,stroke-dasharray: 5 5
+    classDef agent fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef vm fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef config fill:#E6F0FF,stroke:#2563eb,stroke-width:1px
+    classDef flow fill:#FFF7ED,stroke:#ea580c,stroke-width:1px
+
+    class OrcAnnotations,WrkAnnotations,OrcMetrics,WrkMetrics annotated
+    class HITLPod,RedisPod,ESPod nonannotated
+    class Agent agent
+    class VM vm
+    class VMPVC storage
+    class Config config
+    class Step1,Step2,Step3,Step4,Step5 flow

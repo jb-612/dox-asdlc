@@ -1,0 +1,74 @@
+%% File: docs/diagrams/16-mcp-sidecar-pod-internals.mmd
+%% Description: MCP sidecar pod internals - container communication and configuration
+%% Feature: P06-F08 MCP Sidecars
+%% Updated: 2026-01-27
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart LR
+    subgraph Pod["Pod: redis-0 (or elasticsearch-0)"]
+        subgraph MainContainer["Main Container"]
+            Main["redis / elasticsearch<br/>──────────────<br/>Port: 6379 / 9200<br/>──────────────<br/>• Primary service<br/>• Unaware of sidecar<br/>• Continues if sidecar fails"]
+        end
+
+        subgraph SidecarContainer["MCP Sidecar Container"]
+            Sidecar["mcp-redis / mcp-es<br/>──────────────<br/>Port: 9000<br/>──────────────<br/>• MCP protocol server<br/>• /health endpoint<br/>• Graceful degradation"]
+
+            subgraph EnvVars["Environment Variables"]
+                Env1["REDIS_HOST=localhost<br/>REDIS_PORT=6379<br/>REDIS_PASSWORD=***"]
+                Env2["or"]
+                Env3["ES_HOST=localhost<br/>ES_PORT=9200"]
+            end
+
+            subgraph SecurityCtx["Security Context"]
+                Sec1["runAsNonRoot: true"]
+                Sec2["runAsUser: 1000"]
+                Sec3["readOnlyRootFilesystem: true"]
+                Sec4["allowPrivilegeEscalation: false"]
+            end
+
+            subgraph Probes["Health Probes"]
+                Readiness["Readiness Probe<br/>────────────<br/>tcpSocket: 9000<br/>initialDelay: 5s<br/>period: 10s"]
+                Liveness["Liveness Probe<br/>────────────<br/>tcpSocket: 9000<br/>initialDelay: 15s<br/>period: 20s"]
+            end
+        end
+
+        subgraph Resources["Resource Limits"]
+            Res["requests:<br/>  memory: 64Mi<br/>  cpu: 50m<br/>limits:<br/>  memory: 128Mi<br/>  cpu: 100m"]
+        end
+    end
+
+    subgraph External["External"]
+        Kubelet["Kubelet<br/>(probe checks)"]
+        ClaudeCLI["Claude CLI<br/>(MCP client)"]
+        Service["K8s Service<br/>:6379, :9000"]
+    end
+
+    %% Localhost communication within pod
+    Main <-->|"localhost:6379/9200"| Sidecar
+
+    %% Environment config
+    Sidecar --- EnvVars
+    Sidecar --- SecurityCtx
+    Sidecar --- Probes
+    SidecarContainer --- Resources
+
+    %% External connections
+    Kubelet -->|"TCP :9000"| Readiness
+    Kubelet -->|"TCP :9000"| Liveness
+    ClaudeCLI -->|"MCP protocol"| Service
+    Service -->|":9000"| Sidecar
+    Service -->|":6379/9200"| Main
+
+    %% Styling
+    classDef main fill:#D0E8FF,stroke:#2563eb,stroke-width:2px
+    classDef sidecar fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef config fill:#F3E8FF,stroke:#9333ea,stroke-width:1px
+    classDef probe fill:#DCFCE7,stroke:#16a34a,stroke-width:1px
+    classDef external fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class Main main
+    class Sidecar sidecar
+    class Env1,Env2,Env3,Sec1,Sec2,Sec3,Sec4,Res config
+    class Readiness,Liveness probe
+    class Kubelet,ClaudeCLI,Service external
