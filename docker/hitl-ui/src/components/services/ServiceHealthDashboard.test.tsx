@@ -161,10 +161,10 @@ describe('ServiceHealthDashboard', () => {
       expect(screen.getByTestId('service-health-dashboard')).toBeInTheDocument();
     });
 
-    it('renders the topology map', () => {
+    it('renders the service health list', () => {
       renderWithProviders(<ServiceHealthDashboard />);
 
-      expect(screen.getByTestId('topology-container')).toBeInTheDocument();
+      expect(screen.getByTestId('service-health-list')).toBeInTheDocument();
     });
 
     it('renders service cards grid', () => {

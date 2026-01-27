@@ -16,7 +16,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { ArrowPathIcon, ServerStackIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
-import ServiceTopologyMap from './ServiceTopologyMap';
+import ServiceHealthList from './ServiceHealthList';
 import ServiceCard from './ServiceCard';
 import { useServicesHealth, useServiceSparkline } from '../../api/services';
 import type { ServiceHealthInfo, SparklineDataPoint } from '../../api/types/services';
@@ -251,14 +251,12 @@ export default function ServiceHealthDashboard({
         </div>
       </header>
 
-      {/* Topology Map */}
+      {/* Service Health List */}
       <section>
-        <ServiceTopologyMap
+        <ServiceHealthList
           services={services}
-          connections={connections}
-          onServiceClick={handleServiceClick}
-          showLegend
           isLoading={isLoading}
+          defaultExpanded
         />
       </section>
 
