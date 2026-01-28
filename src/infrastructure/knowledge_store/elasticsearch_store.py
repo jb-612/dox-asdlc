@@ -25,6 +25,12 @@ from src.infrastructure.knowledge_store.models import Document, SearchResult
 
 logger = logging.getLogger(__name__)
 
+# Filter key mapping: API name -> ES document field name
+# This maps standardized API filter names to actual field names in ES documents
+FILTER_KEY_MAP = {
+    "file_types": "file_type",  # API uses plural, ES doc uses singular
+}
+
 
 # Index mapping for Elasticsearch
 INDEX_MAPPING = {
@@ -161,19 +167,46 @@ class ElasticsearchStore:
     def _build_filter(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
         """Build Elasticsearch filter clauses from metadata filters.
 
+        This method handles the mapping between standardized API filter names
+        and actual ES document field names. It also handles special filter
+        types like date ranges.
+
+        Mappings:
+            - file_types (API) -> file_type (ES doc) - plural to singular
+            - date_from -> range query on indexed_at with gte
+            - date_to -> range query on indexed_at with lte
+
         Args:
             filters: Dictionary of metadata field:value pairs.
 
         Returns:
-            List of Elasticsearch term/terms filter clauses.
+            List of Elasticsearch term/terms/range filter clauses.
         """
         filter_clauses = []
+        date_range: dict[str, str] = {}
+
         for key, value in filters.items():
+            # Handle date range filters specially
+            if key == "date_from":
+                date_range["gte"] = value
+                continue
+            if key == "date_to":
+                date_range["lte"] = value
+                continue
+
+            # Map key if needed (e.g., file_types -> file_type)
+            es_key = FILTER_KEY_MAP.get(key, key)
+
             # Use 'terms' for list values, 'term' for single values
             if isinstance(value, list):
-                filter_clauses.append({"terms": {f"metadata.{key}": value}})
+                filter_clauses.append({"terms": {f"metadata.{es_key}": value}})
             else:
-                filter_clauses.append({"term": {f"metadata.{key}": value}})
+                filter_clauses.append({"term": {f"metadata.{es_key}": value}})
+
+        # Add date range filter if any date filters were provided
+        if date_range:
+            filter_clauses.append({"range": {"metadata.indexed_at": date_range}})
+
         return filter_clauses
 
     async def index_document(self, document: Document) -> str:
