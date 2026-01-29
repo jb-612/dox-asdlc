@@ -120,7 +120,24 @@ export {
   simulateDelay as simulateServiceDelay,
 } from './services';
 
+// PRD Ideation Studio mocks (P05-F11)
+export {
+  mockChatHistory as mockIdeationChatHistory,
+  mockMaturityStates,
+  mockRequirements as mockIdeationRequirements,
+  mockUserStories,
+  mockPRDDocument,
+  generateMockIdeationResponse,
+  submitMockPRD,
+  getMockSessionMaturity,
+  saveMockDraft,
+  loadMockDraft,
+  deleteMockDraft,
+  listMockDrafts,
+  delay as ideationDelay,
+} from './ideation';
+
 // Helper to check if mocks are enabled
-export function useMocks(): boolean {
+export function areMocksEnabled(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
 }

@@ -14,6 +14,7 @@ import DocsPage from "./pages/DocsPage";
 import DiagramDetailPage from "./pages/DiagramDetailPage";
 import DocDetailPage from "./pages/DocDetailPage";
 import StudioDiscoveryPage from "./pages/StudioDiscoveryPage";
+import StudioIdeationPage from "./pages/StudioIdeationPage";
 import RuleProposalsPage from "./pages/RuleProposalsPage";
 import K8sPage from "./pages/K8sPage";
 import MetricsPage from "./pages/MetricsPage";
@@ -103,6 +104,7 @@ function App() {
           <Route path="docs/:docPath" element={<DocDetailPage />} />
           <Route path="studio" element={<StudioDiscoveryPage />} />
           <Route path="studio/discovery" element={<Navigate to="/studio" replace />} />
+          <Route path="studio/ideation" element={<StudioIdeationPage />} />
           <Route path="rules" element={<RuleProposalsPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

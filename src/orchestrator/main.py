@@ -32,6 +32,7 @@ from src.orchestrator.api.routes.devops import router as devops_api_router
 from src.orchestrator.api.routes.k8s import router as k8s_api_router
 from src.orchestrator.knowledge_store_api import create_knowledge_store_router
 from src.orchestrator.routes.metrics_api import router as metrics_api_router
+from src.orchestrator.routes.ideation_api import router as ideation_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -177,6 +178,9 @@ def create_app() -> FastAPI:
     # K8s cluster API endpoints (for K8s visibility dashboard)
     app.include_router(k8s_api_router)
 
+    # Ideation Studio API endpoints (for PRD Ideation Studio)
+    app.include_router(ideation_api_router)
+
     return app
 
 
@@ -197,6 +201,7 @@ def main() -> None:
     logger.info(f"KnowledgeStore API: http://localhost:{port}/api/knowledge-store/")
     logger.info(f"Metrics API: http://localhost:{port}/api/metrics/")
     logger.info(f"K8s API: http://localhost:{port}/api/k8s/")
+    logger.info(f"Ideation API: http://localhost:{port}/api/studio/ideation/")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:
