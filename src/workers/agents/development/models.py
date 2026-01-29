@@ -690,6 +690,7 @@ class DevelopmentResult:
         test_result: TestRunResult,
         review: CodeReview,
         hitl4_request_id: str | None = None,
+        retry_count: int = 0,
     ) -> DevelopmentResult:
         """Create successful result."""
         return cls(
@@ -699,6 +700,7 @@ class DevelopmentResult:
             test_result=test_result,
             review=review,
             hitl4_request_id=hitl4_request_id,
+            retry_count=retry_count,
         )
 
     @classmethod

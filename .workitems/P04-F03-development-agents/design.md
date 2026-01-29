@@ -50,6 +50,7 @@ class DevelopmentConfig:
     enable_rlm: bool = True
     max_coding_retries: int = 4  # Before escalating to debugger
     test_timeout_seconds: int = 300
+    coverage_threshold: float = 80.0  # Minimum test coverage percentage
 ```
 
 ### 2. Development Models (`models.py`)
@@ -188,7 +189,7 @@ class CodingAgent(DomainAgent):
 
 **RLM Trigger Conditions:**
 - Task involves unfamiliar algorithms
-- Previous attempts failed (fail_count > 1)
+- Previous attempts failed (fail_count > 0, i.e., any failure triggers RLM)
 - Complex integration patterns needed
 
 ### 5. Debugger Agent (`debugger_agent.py`)

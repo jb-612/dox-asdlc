@@ -47,11 +47,19 @@ class ValidationConfig:
     e2e_test_timeout: int = 600
     security_scan_level: str = "standard"  # "minimal", "standard", "thorough"
 
+class DeploymentStrategy(Enum):
+    ROLLING = "rolling"
+    BLUE_GREEN = "blue-green"
+    CANARY = "canary"
+
 @dataclass
 class DeploymentConfig:
     release_model: str = "claude-sonnet-4-20250514"
     deployment_model: str = "claude-sonnet-4-20250514"
     monitor_model: str = "claude-sonnet-4-20250514"
+    max_tokens: int = 8192
+    temperature: float = 0.1
+    deployment_strategy: DeploymentStrategy = DeploymentStrategy.ROLLING
     artifact_base_path: Path = Path("artifacts/deployment")
     rollback_enabled: bool = True
     canary_percentage: int = 10
