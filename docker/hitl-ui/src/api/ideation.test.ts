@@ -422,6 +422,9 @@ describe('Ideation API', () => {
   describe('loadIdeationDraft', () => {
     it('should load and transform draft from backend', async () => {
       const backendDraft = {
+        id: 'session-123',
+        projectName: 'Test Project',
+        status: 'draft',
         messages: [
           { id: 'msg-1', role: 'user', content: 'Hello', timestamp: '2026-01-28T00:00:00Z' },
         ],
@@ -434,7 +437,7 @@ describe('Ideation API', () => {
           canSubmit: false,
           gaps: [],
         },
-        extractedRequirements: [
+        requirements: [
           {
             id: 'req-1',
             description: 'Test requirement',
@@ -444,6 +447,8 @@ describe('Ideation API', () => {
             createdAt: '2026-01-28T00:00:00Z',
           },
         ],
+        createdAt: '2026-01-28T00:00:00Z',
+        updatedAt: '2026-01-28T00:00:00Z',
       };
 
       vi.mocked(apiClient.get).mockResolvedValue({ data: backendDraft });
@@ -495,18 +500,24 @@ describe('Ideation API', () => {
 
   describe('listIdeationDrafts', () => {
     it('should return list of drafts', async () => {
-      const mockDrafts = [
-        { sessionId: 'session-1', projectName: 'Project A', maturityScore: 45, lastModified: '2026-01-28T00:00:00Z' },
-        { sessionId: 'session-2', projectName: 'Project B', maturityScore: 80, lastModified: '2026-01-27T00:00:00Z' },
-      ];
+      const mockResponse = {
+        sessions: [
+          { id: 'session-1', projectName: 'Project A', status: 'draft', createdAt: '2026-01-28T00:00:00Z', updatedAt: '2026-01-28T00:00:00Z', messageCount: 5, maturityScore: 45 },
+          { id: 'session-2', projectName: 'Project B', status: 'draft', createdAt: '2026-01-27T00:00:00Z', updatedAt: '2026-01-27T00:00:00Z', messageCount: 10, maturityScore: 80 },
+        ],
+        total: 2,
+        limit: 20,
+        offset: 0,
+      };
 
-      vi.mocked(apiClient.get).mockResolvedValue({ data: mockDrafts });
+      vi.mocked(apiClient.get).mockResolvedValue({ data: mockResponse });
 
       const result = await listIdeationDrafts();
 
-      expect(apiClient.get).toHaveBeenCalledWith('/studio/ideation/drafts');
+      expect(apiClient.get).toHaveBeenCalledWith('/studio/ideation/sessions');
       expect(result).toHaveLength(2);
       expect(result[0].projectName).toBe('Project A');
+      expect(result[0].sessionId).toBe('session-1');
     });
 
     it('should handle errors', async () => {

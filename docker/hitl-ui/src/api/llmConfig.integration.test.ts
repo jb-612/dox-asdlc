@@ -517,30 +517,45 @@ describe('LLM Config API - Real Mode', () => {
 
   describe('Agent Config Functions - Real API', () => {
     it('fetchAgentConfigs calls real API endpoint', async () => {
-      const mockConfigs = [
-        { role: 'discovery', provider: 'anthropic', model: 'claude-sonnet-4', settings: {} },
+      // Backend returns snake_case format
+      const backendConfigs = [
+        { role: 'discovery', provider: 'anthropic', model: 'claude-sonnet-4', api_key_id: 'key-1', settings: { temperature: 0.7, max_tokens: 4096 }, enabled: true },
       ];
-      vi.mocked(apiClient.get).mockResolvedValue(mockApiResponse(mockConfigs));
+      vi.mocked(apiClient.get).mockResolvedValue(mockApiResponse(backendConfigs));
 
       const configs = await fetchAgentConfigs();
 
       expect(apiClient.get).toHaveBeenCalledWith('/llm/agents');
-      expect(configs).toEqual(mockConfigs);
+      // Frontend receives camelCase format after transformation
+      expect(configs[0].role).toBe('discovery');
+      expect(configs[0].provider).toBe('anthropic');
+      expect(configs[0].model).toBe('claude-sonnet-4');
+      expect(configs[0].apiKeyId).toBe('key-1');
+      expect(configs[0].enabled).toBe(true);
+      expect(configs[0].settings.temperature).toBe(0.7);
+      expect(configs[0].settings.maxTokens).toBe(4096);
     });
 
     it('updateAgentConfig calls real API endpoint', async () => {
-      const updatedConfig = {
+      // Backend returns snake_case format
+      const backendResponse = {
         role: 'discovery',
         provider: 'anthropic',
         model: 'claude-opus-4',
-        settings: {},
+        api_key_id: 'key-1',
+        settings: { temperature: 0.7, max_tokens: 4096 },
+        enabled: true,
       };
-      vi.mocked(apiClient.put).mockResolvedValue(mockApiResponse(updatedConfig));
+      vi.mocked(apiClient.put).mockResolvedValue(mockApiResponse(backendResponse));
 
       const result = await updateAgentConfig('discovery', { model: 'claude-opus-4' });
 
       expect(apiClient.put).toHaveBeenCalledWith('/llm/agents/discovery', { model: 'claude-opus-4' });
-      expect(result).toEqual(updatedConfig);
+      // Frontend receives camelCase format after transformation
+      expect(result.role).toBe('discovery');
+      expect(result.model).toBe('claude-opus-4');
+      expect(result.apiKeyId).toBe('key-1');
+      expect(result.settings.maxTokens).toBe(4096);
     });
   });
 

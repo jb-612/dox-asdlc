@@ -20,6 +20,7 @@ vi.mock('../components/llm', () => ({
   APIKeysSection: () => <div data-testid="api-keys-section">API Keys Section</div>,
   AgentConfigSection: () => <div data-testid="agent-config-section">Agent Config Section</div>,
   DataSourceToggle: () => <div data-testid="data-source-toggle">Data Source Toggle</div>,
+  IntegrationCredentialsSection: () => <div data-testid="integration-credentials-section">Integration Credentials Section</div>,
 }));
 
 // Default mock data
@@ -75,10 +76,18 @@ vi.mock('../api/llmConfig', () => ({
     isLoading: mockState.configsLoading,
     error: mockState.configsError,
   }),
+  useIntegrationCredentials: () => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  }),
   useAddAPIKey: () => ({ mutateAsync: vi.fn() }),
   useDeleteAPIKey: () => ({ mutateAsync: vi.fn() }),
   useTestAPIKey: () => ({ mutateAsync: vi.fn() }),
   useUpdateAgentConfig: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAddIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
   llmConfigQueryKeys: {
     all: ['llmConfig'],
     providers: () => ['llmConfig', 'providers'],
@@ -86,6 +95,11 @@ vi.mock('../api/llmConfig', () => ({
     allModels: () => ['llmConfig', 'allModels'],
     keys: () => ['llmConfig', 'keys'],
     agentConfigs: () => ['llmConfig', 'agentConfigs'],
+  },
+  integrationQueryKeys: {
+    all: ['integrations'],
+    credentials: () => ['integrations', 'credentials'],
+    credentialsByType: (type: string) => ['integrations', 'credentials', type],
   },
 }));
 

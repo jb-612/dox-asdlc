@@ -20,7 +20,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Documentation')).toBeInTheDocument();
     expect(screen.getByText('Agent Cockpit')).toBeInTheDocument();
-    expect(screen.getByText('Discovery Studio')).toBeInTheDocument();
+    expect(screen.getByText('Ideation Studio')).toBeInTheDocument();
     expect(screen.getByText('HITL Gates')).toBeInTheDocument();
     expect(screen.getByText('Artifacts')).toBeInTheDocument();
   });
@@ -66,8 +66,8 @@ describe('Sidebar', () => {
     const cockpitLink = screen.getByRole('link', { name: /agent cockpit/i });
     expect(cockpitLink).toHaveAttribute('href', '/cockpit');
 
-    const studioLink = screen.getByRole('link', { name: /discovery studio/i });
-    expect(studioLink).toHaveAttribute('href', '/studio');
+    const studioLink = screen.getByRole('link', { name: /ideation studio/i });
+    expect(studioLink).toHaveAttribute('href', '/studio/ideation');
 
     const gatesLink = screen.getByRole('link', { name: /hitl gates/i });
     expect(gatesLink).toHaveAttribute('href', '/gates');

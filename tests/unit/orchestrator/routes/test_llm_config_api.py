@@ -304,7 +304,7 @@ class TestUpdateAgentConfig:
             settings=AgentSettings(temperature=0.5, max_tokens=8192),
             enabled=False,
         )
-        mock_service.update_agent_config.return_value = updated_config
+        mock_service.partial_update_agent_config.return_value = updated_config
         
         response = client.put(
             "/api/llm/agents/debugger",
