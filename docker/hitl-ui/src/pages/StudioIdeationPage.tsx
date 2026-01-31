@@ -168,22 +168,24 @@ export default function StudioIdeationPage({ className }: StudioIdeationPageProp
   }, []);
 
   // Handle saving the new project name
-  const handleSaveProjectName = useCallback(async () => {
+  // Updates store immediately, then persists to backend in background
+  const handleSaveProjectName = useCallback(() => {
     if (!sessionId || !editNameValue.trim() || editNameValue.trim() === projectName) {
       setIsEditingName(false);
       return;
     }
 
-    setIsRenameSaving(true);
-    try {
-      await updateProject(sessionId, { projectName: editNameValue.trim() });
-      setProjectName(editNameValue.trim());
-      setIsEditingName(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename project');
-    } finally {
-      setIsRenameSaving(false);
-    }
+    const newName = editNameValue.trim();
+
+    // 1. Update store immediately (sync)
+    setProjectName(newName);
+    setIsEditingName(false);
+
+    // 2. Persist to backend in background (fire-and-forget)
+    updateProject(sessionId, { projectName: newName }).catch((err) => {
+      // Show error but don't revert - localStorage has the truth
+      setError(err instanceof Error ? err.message : 'Failed to save rename to server');
+    });
   }, [sessionId, editNameValue, projectName, setProjectName, setError]);
 
   // Handle key press in edit name input
