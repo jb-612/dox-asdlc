@@ -134,6 +134,11 @@ export interface Requirement {
 export type PRDStatus = 'draft' | 'pending_review' | 'approved';
 
 /**
+ * Ideation project status
+ */
+export type ProjectStatus = 'draft' | 'approved' | 'in_build' | 'closed';
+
+/**
  * Section within a PRD document
  */
 export interface PRDSection {
@@ -174,6 +179,21 @@ export interface UserStory {
 }
 
 // ============================================================================
+// Saved Project Types
+// ============================================================================
+
+/**
+ * Summary of a saved ideation project for listing
+ */
+export interface SavedProject {
+  sessionId: string;
+  projectName: string;
+  maturityScore: number;
+  status: ProjectStatus;
+  lastModified: string;                 // ISO 8601 format
+}
+
+// ============================================================================
 // Session Types
 // ============================================================================
 
@@ -206,6 +226,8 @@ export interface IdeationChatRequest {
   currentMaturity: number;
   model?: 'sonnet' | 'opus' | 'haiku';
   rlmEnabled?: boolean;
+  /** When true, use mock responses instead of real LLM */
+  useMock?: boolean;
 }
 
 /**

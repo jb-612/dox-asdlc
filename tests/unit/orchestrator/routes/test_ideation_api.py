@@ -621,3 +621,230 @@ class TestCamelCaseResponse:
         assert "soThat" in data["userStories"][0]
         assert "acceptanceCriteria" in data["userStories"][0]
         assert "linkedRequirements" in data["userStories"][0]
+
+
+class TestListSessionsEndpoint:
+    """Tests for GET /api/studio/ideation/sessions endpoint."""
+
+    def test_list_sessions_returns_empty_list(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test list sessions returns empty list when no sessions exist."""
+        mock_service.list_sessions.return_value = ([], 0)
+
+        response = client.get("/api/studio/ideation/sessions")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sessions"] == []
+        assert data["total"] == 0
+        assert data["limit"] == 20
+        assert data["offset"] == 0
+
+    def test_list_sessions_returns_sessions(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test list sessions returns session summaries."""
+        mock_service.list_sessions.return_value = (
+            [
+                {
+                    "id": "session-1",
+                    "project_name": "Project A",
+                    "status": "draft",
+                    "created_at": "2024-01-15T10:00:00+00:00",
+                    "updated_at": "2024-01-15T11:00:00+00:00",
+                    "message_count": 5,
+                    "maturity_score": 45.0,
+                },
+                {
+                    "id": "session-2",
+                    "project_name": "Project B",
+                    "status": "approved",
+                    "created_at": "2024-01-14T10:00:00+00:00",
+                    "updated_at": "2024-01-14T12:00:00+00:00",
+                    "message_count": 10,
+                    "maturity_score": 85.0,
+                },
+            ],
+            2,
+        )
+
+        response = client.get("/api/studio/ideation/sessions")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sessions"]) == 2
+        assert data["total"] == 2
+        assert data["sessions"][0]["id"] == "session-1"
+        assert data["sessions"][0]["projectName"] == "Project A"
+        assert data["sessions"][0]["messageCount"] == 5
+        assert data["sessions"][0]["maturityScore"] == 45.0
+
+    def test_list_sessions_with_user_id_filter(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test list sessions filters by user ID."""
+        mock_service.list_sessions.return_value = ([], 0)
+
+        response = client.get("/api/studio/ideation/sessions?user_id=user-123")
+
+        assert response.status_code == 200
+        mock_service.list_sessions.assert_called_once_with("user-123", 20, 0)
+
+    def test_list_sessions_with_pagination(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test list sessions respects pagination parameters."""
+        mock_service.list_sessions.return_value = ([], 0)
+
+        response = client.get("/api/studio/ideation/sessions?limit=10&offset=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["limit"] == 10
+        assert data["offset"] == 5
+        mock_service.list_sessions.assert_called_once_with("anonymous", 10, 5)
+
+    def test_list_sessions_service_error(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test list sessions handles service errors."""
+        mock_service.list_sessions.side_effect = Exception("Database error")
+
+        response = client.get("/api/studio/ideation/sessions")
+
+        assert response.status_code == 500
+
+
+class TestGetSessionEndpoint:
+    """Tests for GET /api/studio/ideation/sessions/{session_id} endpoint."""
+
+    def test_get_session_returns_full_details(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test get session returns full session details."""
+        from src.core.models.ideation import (
+            ChatMessage,
+            MessageRole,
+            MaturityCategory as DomainMaturityCategory,
+            MaturityState as DomainMaturityState,
+            ExtractedRequirement,
+            RequirementType,
+            RequirementPriority,
+        )
+        from datetime import datetime, timezone
+
+        mock_messages = [
+            ChatMessage(
+                id="msg-1",
+                session_id="session-123",
+                role=MessageRole.USER,
+                content="Hello",
+                timestamp=datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+                maturity_delta=0,
+            ),
+            ChatMessage(
+                id="msg-2",
+                session_id="session-123",
+                role=MessageRole.ASSISTANT,
+                content="Hi there!",
+                timestamp=datetime(2024, 1, 15, 10, 1, 0, tzinfo=timezone.utc),
+                maturity_delta=5,
+            ),
+        ]
+
+        mock_maturity = DomainMaturityState(
+            session_id="session-123",
+            score=45,
+            level="defined",
+            categories=[
+                DomainMaturityCategory(
+                    id="problem",
+                    name="Problem Statement",
+                    score=80,
+                    required_for_submit=True,
+                )
+            ],
+            can_submit=False,
+            gaps=["Functional Requirements"],
+        )
+
+        mock_requirements = [
+            ExtractedRequirement(
+                id="req-1",
+                session_id="session-123",
+                description="User can upload files",
+                type=RequirementType.FUNCTIONAL,
+                priority=RequirementPriority.MUST_HAVE,
+                category_id="functional",
+                created_at=datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc),
+            )
+        ]
+
+        mock_service.get_session.return_value = {
+            "id": "session-123",
+            "project_name": "Test Project",
+            "status": "draft",
+            "messages": mock_messages,
+            "maturity": mock_maturity,
+            "requirements": mock_requirements,
+            "created_at": "2024-01-15T10:00:00+00:00",
+            "updated_at": "2024-01-15T11:00:00+00:00",
+        }
+
+        response = client.get("/api/studio/ideation/sessions/session-123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "session-123"
+        assert data["projectName"] == "Test Project"
+        assert len(data["messages"]) == 2
+        assert data["messages"][0]["role"] == "user"
+        assert data["maturityState"]["score"] == 45
+        assert len(data["requirements"]) == 1
+        assert data["requirements"][0]["type"] == "functional"
+
+    def test_get_session_not_found(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test get session returns 404 for unknown session."""
+        mock_service.get_session.return_value = None
+
+        response = client.get("/api/studio/ideation/sessions/unknown-session")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_get_session_without_maturity(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test get session handles missing maturity state."""
+        from src.core.models.ideation import ChatMessage, MessageRole
+        from datetime import datetime, timezone
+
+        mock_service.get_session.return_value = {
+            "id": "session-123",
+            "project_name": "Test Project",
+            "status": "draft",
+            "messages": [],
+            "maturity": None,
+            "requirements": [],
+            "created_at": "2024-01-15T10:00:00+00:00",
+            "updated_at": "2024-01-15T11:00:00+00:00",
+        }
+
+        response = client.get("/api/studio/ideation/sessions/session-123")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["maturityState"] is None
+
+    def test_get_session_service_error(
+        self, client: TestClient, mock_service: AsyncMock
+    ) -> None:
+        """Test get session handles service errors."""
+        mock_service.get_session.side_effect = Exception("Database error")
+
+        response = client.get("/api/studio/ideation/sessions/session-123")
+
+        assert response.status_code == 500

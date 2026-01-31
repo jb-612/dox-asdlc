@@ -17,6 +17,8 @@ import type {
   PRDDocument,
   CategoryMaturity,
   MaturityLevel,
+  SavedProject,
+  ProjectStatus,
 } from '../../types/ideation';
 import { MATURITY_LEVELS, REQUIRED_CATEGORIES } from '../../types/ideation';
 
@@ -701,16 +703,59 @@ export async function getMockSessionMaturity(sessionId: string): Promise<Maturit
 // Draft Storage (in-memory for mock)
 // ============================================================================
 
-const mockDrafts: Map<
-  string,
-  {
-    messages: IdeationMessage[];
-    maturity: MaturityState;
-    requirements: Requirement[];
-    projectName: string;
-    lastModified: string;
-  }
-> = new Map();
+interface MockDraft {
+  messages: IdeationMessage[];
+  maturity: MaturityState;
+  requirements: Requirement[];
+  projectName: string;
+  status: ProjectStatus;
+  dataSource: 'mock' | 'configured';
+  lastModified: string;
+}
+
+const mockDrafts: Map<string, MockDraft> = new Map();
+
+// Seed with some example projects for demo purposes
+function initializeMockDrafts() {
+  if (mockDrafts.size > 0) return;
+
+  const now = new Date();
+  const daysAgo = (days: number) =>
+    new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  mockDrafts.set('demo-auth-system', {
+    messages: mockChatHistory,
+    maturity: mockMaturityStates.complete,
+    requirements: mockRequirements,
+    projectName: 'Authentication System',
+    status: 'approved',
+    dataSource: 'configured',
+    lastModified: daysAgo(2),
+  });
+
+  mockDrafts.set('demo-inventory-mgmt', {
+    messages: [mockChatHistory[0], mockChatHistory[1]],
+    maturity: mockMaturityStates.exploration,
+    requirements: [mockRequirements[0]],
+    projectName: 'Inventory Management',
+    status: 'draft',
+    dataSource: 'mock',
+    lastModified: daysAgo(1),
+  });
+
+  mockDrafts.set('demo-notification-service', {
+    messages: mockChatHistory.slice(0, 4),
+    maturity: mockMaturityStates.defined,
+    requirements: mockRequirements.slice(0, 3),
+    projectName: 'Notification Service',
+    status: 'in_build',
+    dataSource: 'configured',
+    lastModified: daysAgo(5),
+  });
+}
+
+// Initialize on module load
+initializeMockDrafts();
 
 /**
  * Save mock draft
@@ -721,14 +766,30 @@ export async function saveMockDraft(
     messages: IdeationMessage[];
     maturity: MaturityState;
     requirements: Requirement[];
+    projectName?: string;
+    status?: ProjectStatus;
+    dataSource?: 'mock' | 'configured';
   }
 ): Promise<void> {
   await delay(200);
+  const existing = mockDrafts.get(sessionId);
+  const projectName = draft.projectName || existing?.projectName || 'Untitled Project';
+  const status = draft.status || existing?.status || 'draft';
+  const dataSource = draft.dataSource || existing?.dataSource || 'mock';
+
+  console.log('[Mock] Saving draft:', sessionId, projectName, status, dataSource);
+
   mockDrafts.set(sessionId, {
-    ...draft,
-    projectName: 'Mock Project',
+    messages: draft.messages,
+    maturity: draft.maturity,
+    requirements: draft.requirements,
+    projectName,
+    status,
+    dataSource,
     lastModified: new Date().toISOString(),
   });
+
+  console.log('[Mock] Total drafts after save:', mockDrafts.size);
 }
 
 /**
@@ -740,14 +801,22 @@ export async function loadMockDraft(
   messages: IdeationMessage[];
   maturity: MaturityState;
   requirements: Requirement[];
+  projectName: string;
+  status: ProjectStatus;
+  dataSource: 'mock' | 'configured';
 } | null> {
   await delay(200);
+  // Initialize if needed
+  initializeMockDrafts();
   const draft = mockDrafts.get(sessionId);
   if (!draft) return null;
   return {
     messages: draft.messages,
     maturity: draft.maturity,
     requirements: draft.requirements,
+    projectName: draft.projectName,
+    status: draft.status,
+    dataSource: draft.dataSource,
   };
 }
 
@@ -762,19 +831,15 @@ export async function deleteMockDraft(sessionId: string): Promise<void> {
 /**
  * List mock drafts
  */
-export async function listMockDrafts(): Promise<
-  Array<{
-    sessionId: string;
-    projectName: string;
-    maturityScore: number;
-    lastModified: string;
-  }>
-> {
+export async function listMockDrafts(): Promise<SavedProject[]> {
   await delay(200);
+  // Initialize if needed
+  initializeMockDrafts();
   return Array.from(mockDrafts.entries()).map(([sessionId, draft]) => ({
     sessionId,
     projectName: draft.projectName,
     maturityScore: draft.maturity.score,
+    status: draft.status,
     lastModified: draft.lastModified,
   }));
 }
