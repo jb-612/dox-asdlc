@@ -655,6 +655,188 @@ class TestDelete:
                 await store.delete("")
 
 
+class TestBuildFilter:
+    """Tests for _build_filter method."""
+
+    def test_build_filter_empty(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter with empty filters returns empty list."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({})
+
+            assert result == []
+
+    def test_build_filter_single_value(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter with single value uses term query."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"type": "reference"})
+
+            assert len(result) == 1
+            assert result[0] == {"term": {"metadata.type.keyword": "reference"}}
+
+    def test_build_filter_list_value(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter with list value uses terms query."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"status": ["active", "pending"]})
+
+            assert len(result) == 1
+            assert result[0] == {"terms": {"metadata.status.keyword": ["active", "pending"]}}
+
+    def test_build_filter_file_types_mapping(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter maps file_types to file_type."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"file_types": ["py", "js"]})
+
+            assert len(result) == 1
+            # API sends file_types (plural), ES doc uses file_type (singular)
+            assert result[0] == {"terms": {"metadata.file_type.keyword": ["py", "js"]}}
+
+    def test_build_filter_date_from(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter handles date_from with range query."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"date_from": "2024-01-01"})
+
+            assert len(result) == 1
+            assert result[0] == {"range": {"metadata.indexed_at": {"gte": "2024-01-01"}}}
+
+    def test_build_filter_date_to(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter handles date_to with range query."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"date_to": "2024-12-31"})
+
+            assert len(result) == 1
+            assert result[0] == {"range": {"metadata.indexed_at": {"lte": "2024-12-31"}}}
+
+    def test_build_filter_date_range_combined(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter combines date_from and date_to into single range query."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({
+                "date_from": "2024-01-01",
+                "date_to": "2024-12-31"
+            })
+
+            assert len(result) == 1
+            assert result[0] == {
+                "range": {
+                    "metadata.indexed_at": {
+                        "gte": "2024-01-01",
+                        "lte": "2024-12-31"
+                    }
+                }
+            }
+
+    def test_build_filter_mixed_filters(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter with mixed filter types."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({
+                "file_types": ["py", "js"],
+                "author": "john",
+                "date_from": "2024-01-01",
+                "date_to": "2024-06-30"
+            })
+
+            # Should have 3 filter clauses: file_type terms, author term, date range
+            assert len(result) == 3
+
+            # Check file_types mapped to file_type
+            file_type_filter = next(
+                (f for f in result if "terms" in f and "metadata.file_type.keyword" in f["terms"]),
+                None
+            )
+            assert file_type_filter == {"terms": {"metadata.file_type.keyword": ["py", "js"]}}
+
+            # Check author term filter
+            author_filter = next(
+                (f for f in result if "term" in f and "metadata.author.keyword" in f["term"]),
+                None
+            )
+            assert author_filter == {"term": {"metadata.author.keyword": "john"}}
+
+            # Check date range filter
+            date_filter = next(
+                (f for f in result if "range" in f),
+                None
+            )
+            assert date_filter == {
+                "range": {
+                    "metadata.indexed_at": {
+                        "gte": "2024-01-01",
+                        "lte": "2024-06-30"
+                    }
+                }
+            }
+
+    def test_build_filter_passthrough_unknown_keys(self, mock_dependencies, mock_config) -> None:
+        """Test _build_filter passes through unknown filter keys unchanged."""
+        from src.infrastructure.knowledge_store.elasticsearch_store import (
+            ElasticsearchStore,
+        )
+
+        with patch("src.core.config.get_tenant_config") as mock_tenant_config:
+            mock_tenant_config.return_value.enabled = False
+
+            store = ElasticsearchStore(mock_config)
+            result = store._build_filter({"custom_field": "value"})
+
+            assert len(result) == 1
+            assert result[0] == {"term": {"metadata.custom_field.keyword": "value"}}
+
+
 class TestHealthCheck:
     """Tests for health_check method."""
 

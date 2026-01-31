@@ -1,11 +1,11 @@
 /**
- * MemoryChart - Line chart for memory usage percentage
+ * MemoryChart - Line chart for memory usage in MB
  *
  * Features:
  * - Recharts LineChart with responsive container
- * - Y-axis 0-100% scale
+ * - Y-axis auto-scales to data range in MB
  * - Purple color to distinguish from CPU chart
- * - Custom tooltip with timestamp and percentage
+ * - Custom tooltip with timestamp and MB value
  * - Loading skeleton and empty states
  */
 
@@ -76,7 +76,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
           className="w-3 h-3 rounded-full"
           style={{ backgroundColor: CHART_COLORS.memory }}
         />
-        <span className="text-[#c9d1d9]">Memory: {data.value.toFixed(1)}%</span>
+        <span className="text-[#c9d1d9]">Memory: {data.value.toFixed(1)} MB</span>
       </div>
     </div>
   );
@@ -153,8 +153,8 @@ export default function MemoryChart({
             fontSize={11}
             tickLine={false}
             axisLine={false}
-            domain={[0, 100]}
-            tickFormatter={(value) => `${value}%`}
+            domain={['dataMin - 5', 'dataMax + 5']}
+            tickFormatter={(value) => `${Math.round(value)}`}
             width={45}
           />
           <Tooltip content={<CustomTooltip />} />

@@ -1,7 +1,31 @@
-# aSDLC Docker Compose - Four Container Topology
+# aSDLC Docker Compose - Multi Container Topology
 # See docs/System_Design.md Section 4.1 for architecture details
 
 services:
+  # Container 0: PostgreSQL Database
+  # - Persistent storage for ideation sessions and related data
+  # - Used by orchestrator for persistence layer
+  postgres:
+    image: postgres:16-alpine
+    container_name: asdlc-postgres
+    hostname: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-asdlc_ideation}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-asdlc_ideation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdlc-network
+
   # Container 1: Orchestrator and Governance
   # - Exclusive Git write access to protected branches
   # - Runs Manager Agent and governance services
@@ -22,6 +46,16 @@ services:
       - GIT_WRITE_ACCESS=true
       - KNOWLEDGE_STORE_BACKEND=elasticsearch
       - ELASTICSEARCH_URL=http://elasticsearch:9200
+      # Stable encryption key for API key storage (survives container restarts)
+      - LLM_CONFIG_ENCRYPTION_KEY=za4k9itJgd8wPic7VjUuXlhsj0yBqGNnA81dPJbZ57s=
+      # PostgreSQL persistence layer configuration
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-asdlc_ideation}
+      - POSTGRES_USER=${POSTGRES_USER:?POSTGRES_USER is required}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - IDEATION_PERSISTENCE_BACKEND=postgres
+      - POSTGRES_SSL_MODE=prefer
     volumes:
       - ../:/app/workspace:rw
       - git-credentials:/app/.git-credentials:ro
@@ -29,6 +63,8 @@ services:
       redis:
         condition: service_healthy
       elasticsearch:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -158,6 +194,8 @@ services:
     build:
       context: ..
       dockerfile: docker/hitl-ui/Dockerfile
+      args:
+        - VITE_USE_MOCKS=true
     container_name: asdlc-hitl-ui
     hostname: hitl-ui
     ports:
@@ -188,6 +226,8 @@ networks:
     name: asdlc-network
 
 volumes:
+  postgres-data:
+    name: asdlc-postgres-data
   redis-data:
     name: asdlc-redis-data
   elasticsearch-data:

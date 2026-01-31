@@ -320,17 +320,20 @@ async def get_cpu_metrics(
     service: str | None = Query(None, description="Service name filter"),
     range: str = Query("1h", description="Time range (15m, 1h, 6h, 24h, 7d)"),
 ) -> VMMetricsTimeSeries:
-    """Get CPU usage time series."""
+    """Get CPU usage time series.
+
+    Uses rate(process_cpu_seconds_total) * 100 to get CPU percentage.
+    """
     start, end, step = get_time_range(range)
 
-    # Build PromQL query - use asdlc_process_cpu_percent (already percentage)
+    # Build PromQL query - use rate of process_cpu_seconds_total converted to percentage
     if service:
-        query = f'asdlc_process_cpu_percent{{service="{service}"}}'
+        query = f'rate(process_cpu_seconds_total{{service="{service}"}}[5m]) * 100'
     else:
-        query = 'avg(asdlc_process_cpu_percent)'
+        query = 'avg(rate(process_cpu_seconds_total[5m])) * 100'
 
     data = await query_victoriametrics(query, start, end, step)
-    return parse_vm_response(data, "asdlc_process_cpu_percent", service)
+    return parse_vm_response(data, "process_cpu_percent", service)
 
 
 @router.get("/memory", response_model=VMMetricsTimeSeries)
@@ -338,17 +341,20 @@ async def get_memory_metrics(
     service: str | None = Query(None, description="Service name filter"),
     range: str = Query("1h", description="Time range (15m, 1h, 6h, 24h, 7d)"),
 ) -> VMMetricsTimeSeries:
-    """Get memory usage time series."""
+    """Get memory usage time series.
+
+    Uses process_resident_memory_bytes converted to megabytes for readability.
+    """
     start, end, step = get_time_range(range)
 
-    # Build PromQL query - use asdlc_process_memory_bytes with type="rss"
+    # Build PromQL query - use process_resident_memory_bytes (RSS memory)
     if service:
-        query = f'asdlc_process_memory_bytes{{type="rss", service="{service}"}}'
+        query = f'process_resident_memory_bytes{{service="{service}"}} / 1024 / 1024'
     else:
-        query = 'sum(asdlc_process_memory_bytes{type="rss"})'
+        query = 'sum(process_resident_memory_bytes) / 1024 / 1024'
 
     data = await query_victoriametrics(query, start, end, step)
-    return parse_vm_response(data, "asdlc_process_memory_bytes", service)
+    return parse_vm_response(data, "process_memory_mb", service)
 
 
 @router.get("/requests", response_model=VMMetricsTimeSeries)

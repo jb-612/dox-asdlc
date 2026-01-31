@@ -47,10 +47,14 @@ app.get('/health', (req, res) => {
 });
 
 // Proxy /api requests to orchestrator backend
+// The mount path '/api' is stripped by Express, so we target /api on backend
 app.use('/api', createProxyMiddleware({
-  target: API_BACKEND_URL,
+  target: `${API_BACKEND_URL}/api`,
   changeOrigin: true,
   timeout: 30000,
+  onProxyReq: (proxyReq, req) => {
+    console.log(`[${SERVICE_NAME}] Proxying: ${req.method} ${req.originalUrl} -> ${API_BACKEND_URL}/api${req.url}`);
+  },
   onError: (err, req, res) => {
     console.error(`[${SERVICE_NAME}] Proxy error:`, err.message);
     res.status(502).json({ error: 'Backend unavailable', message: err.message });

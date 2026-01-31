@@ -11,16 +11,33 @@ This project uses Claude Code CLI for development. The workflow enforces plannin
 - Python 3.11+
 - Claude Code CLI installed and authenticated
 - Docker 24+ (for local development)
-- Kubernetes + Helm 3+ (for k8s deployment)
+- Kubernetes + Helm 3+ (optional, for K8s testing)
+- gcloud CLI (optional, for remote environments)
 
-**Local Development (Docker Compose):**
+## Environment Tiers
+
+| Tier | Platform | Use Case | Speed |
+|------|----------|----------|-------|
+| **Local Dev** | Docker Compose | Daily development | Fast |
+| **Local Staging** | K8s (minikube) | Helm/K8s testing | Slow |
+| **Remote Lab** | GCP Cloud Run | Demos | Fast |
+| **Remote Staging** | GCP GKE | Pre-production | Slow |
+
+See `docs/environments/README.md` for detailed guides.
+
+**Local Development (Docker Compose) - Recommended:**
 
 ```bash
 # Clone and enter project
 cd dox-asdlc
 
-# Start infrastructure
-docker compose -f docker/docker-compose.yml up -d
+# Start all services
+cd docker && docker compose up -d
+
+# Access services
+# HITL UI: http://localhost:3000
+# API: http://localhost:8080
+# Metrics: http://localhost:8428
 
 # Create a new feature
 ./scripts/new-feature.sh P01 F02 "feature-name"
@@ -32,17 +49,17 @@ docker compose -f docker/docker-compose.yml up -d
 ./scripts/check-completion.sh P01-F02-feature-name
 ```
 
-**Kubernetes Development (Minikube):**
+**Local Staging (Minikube) - For K8s testing:**
 
 ```bash
 # Start local cluster
-./scripts/k8s/start-minikube.sh
+minikube start -p dox-asdlc --cpus=4 --memory=8192
 
-# Build and load images into minikube
+# Build and load images
 ./scripts/build-images.sh --minikube
 
 # Deploy via Helm
-./scripts/k8s/deploy.sh
+helm upgrade --install dox-asdlc ./helm/dox-asdlc -n dox-asdlc --create-namespace
 
 # Verify
 kubectl get pods -n dox-asdlc
@@ -121,27 +138,42 @@ dox-asdlc/
 ./scripts/coordination/ack-message.sh <message-id>
 ```
 
-## Kubernetes Deployment
+## Remote Deployments
 
-For production-like deployments, the system supports Kubernetes via Helm:
+### Remote Lab (GCP Cloud Run)
+
+Quick serverless deployment for demos:
 
 ```bash
-# Start local Kubernetes cluster (minikube)
-./scripts/k8s/start-minikube.sh
+export PROJECT_ID=your-project-id
 
-# Deploy all services via Helm
-./scripts/k8s/deploy.sh
+# Build and push images
+gcloud auth configure-docker
+docker build -t gcr.io/$PROJECT_ID/orchestrator -f docker/orchestrator/Dockerfile .
+docker push gcr.io/$PROJECT_ID/orchestrator
 
-# Or deploy manually with Helm
-helm upgrade --install dox-asdlc ./helm/dox-asdlc -f helm/dox-asdlc/values-minikube.yaml
-
-# Verify deployment
-kubectl get pods -n dox-asdlc
-kubectl get services -n dox-asdlc
-
-# Teardown
-./scripts/k8s/teardown.sh
+# Deploy to Cloud Run
+gcloud run deploy orchestrator --image gcr.io/$PROJECT_ID/orchestrator --allow-unauthenticated
 ```
+
+See `docs/environments/remote-lab.md` for full guide.
+
+### Remote Staging (GCP GKE)
+
+Production-like Kubernetes environment:
+
+```bash
+export PROJECT_ID=your-project-id
+export CLUSTER_NAME=dox-staging
+
+# Get cluster credentials
+gcloud container clusters get-credentials $CLUSTER_NAME --region us-central1
+
+# Deploy via Helm
+helm upgrade --install dox-asdlc ./helm/dox-asdlc -n dox-staging
+```
+
+See `docs/environments/remote-staging.md` for full guide.
 
 ### Plane CE (Project Management)
 
@@ -151,30 +183,17 @@ Optionally deploy Plane Community Edition for project/task management:
 # Deploy Plane CE alongside aSDLC
 ./scripts/k8s/deploy.sh --with-plane
 
-# Or deploy Plane CE separately
-./scripts/k8s/deploy-plane.sh
-
 # Access Plane CE UI (minikube)
 minikube service plane-app-web -n plane-ce --url
-
-# Remove Plane CE
-./scripts/k8s/teardown-plane.sh
 ```
-
-**First-time Plane CE setup:**
-1. Open the web UI using the URL from the command above
-2. Create an admin account
-3. Set up your workspace
-4. Create your first project
-
-**Resource requirements:** Plane CE requires additional resources. Recommended minikube configuration: 4 CPUs, 8GB RAM.
 
 ## Documentation
 
-- [System Design](docs/System_Design.md) - Technical architecture
+- [Environment Tiers](docs/environments/README.md) - Local Dev, Staging, Remote environments
 - [Main Features](docs/Main_Features.md) - Feature specifications
 - [User Stories](docs/User_Stories.md) - Epic-level requirements
-- [BRD HTML Diagram](docs/BRD_HTML_Diagram.md) - Blueprint visualization
+- [K8s Service Access](docs/K8s_Service_Access.md) - Kubernetes networking architecture
+- [VictoriaMetrics Monitoring](docs/VictoriaMetrics_Monitoring.md) - Metrics and observability
 
 ## License
 

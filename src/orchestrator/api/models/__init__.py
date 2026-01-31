@@ -32,6 +32,16 @@ from src.orchestrator.api.models.service_health import (
     ServicesHealthResponse,
     ServiceSparklineResponse,
 )
+from src.orchestrator.api.models.llm_config import (
+    AgentLLMConfig,
+    AgentRole,
+    AgentSettings,
+    APIKey,
+    APIKeyCreate,
+    LLMConfigResponse,
+    LLMModel,
+    LLMProvider,
+)
 
 __all__ = [
     # DevOps activity models
@@ -63,4 +73,13 @@ __all__ = [
     "SparklineDataPoint",
     "ServicesHealthResponse",
     "ServiceSparklineResponse",
+    # LLM config models
+    "AgentLLMConfig",
+    "AgentRole",
+    "AgentSettings",
+    "APIKey",
+    "APIKeyCreate",
+    "LLMConfigResponse",
+    "LLMModel",
+    "LLMProvider",
 ]

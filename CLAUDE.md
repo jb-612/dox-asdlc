@@ -101,6 +101,26 @@ gh issue close <num>             # Close resolved issue
 | contract-update | API contract changes |
 | diagram-builder | Mermaid diagrams |
 
+## Environment Tiers
+
+The project uses a tiered environment strategy:
+
+| Tier | Platform | Use Case |
+|------|----------|----------|
+| **Local Dev** | Docker Compose | Rapid iteration (recommended for daily dev) |
+| **Local Staging** | K8s (minikube) | Helm chart testing |
+| **Remote Lab** | GCP Cloud Run | Demos |
+| **Remote Staging** | GCP GKE | Pre-production |
+
+**Quick Start (Local Dev):**
+```bash
+cd docker && docker compose up -d
+# UI: http://localhost:3000
+# API: http://localhost:8080
+```
+
+See `docs/environments/README.md` for full environment guides.
+
 ## KnowledgeStore MCP
 
 The project includes a semantic search MCP for exploring the indexed codebase.
@@ -133,16 +153,19 @@ ks_get doc_id="src/core/interfaces.py:0"
 
 ### Configuration
 
-The MCP is configured in `.mcp.json` (user-specific, not committed). Requires Elasticsearch at localhost:9200.
+MCP servers connect to localhost services exposed by Docker Compose or K8s port-forwards:
+- **knowledge-store**: Elasticsearch at `localhost:9200`
+- **coordination**: Redis at `localhost:6379`
 
-**For K8s Services:** Start port-forwards for MCP access:
+**Local Dev (Docker Compose):** Services are automatically exposed on localhost.
+
+**K8s (minikube):** Start port-forwards for MCP access:
 ```bash
-./scripts/k8s/port-forward-mcp.sh all  # ES, Redis MCP, HITL UI
+./scripts/k8s/port-forward-mcp.sh all  # ES, Redis, HITL UI
 ```
-
-See `docs/K8s_Service_Access.md` for full architecture and options.
 
 ## Related Docs
 
-- @docs/System_Design.md - Architecture
+- @docs/environments/README.md - Environment tiers
 - @docs/Main_Features.md - Feature specs
+- @docs/K8s_Service_Access.md - K8s networking

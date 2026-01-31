@@ -153,6 +153,62 @@ export const mockDiagrams: DiagramMeta[] = [
     category: 'sequence',
     description: 'MCP tool call sequence diagram',
   },
+  {
+    id: '14-victoriametrics-monitoring',
+    title: 'VictoriaMetrics Monitoring',
+    filename: '14-victoriametrics-monitoring.mmd',
+    category: 'architecture',
+    description: 'Metrics collection and monitoring architecture',
+  },
+  {
+    id: '15-k8s-cluster-complete',
+    title: 'K8s Cluster Complete',
+    filename: '15-k8s-cluster-complete.mmd',
+    category: 'architecture',
+    description: 'Complete Kubernetes cluster topology',
+  },
+  {
+    id: '16-mcp-sidecar-pod-internals',
+    title: 'MCP Sidecar Pod Internals',
+    filename: '16-mcp-sidecar-pod-internals.mmd',
+    category: 'architecture',
+    description: 'MCP sidecar container internals',
+  },
+  {
+    id: '17-sequence-mcp-sidecar-lifecycle',
+    title: 'MCP Sidecar Lifecycle',
+    filename: '17-sequence-mcp-sidecar-lifecycle.mmd',
+    category: 'sequence',
+    description: 'MCP sidecar container lifecycle sequence',
+  },
+  {
+    id: '18-prometheus-annotation-scrape',
+    title: 'Prometheus Annotation Scrape',
+    filename: '18-prometheus-annotation-scrape.mmd',
+    category: 'architecture',
+    description: 'Prometheus scrape configuration via annotations',
+  },
+  {
+    id: '19-mcp-sidecar-helm-toggle',
+    title: 'MCP Sidecar Helm Toggle',
+    filename: '19-mcp-sidecar-helm-toggle.mmd',
+    category: 'architecture',
+    description: 'Helm values for MCP sidecar toggle',
+  },
+  {
+    id: '20-service-health-dashboard',
+    title: 'Service Health Dashboard',
+    filename: '20-service-health-dashboard.mmd',
+    category: 'architecture',
+    description: 'Service health monitoring dashboard components',
+  },
+  {
+    id: '21-devops-activity-coordination',
+    title: 'DevOps Activity Coordination',
+    filename: '21-devops-activity-coordination.mmd',
+    category: 'flow',
+    description: 'DevOps activity and deployment coordination flow',
+  },
 ];
 
 // ============================================================================
