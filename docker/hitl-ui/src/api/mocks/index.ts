@@ -137,7 +137,54 @@ export {
   delay as ideationDelay,
 } from './ideation';
 
+// Agent Activity Dashboard mocks (P05-F12)
+export {
+  mockAgents,
+  getMockAgents,
+  getMockAgentById,
+  getMockAgentLogs,
+  getMockAgentMetrics,
+  getMockAgentTimeline,
+  simulateAgentDelay,
+} from './agents';
+
 // Helper to check if mocks are enabled
 export function areMocksEnabled(): boolean {
   return import.meta.env.VITE_USE_MOCKS === 'true';
 }
+
+// LLM Admin Configuration mocks (P05-F13)
+export {
+  mockProviders,
+  getMockProviders,
+  mockModels,
+  getMockModels,
+  getMockAllModels,
+  getMockKeyModels,
+  getMockAPIKeys,
+  getMockAPIKeyById,
+  getMockAPIKeysByProvider,
+  addMockAPIKey,
+  deleteMockAPIKey,
+  testMockAPIKey,
+  getMockAgentConfigs,
+  getMockAgentConfig,
+  updateMockAgentConfig,
+  resetMockAgentConfigs,
+  resetAllLLMConfigMocks,
+  simulateLLMConfigDelay,
+  // Integration credentials
+  getMockIntegrationCredentials,
+  getMockIntegrationCredentialsByType,
+  getMockIntegrationCredentialById,
+  addMockIntegrationCredential,
+  deleteMockIntegrationCredential,
+  testMockIntegrationCredential,
+} from './llmConfig';
+
+// Brainflare Hub Ideas mocks (P08-F05)
+export {
+  mockIdeas,
+  generateMockIdea,
+  simulateIdeaDelay,
+} from './ideas';

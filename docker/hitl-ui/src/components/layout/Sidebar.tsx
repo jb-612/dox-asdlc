@@ -15,6 +15,8 @@ import {
   ServerIcon,
   MagnifyingGlassIcon,
   ChartBarIcon,
+  UserGroupIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -39,9 +41,11 @@ const navigationSections: NavSection[] = [
       { name: 'Documentation', href: '/docs', icon: DocumentTextIcon },
       { name: 'Knowledge Search', href: '/search', icon: MagnifyingGlassIcon },
       { name: 'Agent Cockpit', href: '/cockpit', icon: CpuChipIcon },
+      { name: 'Agent Activity', href: '/agents', icon: UserGroupIcon },
       { name: 'Kubernetes', href: '/k8s', icon: ServerIcon },
       { name: 'Metrics', href: '/metrics', icon: ChartBarIcon },
-      { name: 'Discovery Studio', href: '/studio', icon: ChatBubbleLeftRightIcon },
+      { name: 'Ideation Studio', href: '/studio/ideation', icon: LightBulbIcon },
+      { name: 'Brainflare Hub', href: '/brainflare', icon: SparklesIcon },
       { name: 'HITL Gates', href: '/gates', icon: ShieldCheckIcon },
       { name: 'Artifacts', href: '/artifacts', icon: FolderIcon },
     ],
@@ -52,6 +56,7 @@ const navigationSections: NavSection[] = [
     items: [
       { name: 'Rule Proposals', href: '/rules', icon: LightBulbIcon },
       { name: 'Budget', href: '/budget', icon: CurrencyDollarIcon, disabled: true },
+      { name: 'LLM Config', href: '/admin/llm', icon: Cog6ToothIcon },
       { name: 'Admin', href: '/admin', icon: Cog6ToothIcon, disabled: true },
     ],
   },

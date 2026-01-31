@@ -19,6 +19,9 @@ import RuleProposalsPage from "./pages/RuleProposalsPage";
 import K8sPage from "./pages/K8sPage";
 import MetricsPage from "./pages/MetricsPage";
 import SearchPage from "./pages/SearchPage";
+import AgentsDashboardPage from "./pages/AgentsDashboardPage";
+import LLMConfigPage from "./pages/LLMConfigPage";
+import BrainflareHubPage from "./pages/BrainflareHubPage";
 import { initMermaid } from "./config/mermaid";
 import { DevOpsNotificationBanner } from "./components/devops";
 import { useDevOpsActivity } from "./api/devops";
@@ -97,6 +100,7 @@ function App() {
           <Route path="cockpit/runs/:runId" element={<RunDetailPage />} />
           <Route path="k8s" element={<K8sPage />} />
           <Route path="metrics" element={<MetricsPage />} />
+          <Route path="agents" element={<AgentsDashboardPage />} />
           <Route path="artifacts" element={<ArtifactsPage />} />
           <Route path="artifacts/:artifactId" element={<ArtifactDetailPage />} />
           <Route path="docs" element={<DocsPage />} />
@@ -107,6 +111,8 @@ function App() {
           <Route path="studio/ideation" element={<StudioIdeationPage />} />
           <Route path="rules" element={<RuleProposalsPage />} />
           <Route path="search" element={<SearchPage />} />
+          <Route path="admin/llm" element={<LLMConfigPage />} />
+          <Route path="brainflare" element={<BrainflareHubPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

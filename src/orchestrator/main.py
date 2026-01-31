@@ -33,6 +33,12 @@ from src.orchestrator.api.routes.k8s import router as k8s_api_router
 from src.orchestrator.knowledge_store_api import create_knowledge_store_router
 from src.orchestrator.routes.metrics_api import router as metrics_api_router
 from src.orchestrator.routes.ideation_api import router as ideation_api_router
+from src.orchestrator.routes.agents_api import router as agents_api_router, ws_router as agents_ws_router
+from src.orchestrator.routes.llm_config_api import router as llm_config_router
+from src.orchestrator.routes.llm_streaming_api import router as llm_streaming_router
+from src.orchestrator.routes.integrations_api import router as integrations_router
+from src.orchestrator.routes.ideas_api import router as ideas_api_router
+from src.orchestrator.routes.correlation_api import router as correlation_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -97,11 +103,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"Infrastructure init failed (non-fatal): {e}")
 
+    # Initialize PostgreSQL database for ideation persistence
+    try:
+        backend = os.getenv("IDEATION_PERSISTENCE_BACKEND", "postgres")
+        if backend == "postgres":
+            from src.orchestrator.persistence.database import get_database
+            db = get_database()
+            await db.connect()
+            logger.info("PostgreSQL database connected")
+    except Exception as e:
+        logger.warning(f"Database connection failed (non-fatal): {e}")
+
     logger.info("Orchestrator service ready")
     yield
 
     # Shutdown
     logger.info("Orchestrator service stopping")
+
+    # Disconnect from PostgreSQL
+    try:
+        backend = os.getenv("IDEATION_PERSISTENCE_BACKEND", "postgres")
+        if backend == "postgres":
+            from src.orchestrator.persistence.database import get_database
+            db = get_database()
+            await db.disconnect()
+            logger.info("PostgreSQL database disconnected")
+    except Exception as e:
+        logger.warning(f"Database disconnect failed: {e}")
 
 
 def create_app() -> FastAPI:
@@ -181,6 +209,25 @@ def create_app() -> FastAPI:
     # Ideation Studio API endpoints (for PRD Ideation Studio)
     app.include_router(ideation_api_router)
 
+    # Agent Telemetry API endpoints (for agent activity monitoring)
+    app.include_router(agents_api_router)
+    app.include_router(agents_ws_router)  # WebSocket at /ws/agents
+
+    # LLM Configuration API endpoints (for LLM Admin settings)
+    app.include_router(llm_config_router)
+
+    # LLM Streaming API endpoints (for SSE streaming in Ideation Studio)
+    app.include_router(llm_streaming_router)
+
+    # Integration Credentials API endpoints (for Slack, Teams, GitHub)
+    app.include_router(integrations_router, prefix="/api")
+
+    # Ideas API endpoints (for Brainflare Hub)
+    app.include_router(ideas_api_router)
+
+    # Correlation API endpoints (for Brainflare Hub graph/linking)
+    app.include_router(correlation_api_router)
+
     return app
 
 
@@ -202,6 +249,12 @@ def main() -> None:
     logger.info(f"Metrics API: http://localhost:{port}/api/metrics/")
     logger.info(f"K8s API: http://localhost:{port}/api/k8s/")
     logger.info(f"Ideation API: http://localhost:{port}/api/studio/ideation/")
+    logger.info(f"Agents API: http://localhost:{port}/api/agents/")
+    logger.info(f"LLM Config API: http://localhost:{port}/api/llm/")
+    logger.info(f"LLM Streaming API: http://localhost:{port}/api/llm/stream")
+    logger.info(f"Integrations API: http://localhost:{port}/api/integrations/")
+    logger.info(f"Ideas API: http://localhost:{port}/api/brainflare/ideas")
+    logger.info(f"Correlation API: http://localhost:{port}/api/brainflare/correlations")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:
