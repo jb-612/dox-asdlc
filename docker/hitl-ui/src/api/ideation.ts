@@ -23,6 +23,8 @@ import type {
   IdeationMessage,
   Requirement,
   CategoryMaturity,
+  SavedProject,
+  ProjectStatus,
 } from '../types/ideation';
 import { MATURITY_LEVELS, REQUIRED_CATEGORIES } from '../types/ideation';
 
@@ -264,15 +266,18 @@ function transformToPRDSubmitRequest(frontend: PRDSubmission): {
 export async function sendIdeationMessage(
   request: IdeationChatRequest
 ): Promise<IdeationChatResponse> {
-  // Use mocks in development if enabled
-  if (areMocksEnabled()) {
+  // Use mocks if explicitly requested via useMock or environment variable
+  const shouldUseMock = request.useMock ?? areMocksEnabled();
+  if (shouldUseMock) {
     return mockIdeation.generateMockIdeationResponse(request);
   }
 
   try {
+    // Remove useMock from request before sending to backend
+    const { useMock, ...backendRequest } = request;
     const response = await apiClient.post<BackendChatResponse>(
       '/studio/ideation/chat',
-      request
+      backendRequest
     );
     return transformChatResponse(response.data);
   } catch (error) {
@@ -407,7 +412,7 @@ function transformToSaveDraftRequest(
  * Used for auto-save and manual draft saving.
  *
  * @param sessionId - The session ID
- * @param draft - Draft data including messages, maturity, and requirements
+ * @param draft - Draft data including messages, maturity, requirements, and project info
  * @throws Error if API call fails
  */
 export async function saveIdeationDraft(
@@ -416,6 +421,9 @@ export async function saveIdeationDraft(
     messages: IdeationMessage[];
     maturity: MaturityState;
     requirements: Requirement[];
+    projectName?: string;
+    status?: ProjectStatus;
+    dataSource?: 'mock' | 'configured';
   }
 ): Promise<void> {
   // Use mocks in development if enabled
@@ -424,8 +432,19 @@ export async function saveIdeationDraft(
   }
 
   try {
-    const backendRequest = transformToSaveDraftRequest(draft);
-    await apiClient.post(`/studio/ideation/${sessionId}/draft`, backendRequest);
+    const backendRequest = transformToSaveDraftRequest({
+      messages: draft.messages,
+      maturity: draft.maturity,
+      requirements: draft.requirements,
+    });
+    // Add projectName, status, and dataSource to request
+    const requestWithProjectInfo = {
+      ...backendRequest,
+      projectName: draft.projectName,
+      status: draft.status,
+      dataSource: draft.dataSource,
+    };
+    await apiClient.post(`/studio/ideation/${sessionId}/draft`, requestWithProjectInfo);
   } catch (error) {
     if (config.isDev) {
       console.error('[Ideation API] saveIdeationDraft failed:', error);
@@ -441,37 +460,76 @@ interface BackendLoadDraftResponse {
   messages: IdeationMessage[];
   maturityState: BackendMaturityState;
   extractedRequirements: Requirement[];
+  projectName?: string;
+  status?: ProjectStatus;
+  dataSource?: 'mock' | 'configured';
 }
 
 /**
  * Load a saved draft for a session.
  *
  * @param sessionId - The session ID to load
+ * @param useMock - Optional flag to use mock data (defaults to areMocksEnabled())
  * @returns Draft data or null if not found
  */
 export async function loadIdeationDraft(
-  sessionId: string
+  sessionId: string,
+  useMock?: boolean
 ): Promise<{
   messages: IdeationMessage[];
   maturity: MaturityState;
   requirements: Requirement[];
+  projectName: string;
+  status: ProjectStatus;
+  dataSource: 'mock' | 'configured';
 } | null> {
-  // Use mocks in development if enabled
-  if (areMocksEnabled()) {
+  // Use mocks if explicitly requested or if environment mocks are enabled
+  const shouldUseMock = useMock ?? areMocksEnabled();
+  if (shouldUseMock) {
     return mockIdeation.loadMockDraft(sessionId);
   }
 
   try {
-    const response = await apiClient.get<BackendLoadDraftResponse>(
-      `/studio/ideation/${sessionId}/draft`
-    );
+    // Use the new sessions endpoint
+    const response = await apiClient.get<{
+      id: string;
+      projectName: string;
+      status: string;
+      messages: IdeationMessage[];
+      maturityState: BackendMaturityState | null;
+      requirements: Requirement[];
+      createdAt: string;
+      updatedAt: string;
+    }>(`/studio/ideation/sessions/${sessionId}`);
+
+    // Transform maturity state if present
+    const maturity = response.data.maturityState
+      ? transformMaturityState(response.data.maturityState)
+      : {
+          score: 0,
+          level: MATURITY_LEVELS[0],
+          categories: REQUIRED_CATEGORIES.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            score: 0,
+            weight: cat.weight,
+            requiredForSubmit: true,
+            sections: [],
+          })),
+          canSubmit: false,
+          gaps: REQUIRED_CATEGORIES.map(c => c.id),
+        };
+
     return {
       messages: response.data.messages,
-      maturity: transformMaturityState(response.data.maturityState),
-      requirements: response.data.extractedRequirements,
+      maturity,
+      requirements: response.data.requirements,
+      projectName: response.data.projectName || 'Untitled Project',
+      status: (response.data.status as ProjectStatus) || 'draft',
+      dataSource: 'configured',
     };
   } catch (error: unknown) {
-    // Return null if draft not found (404)
+    // Return null if session not found (404)
     if (error && typeof error === 'object' && 'response' in error) {
       const axiosError = error as { response?: { status?: number } };
       if (axiosError.response?.status === 404) {
@@ -508,34 +566,71 @@ export async function deleteIdeationDraft(sessionId: string): Promise<void> {
 }
 
 /**
+ * Update project metadata (name, status).
+ *
+ * @param sessionId - The session ID to update
+ * @param updates - Object containing projectName and/or status
+ * @returns void
+ * @throws Error if API call fails
+ */
+export async function updateProject(
+  sessionId: string,
+  updates: { projectName?: string; status?: ProjectStatus }
+): Promise<void> {
+  // Use mocks in development if enabled
+  if (areMocksEnabled()) {
+    // For mock mode, just return successfully (state is managed locally)
+    return;
+  }
+
+  try {
+    await apiClient.patch(`/studio/ideation/sessions/${sessionId}`, updates);
+  } catch (error) {
+    if (config.isDev) {
+      console.error('[Ideation API] updateProject failed:', error);
+    }
+    throw error;
+  }
+}
+
+/**
  * List all saved drafts for the current user.
  *
+ * @param useMock - Optional flag to use mock data (defaults to areMocksEnabled())
  * @returns List of saved draft summaries
  * @throws Error if API call fails
  */
-export async function listIdeationDrafts(): Promise<
-  Array<{
-    sessionId: string;
-    projectName: string;
-    maturityScore: number;
-    lastModified: string;
-  }>
-> {
-  // Use mocks in development if enabled
-  if (areMocksEnabled()) {
+export async function listIdeationDrafts(useMock?: boolean): Promise<SavedProject[]> {
+  // Use mocks if explicitly requested or if environment mocks are enabled
+  const shouldUseMock = useMock ?? areMocksEnabled();
+  if (shouldUseMock) {
     return mockIdeation.listMockDrafts();
   }
 
   try {
-    const response = await apiClient.get<
-      Array<{
-        sessionId: string;
+    const response = await apiClient.get<{
+      sessions: Array<{
+        id: string;
         projectName: string;
+        status: string;
+        createdAt: string;
+        updatedAt: string;
+        messageCount: number;
         maturityScore: number;
-        lastModified: string;
-      }>
-    >('/studio/ideation/drafts');
-    return response.data;
+      }>;
+      total: number;
+      limit: number;
+      offset: number;
+    }>('/studio/ideation/sessions');
+
+    // Map backend response to SavedProject type
+    return response.data.sessions.map((item) => ({
+      sessionId: item.id,
+      projectName: item.projectName,
+      maturityScore: item.maturityScore,
+      status: item.status as ProjectStatus || 'draft',
+      lastModified: item.updatedAt,
+    }));
   } catch (error) {
     if (config.isDev) {
       console.error('[Ideation API] listIdeationDrafts failed:', error);

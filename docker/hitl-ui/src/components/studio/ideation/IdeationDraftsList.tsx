@@ -16,10 +16,14 @@ import {
   ArrowPathIcon,
   PlayIcon,
   ExclamationTriangleIcon,
+  CheckCircleIcon,
+  WrenchScrewdriverIcon,
+  ArchiveBoxIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import { listIdeationDrafts, deleteIdeationDraft, loadIdeationDraft } from '../../../api/ideation';
-import type { IdeationMessage, MaturityState, Requirement } from '../../../types/ideation';
+import type { IdeationMessage, MaturityState, Requirement, ProjectStatus, SavedProject } from '../../../types/ideation';
 
 export interface IdeationDraftsListProps {
   /** Callback when a draft is resumed */
@@ -29,61 +33,102 @@ export interface IdeationDraftsListProps {
     messages: IdeationMessage[];
     maturity: MaturityState;
     requirements: Requirement[];
+    status: ProjectStatus;
+    dataSource: 'mock' | 'configured';
   }) => void;
+  /** Whether to use mock data (from page-level toggle) */
+  useMock?: boolean;
   /** Custom class name */
   className?: string;
 }
 
-interface DraftSummary {
-  sessionId: string;
-  projectName: string;
-  maturityScore: number;
-  lastModified: string;
-}
+/**
+ * Status badge configuration
+ */
+const STATUS_CONFIG: Record<
+  ProjectStatus,
+  { label: string; bgColor: string; textColor: string; icon: React.ElementType }
+> = {
+  draft: {
+    label: 'Draft',
+    bgColor: 'bg-gray-100',
+    textColor: 'text-gray-700',
+    icon: DocumentTextIcon,
+  },
+  approved: {
+    label: 'Approved',
+    bgColor: 'bg-green-100',
+    textColor: 'text-green-700',
+    icon: CheckCircleIcon,
+  },
+  in_build: {
+    label: 'In Build',
+    bgColor: 'bg-blue-100',
+    textColor: 'text-blue-700',
+    icon: WrenchScrewdriverIcon,
+  },
+  closed: {
+    label: 'Closed',
+    bgColor: 'bg-purple-100',
+    textColor: 'text-purple-700',
+    icon: ArchiveBoxIcon,
+  },
+};
 
 export default function IdeationDraftsList({
   onResume,
+  useMock,
   className,
 }: IdeationDraftsListProps) {
   // State
-  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
+  const [drafts, setDrafts] = useState<SavedProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loadingDraft, setLoadingDraft] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Load drafts on mount
+  // Load drafts on mount and when refreshKey changes
   const loadDrafts = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await listIdeationDrafts();
+      console.log('[IdeationDraftsList] Loading drafts...');
+      const result = await listIdeationDrafts(useMock);
+      console.log('[IdeationDraftsList] Loaded drafts:', result.length);
       setDrafts(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load drafts');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [useMock]);
 
   useEffect(() => {
     loadDrafts();
-  }, [loadDrafts]);
+  }, [loadDrafts, refreshKey]);
+
+  // Handler for manual refresh
+  const handleRefresh = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   // Handle resume draft
   const handleResume = useCallback(
-    async (draft: DraftSummary) => {
+    async (draft: SavedProject) => {
       setLoadingDraft(draft.sessionId);
       try {
-        const data = await loadIdeationDraft(draft.sessionId);
+        const data = await loadIdeationDraft(draft.sessionId, useMock);
         if (data) {
           onResume({
             sessionId: draft.sessionId,
-            projectName: draft.projectName,
+            projectName: data.projectName,
             messages: data.messages,
             maturity: data.maturity,
             requirements: data.requirements,
+            status: data.status,
+            dataSource: data.dataSource,
           });
         }
       } catch (err) {
@@ -92,7 +137,7 @@ export default function IdeationDraftsList({
         setLoadingDraft(null);
       }
     },
-    [onResume]
+    [onResume, useMock]
   );
 
   // Handle delete draft
@@ -162,7 +207,7 @@ export default function IdeationDraftsList({
           <h3 className="text-lg font-medium text-text-primary">Saved Drafts</h3>
           <button
             type="button"
-            onClick={loadDrafts}
+            onClick={handleRefresh}
             className="p-1 text-text-muted hover:text-text-secondary"
             aria-label="Refresh drafts"
           >
@@ -189,7 +234,7 @@ export default function IdeationDraftsList({
           <h3 className="text-lg font-medium text-text-primary">Saved Drafts</h3>
           <button
             type="button"
-            onClick={loadDrafts}
+            onClick={handleRefresh}
             className="p-1 text-text-muted hover:text-text-secondary"
             aria-label="Refresh drafts"
           >
@@ -223,7 +268,7 @@ export default function IdeationDraftsList({
         </div>
         <button
           type="button"
-          onClick={loadDrafts}
+          onClick={handleRefresh}
           className="p-1 text-text-muted hover:text-text-secondary"
           aria-label="Refresh drafts"
         >
@@ -266,49 +311,66 @@ export default function IdeationDraftsList({
 
       {/* Drafts list */}
       <ul className="space-y-3" role="list">
-        {drafts.map((draft) => (
-          <li
-            key={draft.sessionId}
-            className="bg-bg-secondary rounded-lg p-4 border border-border-secondary hover:border-border-primary transition-colors"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <h4 className="text-base font-medium text-text-primary truncate">
-                  {draft.projectName}
-                </h4>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className={clsx('text-sm font-medium', getMaturityColor(draft.maturityScore))}>
-                    {draft.maturityScore}% maturity
-                  </span>
-                  <span className="text-sm text-text-muted">
-                    {formatDate(draft.lastModified)}
-                  </span>
+        {drafts.map((draft) => {
+          const statusConfig = STATUS_CONFIG[draft.status || 'draft'];
+          const StatusIcon = statusConfig.icon;
+
+          return (
+            <li
+              key={draft.sessionId}
+              className="bg-bg-secondary rounded-lg p-4 border border-border-secondary hover:border-border-primary transition-colors"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-medium text-text-primary truncate">
+                      {draft.projectName}
+                    </h4>
+                    <span
+                      className={clsx(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
+                        statusConfig.bgColor,
+                        statusConfig.textColor
+                      )}
+                    >
+                      <StatusIcon className="h-3 w-3" />
+                      {statusConfig.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className={clsx('text-sm font-medium', getMaturityColor(draft.maturityScore))}>
+                      {draft.maturityScore}% maturity
+                    </span>
+                    <span className="text-sm text-text-muted">
+                      {formatDate(draft.lastModified)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-4">
+                  <button
+                    type="button"
+                    onClick={() => handleResume(draft)}
+                    disabled={loadingDraft === draft.sessionId}
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    aria-label={`Resume ${draft.projectName}`}
+                  >
+                    <PlayIcon className="h-4 w-4" />
+                    {loadingDraft === draft.sessionId ? 'Loading...' : 'Resume'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(draft.sessionId)}
+                    disabled={deleteConfirm === draft.sessionId}
+                    className="p-1.5 text-text-muted hover:text-status-error disabled:opacity-50"
+                    aria-label={`Delete ${draft.projectName}`}
+                  >
+                    <TrashIcon className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 ml-4">
-                <button
-                  type="button"
-                  onClick={() => handleResume(draft)}
-                  disabled={loadingDraft === draft.sessionId}
-                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  aria-label={`Resume ${draft.projectName}`}
-                >
-                  <PlayIcon className="h-4 w-4" />
-                  {loadingDraft === draft.sessionId ? 'Loading...' : 'Resume'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm(draft.sessionId)}
-                  disabled={deleteConfirm === draft.sessionId}
-                  className="p-1.5 text-text-muted hover:text-status-error disabled:opacity-50"
-                  aria-label={`Delete ${draft.projectName}`}
-                >
-                  <TrashIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

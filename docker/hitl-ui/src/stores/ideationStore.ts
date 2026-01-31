@@ -10,6 +10,7 @@
  */
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type {
   IdeationMessage,
   MaturityState,
@@ -17,9 +18,13 @@ import type {
   UserStory,
   PRDDocument,
   PRDSubmissionResult,
+  ProjectStatus,
 } from '../types/ideation';
 import { createInitialMaturityState } from '../utils/maturityCalculator';
 import * as ideationApi from '../api/ideation';
+
+/** Data source for LLM calls */
+export type IdeationDataSource = 'mock' | 'configured';
 
 /**
  * Ideation store state interface
@@ -28,6 +33,10 @@ export interface IdeationState {
   // Session
   sessionId: string | null;
   projectName: string;
+  projectStatus: ProjectStatus;
+
+  // Data source for LLM calls
+  dataSource: IdeationDataSource;
 
   // Messages
   messages: IdeationMessage[];
@@ -50,6 +59,16 @@ export interface IdeationState {
 
   // Actions
   startSession: (projectName: string) => void;
+  loadSession: (data: {
+    sessionId: string;
+    projectName: string;
+    messages: IdeationMessage[];
+    maturity: MaturityState;
+    requirements: Requirement[];
+    status: ProjectStatus;
+    dataSource?: IdeationDataSource;
+  }) => void;
+  setDataSource: (source: IdeationDataSource) => void;
   addMessage: (message: Omit<IdeationMessage, 'id' | 'timestamp'>) => void;
   sendMessage: (content: string) => Promise<void>;
   updateMaturity: (update: Partial<MaturityState>) => void;
@@ -59,6 +78,8 @@ export interface IdeationState {
   submitForPRD: () => Promise<PRDSubmissionResult>;
   resetSession: () => void;
   setError: (error: string | null) => void;
+  setProjectStatus: (status: ProjectStatus) => void;
+  setProjectName: (name: string) => void;
 }
 
 /**
@@ -113,6 +134,8 @@ Let's start! **What problem are you trying to solve with this project?**`,
 const DEFAULT_STATE = {
   sessionId: null,
   projectName: '',
+  projectStatus: 'draft' as ProjectStatus,
+  dataSource: 'mock' as IdeationDataSource,
   messages: [],
   isLoading: false,
   maturity: createInitialMaturityState(),
@@ -127,7 +150,9 @@ const DEFAULT_STATE = {
 /**
  * Ideation store
  */
-export const useIdeationStore = create<IdeationState>((set, get) => ({
+export const useIdeationStore = create<IdeationState>()(
+  persist(
+    (set, get) => ({
   ...DEFAULT_STATE,
 
   /**
@@ -140,6 +165,7 @@ export const useIdeationStore = create<IdeationState>((set, get) => ({
     set({
       sessionId,
       projectName,
+      projectStatus: 'draft',
       messages: [welcomeMessage],
       maturity: createInitialMaturityState(),
       extractedRequirements: [],
@@ -149,6 +175,33 @@ export const useIdeationStore = create<IdeationState>((set, get) => ({
       isSubmitting: false,
       error: null,
     });
+  },
+
+  /**
+   * Load an existing session from saved draft
+   */
+  loadSession: (data) => {
+    set({
+      sessionId: data.sessionId,
+      projectName: data.projectName,
+      projectStatus: data.status,
+      dataSource: data.dataSource || 'mock',
+      messages: data.messages,
+      maturity: data.maturity,
+      extractedRequirements: data.requirements,
+      userStories: [],
+      prdDraft: null,
+      submittedGateId: null,
+      isSubmitting: false,
+      error: null,
+    });
+  },
+
+  /**
+   * Set data source for LLM calls
+   */
+  setDataSource: (source: IdeationDataSource) => {
+    set({ dataSource: source });
   },
 
   /**
@@ -170,7 +223,7 @@ export const useIdeationStore = create<IdeationState>((set, get) => ({
    * Send a message and get AI response
    */
   sendMessage: async (content: string) => {
-    const { sessionId, maturity, addMessage } = get();
+    const { sessionId, maturity, dataSource, addMessage } = get();
 
     if (!sessionId) {
       set({ error: 'No active session' });
@@ -184,11 +237,12 @@ export const useIdeationStore = create<IdeationState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Call API
+      // Call API with data source preference
       const response = await ideationApi.sendIdeationMessage({
         sessionId,
         message: content,
         currentMaturity: maturity.score,
+        useMock: dataSource === 'mock',
       });
 
       // Add assistant response
@@ -340,4 +394,36 @@ export const useIdeationStore = create<IdeationState>((set, get) => ({
   setError: (error: string | null) => {
     set({ error });
   },
-}));
+
+  /**
+   * Set project status
+   */
+  setProjectStatus: (status: ProjectStatus) => {
+    set({ projectStatus: status });
+  },
+
+  /**
+   * Set project name
+   */
+  setProjectName: (name: string) => {
+    set({ projectName: name });
+  },
+    }),
+    {
+      name: 'ideation-session',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        sessionId: state.sessionId,
+        projectName: state.projectName,
+        projectStatus: state.projectStatus,
+        dataSource: state.dataSource,
+        messages: state.messages,
+        maturity: state.maturity,
+        extractedRequirements: state.extractedRequirements,
+        userStories: state.userStories,
+        prdDraft: state.prdDraft,
+        submittedGateId: state.submittedGateId,
+      }),
+    }
+  )
+);
