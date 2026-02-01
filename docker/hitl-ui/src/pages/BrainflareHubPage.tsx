@@ -103,12 +103,12 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
       {/* Main Content - 3 Column Layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Ideas List */}
-        <div className="w-1/3 border-r border-border-primary bg-bg-primary">
+        <div className="w-72 min-w-72 border-r border-border-primary bg-bg-primary overflow-y-auto">
           <IdeasListPanel />
         </div>
 
         {/* Center Panel - Snowflake Graph (P08-F06) */}
-        <div className="flex-1 bg-bg-tertiary relative">
+        <div className="flex-1 min-w-0 bg-bg-tertiary relative">
           <SnowflakeGraph className="w-full h-full" />
           <div className="absolute top-4 right-4 w-64 bg-bg-primary rounded-lg shadow-lg border border-border-primary">
             <GraphControls onRefresh={handleRefreshGraph} />
@@ -116,7 +116,7 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
         </div>
 
         {/* Right Panel - Detail or Form */}
-        <div className="w-1/3 border-l border-border-primary bg-bg-primary">
+        <div className="w-80 min-w-80 border-l border-border-primary bg-bg-primary overflow-y-auto">
           {isFormOpen ? (
             <div className="p-4">
               <h2 className="text-lg font-semibold text-text-primary mb-4">
