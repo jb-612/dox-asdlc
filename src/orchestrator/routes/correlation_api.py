@@ -231,6 +231,9 @@ async def delete_correlation(
 async def get_graph() -> GraphResponse:
     """Get full graph data for visualization.
 
+    Returns all ideas as nodes, with edges for correlations.
+    Ideas appear even without correlations (isolated nodes).
+
     Returns:
         Graph data containing nodes (ideas) and edges (correlations).
 
@@ -240,81 +243,67 @@ async def get_graph() -> GraphResponse:
     graph_store = _get_graph_store()
     ideas_service = _get_ideas_service()
 
-    if graph_store is None or ideas_service is None:
-        # Mock mode - return sample graph
-        return GraphResponse(
-            nodes=[
-                GraphNode(
-                    id="idea-001",
-                    label="Add dark mode",
-                    classification="functional",
-                    labels=["ui"],
-                    degree=1,
+    # Get ALL ideas from the ideas service
+    all_ideas = []
+    if ideas_service:
+        try:
+            ideas_list, _ = await ideas_service.list_ideas(limit=500)
+            all_ideas = ideas_list
+        except Exception as e:
+            logger.warning(f"Failed to fetch ideas: {e}")
+
+    # Get edges from graph store or mock correlations
+    edges = []
+    if graph_store is None:
+        # Mock mode - use MOCK_CORRELATIONS list
+        for corr in MOCK_CORRELATIONS:
+            edges.append(
+                GraphEdge(
+                    id=corr.id,
+                    source=corr.source_idea_id,
+                    target=corr.target_idea_id,
+                    correlation_type=corr.correlation_type,
+                )
+            )
+    else:
+        # Real mode - get from graph store
+        try:
+            _, raw_edges = await graph_store.get_graph()
+            edges = [
+                GraphEdge(
+                    id=e.get("id", f"edge-{e['source'][:6]}-{e['target'][:6]}"),
+                    source=e["source"],
+                    target=e["target"],
+                    correlation_type=CorrelationType(e["edge_type"]),
+                )
+                for e in raw_edges
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to get edges from graph store: {e}")
+
+    # Build nodes from ALL ideas
+    nodes = []
+    for idea in all_ideas:
+        # Count degree from edges
+        degree = sum(
+            1 for e in edges if e.source == idea.id or e.target == idea.id
+        )
+        nodes.append(
+            GraphNode(
+                id=idea.id,
+                label=(
+                    idea.content[:50] + "..."
+                    if len(idea.content) > 50
+                    else idea.content
                 ),
-                GraphNode(
-                    id="idea-002",
-                    label="Implement caching",
-                    classification="non_functional",
-                    labels=["performance"],
-                    degree=1,
-                ),
-            ],
-            edges=(
-                [
-                    GraphEdge(
-                        id="corr-001",
-                        source="idea-001",
-                        target="idea-002",
-                        correlation_type=CorrelationType.RELATED,
-                    ),
-                ]
-                if MOCK_CORRELATIONS
-                else []
-            ),
+                classification=idea.classification.value,
+                labels=idea.labels,
+                degree=degree,
+            )
         )
 
-    try:
-        # Get graph structure from Redis
-        raw_nodes, raw_edges = await graph_store.get_graph()
+    # If no ideas found (service unavailable), fall back to minimal mock
+    if not nodes:
+        logger.warning("No ideas found, returning empty graph")
 
-        # Get idea details for node labels
-        node_ids = [n["id"] for n in raw_nodes]
-        nodes = []
-        for node_id in node_ids:
-            idea = await ideas_service.get_idea(node_id)
-            if idea:
-                # Count degree from edges
-                degree = sum(
-                    1
-                    for e in raw_edges
-                    if e["source"] == node_id or e["target"] == node_id
-                )
-                nodes.append(
-                    GraphNode(
-                        id=idea.id,
-                        label=(
-                            idea.content[:50] + "..."
-                            if len(idea.content) > 50
-                            else idea.content
-                        ),
-                        classification=idea.classification.value,
-                        labels=idea.labels,
-                        degree=degree,
-                    )
-                )
-
-        # Convert edges
-        edges = [
-            GraphEdge(
-                id=e.get("id", f"edge-{e['source'][:6]}-{e['target'][:6]}"),
-                source=e["source"],
-                target=e["target"],
-                correlation_type=CorrelationType(e["edge_type"]),
-            )
-            for e in raw_edges
-        ]
-
-        return GraphResponse(nodes=nodes, edges=edges)
-    except Exception as e:
-        logger.error(f"Failed to get graph: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    return GraphResponse(nodes=nodes, edges=edges)
