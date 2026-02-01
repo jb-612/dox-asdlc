@@ -2,6 +2,7 @@
  * GraphControls - Control panel for Snowflake Graph (P08-F06)
  *
  * Provides:
+ * - Collapsible panel
  * - Search filter for nodes
  * - Edge type toggles (similar, related, contradicts)
  * - Reset view button
@@ -9,9 +10,9 @@
  * - Stats display and legend
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useGraphViewStore } from '../../../stores/graphViewStore';
-import { MagnifyingGlassIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ArrowPathIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import type { CorrelationType } from '../../../types/graph';
 
 export interface GraphControlsProps {
@@ -30,6 +31,7 @@ const CORRELATION_TYPE_LABELS: Record<CorrelationType, { label: string; color: s
  */
 export function GraphControls({ className, onRefresh }: GraphControlsProps) {
   const { filters, setFilters, resetView, nodes, edges } = useGraphViewStore();
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const toggleCorrelationType = (type: CorrelationType) => {
     const current = filters.correlationTypes;
@@ -41,13 +43,29 @@ export function GraphControls({ className, onRefresh }: GraphControlsProps) {
   };
 
   return (
-    <div className={`p-4 space-y-4 ${className}`} data-testid="graph-controls">
-      <h3 className="font-medium text-text-primary">Graph Controls</h3>
+    <div className={`${className}`} data-testid="graph-controls">
+      {/* Header - always visible */}
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="w-full p-3 flex items-center justify-between hover:bg-bg-secondary transition-colors rounded-t-lg"
+        data-testid="graph-controls-toggle"
+      >
+        <span className="font-medium text-text-primary text-sm">
+          Graph Controls
+          <span className="ml-2 text-text-muted text-xs">
+            ({nodes.length} nodes, {edges.length} edges)
+          </span>
+        </span>
+        {isCollapsed ? (
+          <ChevronDownIcon className="h-4 w-4 text-text-muted" />
+        ) : (
+          <ChevronUpIcon className="h-4 w-4 text-text-muted" />
+        )}
+      </button>
 
-      {/* Stats */}
-      <div className="text-sm text-text-muted">
-        {nodes.length} nodes, {edges.length} edges
-      </div>
+      {/* Collapsible content */}
+      {!isCollapsed && (
+        <div className="p-4 pt-0 space-y-4">
 
       {/* Search */}
       <div className="relative">
@@ -126,6 +144,8 @@ export function GraphControls({ className, onRefresh }: GraphControlsProps) {
           </div>
         </div>
       </div>
+        </div>
+      )}
     </div>
   );
 }

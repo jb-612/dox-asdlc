@@ -7,6 +7,7 @@ export { IdeaForm } from './IdeaForm';
 export { IdeasListPanel } from './IdeasListPanel';
 export { IdeaDetailPanel } from './IdeaDetailPanel';
 export { LinkIdeaModal } from './LinkIdeaModal';
+export { NewIdeaModal } from './NewIdeaModal';
 
 // Graph components (P08-F06)
 export { SnowflakeGraph, GraphControls } from './graph';

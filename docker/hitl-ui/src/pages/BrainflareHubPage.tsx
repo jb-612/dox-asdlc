@@ -1,10 +1,10 @@
 /**
  * BrainflareHubPage - Main page for Brainflare Hub idea management (P08-F05 T19)
  *
- * Layout (3-column):
+ * Layout (2-column with modal):
  * - Left: Ideas list with search and filters
- * - Center: Snowflake graph visualization (P08-F06)
- * - Right: Idea detail view or form
+ * - Right: Snowflake graph visualization (P08-F06) + detail panel
+ * - Modal: New/Edit Idea form (popup)
  */
 
 import { useCallback } from 'react';
@@ -13,9 +13,9 @@ import { useGraphViewStore } from '../stores/graphViewStore';
 import {
   IdeasListPanel,
   IdeaDetailPanel,
-  IdeaForm,
   SnowflakeGraph,
   GraphControls,
+  NewIdeaModal,
 } from '../components/brainflare';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 import type { CreateIdeaRequest } from '../types/ideas';
@@ -31,8 +31,17 @@ export interface BrainflareHubPageProps {
  * BrainflareHubPage component
  */
 export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
-  const { isFormOpen, editingIdea, closeForm, createIdea, updateIdea, error, clearError } =
-    useBrainflareStore();
+  const {
+    isFormOpen,
+    editingIdea,
+    selectedIdea,
+    closeForm,
+    createIdea,
+    updateIdea,
+    error,
+    clearError,
+    fetchIdeas,
+  } = useBrainflareStore();
   const { setGraphData, setLoading, setError } = useGraphViewStore();
 
   /**
@@ -45,9 +54,10 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
       } else {
         await createIdea(data);
       }
-      closeForm();
+      // Refresh ideas list after create/update
+      fetchIdeas();
     },
-    [editingIdea, createIdea, updateIdea, closeForm]
+    [editingIdea, createIdea, updateIdea, fetchIdeas]
   );
 
   /**
@@ -73,7 +83,7 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
       role="main"
     >
       {/* Header Bar */}
-      <div className="bg-bg-secondary border-b border-border-primary px-4 py-3">
+      <div className="bg-bg-secondary border-b border-border-primary px-4 py-3 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <SparklesIcon className="h-6 w-6 text-yellow-500" />
@@ -85,7 +95,7 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
 
       {/* Error Toast */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2">
+        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-2 shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
             <button
@@ -94,41 +104,46 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
               onClick={clearError}
               aria-label="Dismiss error"
             >
-              x
+              ×
             </button>
           </div>
         </div>
       )}
 
-      {/* Main Content - 3 Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content - 2 Column Layout */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left Panel - Ideas List */}
-        <div className="w-72 min-w-72 border-r border-border-primary bg-bg-primary overflow-y-auto">
+        <div className="w-80 min-w-80 border-r border-border-primary bg-bg-primary flex flex-col">
           <IdeasListPanel />
         </div>
 
-        {/* Center Panel - Snowflake Graph (P08-F06) */}
-        <div className="flex-1 min-w-0 bg-bg-tertiary relative">
-          <SnowflakeGraph className="w-full h-full" />
-          <div className="absolute top-4 right-4 w-64 bg-bg-primary rounded-lg shadow-lg border border-border-primary">
-            <GraphControls onRefresh={handleRefreshGraph} />
-          </div>
-        </div>
-
-        {/* Right Panel - Detail or Form */}
-        <div className="w-80 min-w-80 border-l border-border-primary bg-bg-primary overflow-y-auto">
-          {isFormOpen ? (
-            <div className="p-4">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">
-                {editingIdea ? 'Edit Idea' : 'New Idea'}
-              </h2>
-              <IdeaForm idea={editingIdea} onSubmit={handleSubmit} onCancel={closeForm} />
+        {/* Right Panel - Graph and Detail */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Graph Area */}
+          <div className="flex-1 min-h-0 bg-bg-tertiary relative">
+            <SnowflakeGraph className="w-full h-full" />
+            {/* Graph Controls - top right corner */}
+            <div className="absolute top-3 right-3 w-56 bg-bg-primary rounded-lg shadow-lg border border-border-primary max-h-[calc(100%-24px)] overflow-hidden">
+              <GraphControls onRefresh={handleRefreshGraph} />
             </div>
-          ) : (
-            <IdeaDetailPanel />
+          </div>
+
+          {/* Detail Panel - bottom */}
+          {selectedIdea && (
+            <div className="h-48 min-h-48 border-t border-border-primary bg-bg-primary overflow-y-auto">
+              <IdeaDetailPanel />
+            </div>
           )}
         </div>
       </div>
+
+      {/* New/Edit Idea Modal */}
+      <NewIdeaModal
+        isOpen={isFormOpen}
+        idea={editingIdea}
+        onSubmit={handleSubmit}
+        onClose={closeForm}
+      />
     </div>
   );
 }
