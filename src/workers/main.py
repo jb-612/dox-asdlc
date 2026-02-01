@@ -31,6 +31,7 @@ from src.workers.agents.dispatcher import AgentDispatcher
 from src.workers.agents.stub_agent import StubAgent
 from src.workers.config import get_worker_config
 from src.workers.pool.worker_pool import WorkerPool
+from src.workers.classification_worker import ClassificationWorker
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 # Global references for shutdown
 _worker_pool: WorkerPool | None = None
 _health_server: HTTPServer | None = None
+_classification_worker: ClassificationWorker | None = None
 
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -188,7 +190,7 @@ async def run_worker_pool(pool: WorkerPool) -> None:
 
 async def async_main() -> None:
     """Async main function that runs the worker pool."""
-    global _worker_pool, _health_server
+    global _worker_pool, _health_server, _classification_worker
 
     logger.info("Starting aSDLC Workers Service")
 
@@ -261,19 +263,61 @@ async def async_main() -> None:
     logger.info(f"Metrics: http://localhost:{port}/metrics")
     logger.info(f"Stats: http://localhost:{port}/stats")
 
+    # Start classification worker if classification service is available
+    classification_task = None
+    try:
+        from src.orchestrator.services.classification_service import (
+            ClassificationService,
+            get_classification_service,
+        )
+
+        classification_service = get_classification_service()
+        if classification_service:
+            _classification_worker = ClassificationWorker(
+                redis_client=redis_client,
+                classification_service=classification_service,
+            )
+            classification_task = asyncio.create_task(
+                _classification_worker.start(),
+                name="classification-worker",
+            )
+            logger.info("Classification worker started")
+        else:
+            logger.warning("Classification service not available, worker not started")
+    except ImportError as e:
+        logger.warning(f"Classification worker not available: {e}")
+    except Exception as e:
+        logger.error(f"Failed to start classification worker: {e}")
+
     # Run worker pool
-    await run_worker_pool(_worker_pool)
+    try:
+        await run_worker_pool(_worker_pool)
+    finally:
+        # Stop classification worker
+        if classification_task and _classification_worker:
+            await _classification_worker.stop()
+            classification_task.cancel()
+            try:
+                await classification_task
+            except asyncio.CancelledError:
+                pass
 
 
 def handle_shutdown(signum: int, frame: Any) -> None:
     """Handle shutdown signals."""
-    global _worker_pool, _health_server
+    global _worker_pool, _health_server, _classification_worker
 
     logger.info(f"Received signal {signum}, shutting down...")
 
     # Stop health server
     if _health_server:
         _health_server.shutdown()
+
+    # Stop classification worker
+    if _classification_worker:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(_classification_worker.stop())
 
     # Stop worker pool (needs to be done in the event loop)
     if _worker_pool:
