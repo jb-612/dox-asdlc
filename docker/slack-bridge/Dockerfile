@@ -23,12 +23,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source
 # Only copy the slack_bridge module and its dependencies
 COPY src/infrastructure/slack_bridge/ /app/src/infrastructure/slack_bridge/
-COPY src/infrastructure/redis_streams/ /app/src/infrastructure/redis_streams/
+COPY src/infrastructure/redis_streams.py /app/src/infrastructure/redis_streams.py
+COPY src/infrastructure/secrets/ /app/src/infrastructure/secrets/
 COPY src/core/ /app/src/core/
+COPY src/orchestrator/api/models/ /app/src/orchestrator/api/models/
+COPY src/orchestrator/services/ideas_service.py /app/src/orchestrator/services/ideas_service.py
 
 # Create __init__.py files for proper Python package structure
 RUN touch /app/src/__init__.py && \
-    touch /app/src/infrastructure/__init__.py
+    mkdir -p /app/src/orchestrator/api /app/src/orchestrator/services && \
+    touch /app/src/orchestrator/__init__.py && \
+    touch /app/src/orchestrator/api/__init__.py && \
+    touch /app/src/orchestrator/services/__init__.py && \
+    touch /app/src/infrastructure/__init__.py && \
+    echo 'from src.infrastructure.secrets.client import SecretsClient, EnvironmentSecretsClient, get_secrets_client' > /app/src/infrastructure/secrets/__init__.py
 
 # Set ownership
 RUN chown -R asdlc:asdlc /app

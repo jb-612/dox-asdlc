@@ -311,3 +311,42 @@ class IdeaHandler:
             )
         except Exception as e:
             logger.warning(f"Failed to add confirmation reaction: {e}")
+
+    async def create_idea_from_command(
+        self, user_id: str, text: str, channel_id: str
+    ) -> Idea | None:
+        """Create idea from /idea-new slash command.
+
+        Args:
+            user_id: Slack user ID who invoked the command.
+            text: The idea content from the command.
+            channel_id: Channel where command was invoked.
+
+        Returns:
+            Idea | None: The created idea, or None if creation failed.
+        """
+        # Get author display name
+        author_name = await self._get_user_name(user_id)
+
+        # Build source label for traceability
+        source_label = f"source_ref:slack:command:{channel_id}:{user_id}"
+
+        # Create the idea request
+        request = CreateIdeaRequest(
+            content=text,
+            author_id=user_id,
+            author_name=author_name,
+            labels=[source_label],
+        )
+
+        try:
+            idea = await self.ideas_service.create_idea(request)
+            logger.info(f"Created idea {idea.id} from /idea-new command by {user_id}")
+            return idea
+        except ValueError as e:
+            # Handle word limit or validation errors
+            logger.warning(f"Failed to create idea from command: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error creating idea from command: {e}")
+            return None

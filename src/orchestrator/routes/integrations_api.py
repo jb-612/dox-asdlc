@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from src.infrastructure.secrets.client import get_secrets_client
 from src.infrastructure.secrets.service import get_secrets_service, IntegrationType
 
 
@@ -63,6 +64,15 @@ class TestCredentialResponse(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class SecretsHealthResponse(BaseModel):
+    """Response for secrets backend health check."""
+
+    status: str
+    backend: str
+    details: dict[str, Any] | None = None
+    error: str | None = None
 
 
 # ============================================================================
@@ -156,6 +166,75 @@ async def add_integration_credential(
     }
 
 
+@router.get("/health", response_model=SecretsHealthResponse)
+async def secrets_health() -> dict[str, Any]:
+    """Check the health of the secrets backend.
+
+    Returns health status including:
+    - Backend type (env, infisical, gcp)
+    - Connection status
+    - Any errors or warnings
+
+    Returns:
+        Health status response with backend details.
+    """
+    from fastapi.responses import JSONResponse
+
+    try:
+        client = get_secrets_client()
+        backend_type = getattr(client, "backend_type", "unknown")
+
+        # For environment backend, always healthy (no external dependencies)
+        if backend_type == "env":
+            return {
+                "status": "healthy",
+                "backend": backend_type,
+                "details": {"source": "environment variables"},
+                "error": None,
+            }
+
+        # For other backends, perform health check if available
+        if hasattr(client, "health_check"):
+            health_result = await client.health_check()
+            # Check if there's a warning (degraded state)
+            if health_result.get("quota_warning"):
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "degraded",
+                        "backend": backend_type,
+                        "details": health_result,
+                        "error": None,
+                    },
+                )
+            return {
+                "status": "healthy",
+                "backend": backend_type,
+                "details": health_result,
+                "error": None,
+            }
+        else:
+            # Backend doesn't support health check, assume healthy
+            return {
+                "status": "healthy",
+                "backend": backend_type,
+                "details": None,
+                "error": None,
+            }
+
+    except Exception as e:
+        logger.exception("Secrets backend health check failed")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "backend": "unknown",
+                "details": None,
+                "error": str(e),
+            },
+        )
+
+
 @router.delete("/{credential_id}")
 async def delete_integration_credential(credential_id: str) -> dict[str, bool]:
     """Delete an integration credential.
@@ -203,6 +282,93 @@ async def test_integration_credential(credential_id: str) -> dict[str, Any]:
     except Exception as e:
         logger.exception(f"Failed to test credential {credential_id}")
         raise HTTPException(status_code=500, detail=f"Test failed: {str(e)}")
+
+
+class TestMessageResponse(BaseModel):
+    """Response from sending a test message."""
+
+    success: bool
+    message: str
+    channel: str | None = None
+    timestamp: str | None = None
+    tested_at: str = Field(alias="testedAt")
+    error: str | None = None
+
+    class Config:
+        populate_by_name = True
+
+
+@router.post("/{credential_id}/test-message", response_model=TestMessageResponse)
+async def send_test_message(credential_id: str, channel: str = "general") -> dict[str, Any]:
+    """Send a test message to Slack using the bot token.
+
+    This sends an actual message to verify the Slack integration is working.
+
+    Args:
+        credential_id: The ID of the bot_token credential.
+        channel: The channel to send to (default: general).
+
+    Returns:
+        Result with success status, channel, and message timestamp.
+    """
+    service = get_secrets_service()
+
+    try:
+        # Get the credential metadata
+        metadata = await service.get_credential_metadata(credential_id)
+        if not metadata:
+            raise HTTPException(status_code=404, detail="Credential not found")
+
+        if metadata.get("credential_type") != "bot_token":
+            raise HTTPException(
+                status_code=400,
+                detail="Test messages can only be sent with bot_token credentials"
+            )
+
+        # Get the actual token value
+        token = await service.retrieve(credential_id)
+        if not token:
+            raise HTTPException(status_code=404, detail="Token value not found")
+
+        # Send test message using Slack SDK
+        from slack_sdk.web.async_client import AsyncWebClient
+
+        client = AsyncWebClient(token=token)
+
+        # Send the test message
+        # Channel IDs start with C, don't add # prefix for those
+        channel_ref = channel if channel.startswith("C") else f"#{channel}"
+        response = await client.chat_postMessage(
+            channel=channel_ref,
+            text=f"🧪 *Test message from aSDLC Admin*\n\nThis is a test message sent at {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} to verify Slack integration.",
+        )
+
+        if response.get("ok"):
+            return {
+                "success": True,
+                "message": f"Test message sent successfully to #{channel}",
+                "channel": response.get("channel"),
+                "timestamp": response.get("ts"),
+                "testedAt": datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to send message",
+                "error": response.get("error", "Unknown error"),
+                "testedAt": datetime.now(timezone.utc).isoformat(),
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Failed to send test message with credential {credential_id}")
+        return {
+            "success": False,
+            "message": "Failed to send test message",
+            "error": str(e),
+            "testedAt": datetime.now(timezone.utc).isoformat(),
+        }
 
 
 @router.get("/{credential_id}", response_model=IntegrationCredentialResponse)

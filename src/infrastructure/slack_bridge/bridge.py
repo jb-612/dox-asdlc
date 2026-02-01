@@ -28,12 +28,70 @@ from src.infrastructure.slack_bridge.decision_handler import (
     RBACDeniedException,
 )
 from src.infrastructure.slack_bridge.gate_consumer import GateConsumer
+from src.infrastructure.slack_bridge.idea_handler import IdeaHandler
 from src.infrastructure.slack_bridge.policy import RoutingPolicy
 
 logger = logging.getLogger(__name__)
 
 # Version for startup logging
 __version__ = "1.0.0"
+
+
+async def fetch_slack_credentials_from_secrets() -> dict[str, str] | None:
+    """Fetch Slack credentials from the secrets backend (GCP/Infisical/env).
+
+    Queries the configured secrets backend for Slack credentials using the
+    standard secret names: SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET.
+
+    Returns:
+        Dict with bot_token, app_token, and signing_secret if all three are found.
+        None if credentials are missing, incomplete, or service fails.
+
+    Example:
+        ```python
+        creds = await fetch_slack_credentials_from_secrets()
+        if creds:
+            config = SlackBridgeConfig(
+                bot_token=SecretStr(creds["bot_token"]),
+                app_token=SecretStr(creds["app_token"]),
+                signing_secret=SecretStr(creds["signing_secret"]),
+            )
+        ```
+    """
+    try:
+        from src.infrastructure.secrets.client import get_secrets_client
+
+        client = get_secrets_client()
+        environment = os.environ.get("SECRETS_ENVIRONMENT", "dev")
+
+        logger.info(f"Fetching Slack credentials from {client.backend_type} backend")
+
+        # Fetch each secret by standard name
+        bot_token = await client.get_secret("SLACK_BOT_TOKEN", environment)
+        app_token = await client.get_secret("SLACK_APP_TOKEN", environment)
+        signing_secret = await client.get_secret("SLACK_SIGNING_SECRET", environment)
+
+        # Check if all required secrets were found
+        if not bot_token:
+            logger.debug("SLACK_BOT_TOKEN not found in secrets backend")
+            return None
+        if not app_token:
+            logger.debug("SLACK_APP_TOKEN not found in secrets backend")
+            return None
+        if not signing_secret:
+            logger.debug("SLACK_SIGNING_SECRET not found in secrets backend")
+            return None
+
+        logger.info(f"Successfully fetched Slack credentials from {client.backend_type}")
+        return {
+            "bot_token": bot_token,
+            "app_token": app_token,
+            "signing_secret": signing_secret,
+        }
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch Slack credentials from secrets backend: {e}")
+        return None
 
 
 class StartupValidationError(Exception):
@@ -107,6 +165,9 @@ class SlackBridge:
         self.decision_handler: DecisionHandler | None = None
         self.gate_consumer: GateConsumer | None = None
 
+        # Idea handler (will be set up after Redis client is available)
+        self.idea_handler: IdeaHandler | None = None
+
         # Set up handlers if redis client is provided
         if redis_client:
             self._setup_handlers(redis_client)
@@ -144,6 +205,9 @@ class SlackBridge:
         self.app.view({"type": "view_submission", "callback_id": "rejection_modal_.*"})(
             self._handle_rejection_modal
         )
+
+        # Register /idea-new slash command handler
+        self.app.command("/idea-new")(self._handle_idea_new_command)
 
     async def _handle_approve_gate(
         self,
@@ -308,6 +372,64 @@ class SlackBridge:
 
         if not result.get("success"):
             logger.warning(f"Rejection failed: {result.get('error')}")
+
+    async def _handle_idea_new_command(
+        self,
+        ack: Callable,
+        command: dict,
+        client: Any,
+    ) -> None:
+        """Handle /idea-new slash command.
+
+        Creates a new idea from the command text.
+
+        Args:
+            ack: Acknowledgement function.
+            command: Command payload from Slack.
+            client: Slack client instance.
+        """
+        await ack()
+
+        user_id = command.get("user_id", "")
+        channel_id = command.get("channel_id", "")
+        text = command.get("text", "").strip()
+
+        if not text:
+            await client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text="Please provide a description. Usage: `/idea-new [your idea text]`",
+            )
+            return
+
+        # Check if idea handler is available
+        if self.idea_handler is None:
+            await client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text="Idea capture is not configured. Contact your administrator.",
+            )
+            return
+
+        # Create idea via IdeaHandler
+        idea = await self.idea_handler.create_idea_from_command(
+            user_id=user_id,
+            text=text,
+            channel_id=channel_id,
+        )
+
+        if idea:
+            await client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=f"Idea saved! Reference: #{idea.id[:8]}",
+            )
+        else:
+            await client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text="Failed to save idea. It may exceed the word limit or be a duplicate.",
+            )
 
     def _get_channel_config_for_channel(self, channel_id: str) -> ChannelConfig | None:
         """Find channel config for a given channel ID.
@@ -622,8 +744,12 @@ def load_config_from_file(config_path: str) -> dict:
 async def main() -> None:
     """Main entry point for the Slack Bridge.
 
-    Loads configuration from environment and optional config file,
+    Loads configuration from secrets service (preferred) or environment variables,
     validates startup, and runs the bridge.
+
+    Credential loading priority:
+    1. Secrets service (credentials saved via Admin/LLM page)
+    2. Environment variables (SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET)
     """
     from pydantic import SecretStr
 
@@ -653,11 +779,27 @@ async def main() -> None:
     for gate_type, channel_data in file_config.get("routing_policy", {}).items():
         routing_policy[gate_type] = ChannelConfig(**channel_data)
 
-    # Load configuration from environment (env vars take precedence)
+    # Try to fetch credentials from secrets service first
+    secrets_creds = await fetch_slack_credentials_from_secrets()
+
+    if secrets_creds:
+        # Use credentials from secrets service
+        logger.info("Using Slack credentials from secrets service")
+        bot_token = secrets_creds["bot_token"]
+        app_token = secrets_creds["app_token"]
+        signing_secret = secrets_creds["signing_secret"]
+    else:
+        # Fall back to environment variables
+        logger.info("Using Slack credentials from environment variables")
+        bot_token = os.environ.get("SLACK_BOT_TOKEN", "")
+        app_token = os.environ.get("SLACK_APP_TOKEN", "")
+        signing_secret = os.environ.get("SLACK_SIGNING_SECRET", "")
+
+    # Load configuration
     config = SlackBridgeConfig(
-        bot_token=SecretStr(os.environ.get("SLACK_BOT_TOKEN", "")),
-        app_token=SecretStr(os.environ.get("SLACK_APP_TOKEN", "")),
-        signing_secret=SecretStr(os.environ.get("SLACK_SIGNING_SECRET", "")),
+        bot_token=SecretStr(bot_token),
+        app_token=SecretStr(app_token),
+        signing_secret=SecretStr(signing_secret),
         routing_policy=routing_policy,
         rbac_map=file_config.get("rbac_map", {}),
         ideas_channels=file_config.get("ideas_channels", []),

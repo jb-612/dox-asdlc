@@ -60,3 +60,4 @@ psycopg2-binary>=2.9.0
 
 # Development
 python-dotenv>=1.0.0
+slack-sdk==3.33.4

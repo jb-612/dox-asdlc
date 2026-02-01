@@ -203,12 +203,20 @@ services:
       - REDIS_URL=redis://redis:6379
       - SERVICE_NAME=slack-bridge
       - HEALTH_PORT=8085
-      # Slack credentials - must be set via .env or docker-compose override
+      # Secrets backend configuration - use GCP with Infisical cache
+      - SECRETS_BACKEND=gcp
+      - GCP_PROJECT_ID=gen-lang-client-0879716971
+      - SECRETS_ENVIRONMENT=prod
+      # Fallback: Slack credentials from env (used if secrets backend fails)
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
       - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
       # Optional: JSON config file path for routing policy and RBAC
       - SLACK_CONFIG_FILE=${SLACK_CONFIG_FILE:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-credentials.json
+    volumes:
+      # Mount GCP credentials for Secret Manager access
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/app/gcp-credentials.json:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -257,6 +265,76 @@ services:
     networks:
       - asdlc-network
 
+  # Container 6: Infisical Secrets Manager
+  # - Centralized secrets storage for all services
+  # - Web UI for secret management
+  # - API for programmatic access
+  infisical:
+    image: infisical/infisical:latest
+    container_name: asdlc-infisical
+    hostname: infisical
+    ports:
+      - "8086:8080"
+    environment:
+      - ENCRYPTION_KEY=${INFISICAL_ENCRYPTION_KEY:-}
+      - AUTH_SECRET=${INFISICAL_AUTH_SECRET:-}
+      - POSTGRES_HOST=infisical-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=infisical
+      - POSTGRES_USER=infisical
+      - POSTGRES_PASSWORD=${INFISICAL_DB_PASSWORD:-infisical_dev_password}
+      - REDIS_URL=redis://infisical-redis:6379
+      - SITE_URL=http://localhost:8086
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      infisical-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - asdlc-network
+    profiles:
+      - secrets
+
+  infisical-db:
+    image: postgres:15-alpine
+    container_name: asdlc-infisical-db
+    hostname: infisical-db
+    environment:
+      - POSTGRES_DB=infisical
+      - POSTGRES_USER=infisical
+      - POSTGRES_PASSWORD=${INFISICAL_DB_PASSWORD:-infisical_dev_password}
+    volumes:
+      - infisical-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical -d infisical"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdlc-network
+    profiles:
+      - secrets
+
+  infisical-redis:
+    image: redis:7-alpine
+    container_name: asdlc-infisical-redis
+    hostname: infisical-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asdlc-network
+    profiles:
+      - secrets
+
 networks:
   asdlc-network:
     driver: bridge
@@ -273,3 +351,5 @@ volumes:
     name: asdlc-victoriametrics-data
   git-credentials:
     name: asdlc-git-credentials
+  infisical-db-data:
+    name: asdlc-infisical-db-data

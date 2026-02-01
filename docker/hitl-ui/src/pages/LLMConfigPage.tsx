@@ -32,10 +32,14 @@ import {
   useIntegrationCredentials,
   useAddIntegrationCredential,
   useDeleteIntegrationCredential,
-  useTestIntegrationCredential,
+  useTestIntegrationCredentialEnhanced,
+  useSendTestMessage,
   integrationQueryKeys,
+  useSecretsHealth,
+  secretsQueryKeys,
 } from '../api/llmConfig';
 import { useLLMConfigStore, selectAllPendingConfigs } from '../stores/llmConfigStore';
+import { useState } from 'react';
 import type {
   LLMModel,
   LLMProvider,
@@ -43,6 +47,7 @@ import type {
   AddAPIKeyRequest,
   AgentLLMSettings,
   AddIntegrationCredentialRequest,
+  SecretsEnvironment,
 } from '../types/llmConfig';
 
 export interface LLMConfigPageProps {
@@ -81,6 +86,15 @@ export default function LLMConfigPage({ className }: LLMConfigPageProps) {
     error: credentialsError,
   } = useIntegrationCredentials();
 
+  // Secrets backend health (P09-F01 T08)
+  const {
+    data: secretsHealth,
+    isLoading: secretsHealthLoading,
+  } = useSecretsHealth();
+
+  // Environment selector state (P09-F01 T10)
+  const [selectedEnvironment, setSelectedEnvironment] = useState<SecretsEnvironment | 'all'>('all');
+
   // Mutations
   const addKeyMutation = useAddAPIKey();
   const deleteKeyMutation = useDeleteAPIKey();
@@ -88,7 +102,8 @@ export default function LLMConfigPage({ className }: LLMConfigPageProps) {
   const updateConfigMutation = useUpdateAgentConfig();
   const addCredentialMutation = useAddIntegrationCredential();
   const deleteCredentialMutation = useDeleteIntegrationCredential();
-  const testCredentialMutation = useTestIntegrationCredential();
+  const testCredentialMutation = useTestIntegrationCredentialEnhanced();
+  const sendTestMessageMutation = useSendTestMessage();
 
   // Sync fetched data to store
   useEffect(() => {
@@ -171,6 +186,7 @@ export default function LLMConfigPage({ className }: LLMConfigPageProps) {
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: llmConfigQueryKeys.all });
     queryClient.invalidateQueries({ queryKey: integrationQueryKeys.all });
+    queryClient.invalidateQueries({ queryKey: secretsQueryKeys.all });
   }, [queryClient]);
 
   const handleAddKey = useCallback(
@@ -258,10 +274,26 @@ export default function LLMConfigPage({ className }: LLMConfigPageProps) {
 
   const handleTestCredential = useCallback(
     async (credentialId: string) => {
-      await testCredentialMutation.mutateAsync(credentialId);
+      // Use enhanced test that returns detailed results for Slack
+      const result = await testCredentialMutation.mutateAsync(credentialId);
+      return result;
     },
     [testCredentialMutation]
   );
+
+  const handleSendTestMessage = useCallback(
+    async (credentialId: string, channel: string) => {
+      const result = await sendTestMessageMutation.mutateAsync({ credentialId, channel });
+      return result;
+    },
+    [sendTestMessageMutation]
+  );
+
+  // Environment change handler (P09-F01 T10)
+  const handleEnvironmentChange = useCallback((env: SecretsEnvironment | 'all') => {
+    setSelectedEnvironment(env);
+    // TODO: When backend supports environment filtering, refetch credentials with filter
+  }, []);
 
   const isLoading = providersLoading || modelsLoading || keysLoading || configsLoading || credentialsLoading;
   const isSaving = updateConfigMutation.isPending;
@@ -393,6 +425,11 @@ export default function LLMConfigPage({ className }: LLMConfigPageProps) {
             onAddCredential={handleAddCredential}
             onDeleteCredential={handleDeleteCredential}
             onTestCredential={handleTestCredential}
+            onSendTestMessage={handleSendTestMessage}
+            secretsHealth={secretsHealth}
+            secretsHealthLoading={secretsHealthLoading}
+            selectedEnvironment={selectedEnvironment}
+            onEnvironmentChange={handleEnvironmentChange}
           />
 
           {/* Agent Configs Section */}

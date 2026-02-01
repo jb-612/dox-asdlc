@@ -28,3 +28,29 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: () => false,
   }),
 });
+
+// Mock ResizeObserver (used by @headlessui/react Dialog component)
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(window, 'ResizeObserver', {
+  writable: true,
+  value: MockResizeObserver,
+});
+
+// Mock getComputedStyle for scrollbar width calculations
+const originalGetComputedStyle = window.getComputedStyle;
+window.getComputedStyle = (element: Element, pseudoElt?: string | null) => {
+  const style = originalGetComputedStyle(element, pseudoElt);
+  // Return a default scrollbar width of 0 for tests
+  return {
+    ...style,
+    getPropertyValue: (prop: string) => {
+      if (prop === 'scrollbar-width') return '0';
+      return style.getPropertyValue(prop);
+    },
+  };
+};

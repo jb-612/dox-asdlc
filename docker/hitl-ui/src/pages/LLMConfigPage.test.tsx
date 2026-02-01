@@ -87,7 +87,13 @@ vi.mock('../api/llmConfig', () => ({
   useUpdateAgentConfig: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAddIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useTestIntegrationCredential: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestIntegrationCredentialEnhanced: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSendTestMessage: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSecretsHealth: () => ({
+    data: { status: 'healthy', backend: 'env', details: { source: 'environment variables' } },
+    isLoading: false,
+    error: null,
+  }),
   llmConfigQueryKeys: {
     all: ['llmConfig'],
     providers: () => ['llmConfig', 'providers'],
@@ -100,6 +106,10 @@ vi.mock('../api/llmConfig', () => ({
     all: ['integrations'],
     credentials: () => ['integrations', 'credentials'],
     credentialsByType: (type: string) => ['integrations', 'credentials', type],
+  },
+  secretsQueryKeys: {
+    all: ['secrets'],
+    health: () => ['secrets', 'health'],
   },
 }));
 

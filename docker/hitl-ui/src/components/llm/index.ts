@@ -37,3 +37,15 @@ export type { AddIntegrationCredentialDialogProps } from './AddIntegrationCreden
 
 export { default as IntegrationCredentialsSection } from './IntegrationCredentialsSection';
 export type { IntegrationCredentialsSectionProps } from './IntegrationCredentialsSection';
+
+export { default as SecretsBackendBadge } from './SecretsBackendBadge';
+export type { SecretsBackendBadgeProps } from './SecretsBackendBadge';
+
+export { default as EnvironmentSelector } from './EnvironmentSelector';
+export type { EnvironmentSelectorProps } from './EnvironmentSelector';
+
+export { default as TestResultDialog } from './TestResultDialog';
+export type { TestResultDialogProps } from './TestResultDialog';
+
+export { default as SendTestMessageDialog } from './SendTestMessageDialog';
+export type { SendTestMessageDialogProps } from './SendTestMessageDialog';

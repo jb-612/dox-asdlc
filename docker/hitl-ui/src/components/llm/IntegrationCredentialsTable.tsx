@@ -2,6 +2,7 @@
  * IntegrationCredentialsTable Component (P05-F13 Extension)
  *
  * Table displaying integration credentials with masked values, status, and actions.
+ * Bot token credentials have an additional "Send Test Message" button.
  */
 
 import { useCallback, useState } from 'react';
@@ -13,6 +14,7 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   QuestionMarkCircleIcon,
+  ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline';
 import type {
   IntegrationCredential,
@@ -33,10 +35,14 @@ export interface IntegrationCredentialsTableProps {
   isLoading?: boolean;
   /** Callback when test button clicked */
   onTest?: (credentialId: string) => void;
+  /** Callback when send test message button clicked (for bot_token credentials) */
+  onSendTestMessage?: (credentialId: string) => void;
   /** Callback when delete button clicked */
   onDelete?: (credentialId: string) => void;
   /** ID of credential currently being tested */
   testingCredentialId?: string | null;
+  /** ID of credential currently sending a test message */
+  sendingMessageCredentialId?: string | null;
   /** ID of credential currently being deleted */
   deletingCredentialId?: string | null;
   /** Custom class name */
@@ -92,8 +98,10 @@ export default function IntegrationCredentialsTable({
   credentials,
   isLoading = false,
   onTest,
+  onSendTestMessage,
   onDelete,
   testingCredentialId,
+  sendingMessageCredentialId,
   deletingCredentialId,
   className,
 }: IntegrationCredentialsTableProps) {
@@ -111,6 +119,10 @@ export default function IntegrationCredentialsTable({
   const handleCancelDelete = useCallback(() => {
     setConfirmDeleteId(null);
   }, []);
+
+  // Check if a credential is a Slack bot token (can send test messages)
+  const isBotToken = (cred: IntegrationCredential) =>
+    cred.integrationType === 'slack' && cred.credentialType === 'bot_token';
 
   if (isLoading) {
     return (
@@ -202,6 +214,7 @@ export default function IntegrationCredentialsTable({
               </td>
               <td className="py-3 px-4">
                 <div className="flex items-center justify-end gap-2">
+                  {/* Test Credential Button */}
                   <button
                     data-testid={'test-credential-' + cred.id}
                     onClick={() => onTest?.(cred.id)}
@@ -218,6 +231,28 @@ export default function IntegrationCredentialsTable({
                       <PlayIcon className="h-4 w-4" />
                     )}
                   </button>
+
+                  {/* Send Test Message Button (only for Slack bot tokens) */}
+                  {isBotToken(cred) && (
+                    <button
+                      data-testid={'send-test-message-' + cred.id}
+                      onClick={() => onSendTestMessage?.(cred.id)}
+                      disabled={sendingMessageCredentialId === cred.id}
+                      className={clsx(
+                        'p-1.5 rounded text-text-secondary hover:text-accent-purple hover:bg-accent-purple/10',
+                        'transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                      title="Send test message to Slack"
+                    >
+                      {sendingMessageCredentialId === cred.id ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <ChatBubbleLeftIcon className="h-4 w-4" />
+                      )}
+                    </button>
+                  )}
+
+                  {/* Delete Button */}
                   {confirmDeleteId === cred.id ? (
                     <div className="flex items-center gap-1">
                       <button

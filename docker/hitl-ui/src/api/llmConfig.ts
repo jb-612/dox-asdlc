@@ -30,6 +30,7 @@ import {
   addMockIntegrationCredential,
   deleteMockIntegrationCredential,
   testMockIntegrationCredential,
+  sendMockTestMessage,
 } from './mocks/llmConfig';
 import { shouldUseMocks, useLLMConfigStore } from '../stores/llmConfigStore';
 import type {
@@ -49,6 +50,10 @@ import type {
   IntegrationCredential,
   AddIntegrationCredentialRequest,
   TestIntegrationCredentialResponse,
+  SecretsHealthResponse,
+  SecretsEnvironment,
+  EnhancedTestIntegrationCredentialResponse,
+  SendTestMessageResponse,
 } from '../types/llmConfig';
 
 // ============================================================================
@@ -939,6 +944,134 @@ export function useTestIntegrationCredential() {
 }
 
 // ============================================================================
+// Secrets Backend Health API Functions (P09-F01)
+// ============================================================================
+
+export const secretsQueryKeys = {
+  all: ['secrets'] as const,
+  health: () => [...secretsQueryKeys.all, 'health'] as const,
+};
+
+/**
+ * Fetch secrets backend health status
+ */
+export async function fetchSecretsHealth(): Promise<SecretsHealthResponse> {
+  if (shouldUseMocks()) {
+    await simulateLLMConfigDelay(50, 150);
+    return getMockSecretsHealth();
+  }
+
+  try {
+    const response = await apiClient.get<SecretsHealthResponse>('/integrations/health');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch secrets health:', error);
+    // Return a degraded status on error rather than throwing
+    return {
+      status: 'unhealthy',
+      backend: 'env',
+      error: createErrorMessage(error, 'Failed to check secrets backend health'),
+    };
+  }
+}
+
+/**
+ * Hook to fetch secrets backend health
+ */
+export function useSecretsHealth() {
+  const dataSource = useLLMConfigStore((state) => state.dataSource);
+  return useQuery({
+    queryKey: [...secretsQueryKeys.health(), dataSource],
+    queryFn: fetchSecretsHealth,
+    staleTime: 60 * 1000, // 1 minute
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+  });
+}
+
+/**
+ * Test an integration credential with enhanced result handling
+ * Returns more detailed information for Slack tests including channel and timestamp
+ */
+export async function testIntegrationCredentialEnhanced(
+  id: string
+): Promise<EnhancedTestIntegrationCredentialResponse> {
+  if (shouldUseMocks()) {
+    await simulateLLMConfigDelay(500, 1500);
+    return testMockIntegrationCredentialEnhanced(id);
+  }
+
+  try {
+    const response = await apiClient.post<EnhancedTestIntegrationCredentialResponse>(
+      '/integrations/' + id + '/test'
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Failed to test integration credential:', error);
+    throw new Error(createErrorMessage(error, 'Failed to test integration credential'));
+  }
+}
+
+/**
+ * Hook to test an integration credential with enhanced results
+ */
+export function useTestIntegrationCredentialEnhanced() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: testIntegrationCredentialEnhanced,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: integrationQueryKeys.credentials() });
+    },
+  });
+}
+
+// Mock function for secrets health
+function getMockSecretsHealth(): SecretsHealthResponse {
+  // Randomly pick a backend type for demo purposes
+  const backends: Array<'env' | 'infisical' | 'gcp'> = ['env', 'infisical', 'gcp'];
+  const backend = backends[Math.floor(Math.random() * backends.length)];
+
+  if (backend === 'env') {
+    return {
+      status: 'healthy',
+      backend: 'env',
+      details: { source: 'environment variables' },
+    };
+  } else if (backend === 'infisical') {
+    return {
+      status: 'healthy',
+      backend: 'infisical',
+      details: { connected: true, version: '0.78.0' },
+    };
+  } else {
+    return {
+      status: 'healthy',
+      backend: 'gcp',
+      details: { project: 'my-project', location: 'us-central1' },
+    };
+  }
+}
+
+// Mock function for enhanced credential test
+function testMockIntegrationCredentialEnhanced(id: string): EnhancedTestIntegrationCredentialResponse {
+  const result = testMockIntegrationCredential(id);
+
+  // For Slack bot tokens, add enhanced details
+  if (id.includes('slack') && id.includes('bot')) {
+    return {
+      ...result,
+      details: {
+        team: 'TestTeam',
+        team_id: 'T12345',
+        channel: '#asdlc-notifications',
+        timestamp: new Date().getTime().toString().slice(0, 10) + '.123456',
+      },
+    };
+  }
+
+  return result;
+}
+
+// ============================================================================
 // Utility Functions
 // ============================================================================
 
@@ -1036,5 +1169,48 @@ export async function testLLMConnection(role: AgentRole): Promise<TestConnection
 export function useTestLLMConnection() {
   return useMutation({
     mutationFn: testLLMConnection,
+  });
+}
+
+
+// ============================================================================
+// Send Test Message Functions (Slack Bot Token)
+// ============================================================================
+
+/**
+ * Send a test message to Slack using a bot token credential
+ */
+export async function sendTestMessage(
+  credentialId: string,
+  channel?: string
+): Promise<SendTestMessageResponse> {
+  if (shouldUseMocks()) {
+    await simulateLLMConfigDelay(500, 1500);
+    return sendMockTestMessage(credentialId, channel);
+  }
+
+  try {
+    const url = channel
+      ? '/integrations/' + credentialId + '/test-message?channel=' + encodeURIComponent(channel)
+      : '/integrations/' + credentialId + '/test-message';
+    const response = await apiClient.post<SendTestMessageResponse>(url);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send test message:', error);
+    throw new Error(createErrorMessage(error, 'Failed to send test message'));
+  }
+}
+
+/**
+ * Hook to send a test message
+ */
+export function useSendTestMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ credentialId, channel }: { credentialId: string; channel?: string }) =>
+      sendTestMessage(credentialId, channel),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: integrationQueryKeys.credentials() });
+    },
   });
 }

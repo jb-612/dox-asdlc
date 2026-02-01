@@ -641,12 +641,18 @@ export function testMockIntegrationCredential(id: string): TestIntegrationCreden
   if (isValid) {
     switch (cred.integrationType) {
       case 'slack':
-        message = cred.credentialType === 'bot_token'
-          ? 'Valid bot token for team: TestTeam'
-          : cred.credentialType + ' format is valid';
-        details = cred.credentialType === 'bot_token'
-          ? { team: 'TestTeam', team_id: 'T12345', bot_id: 'B12345' }
-          : undefined;
+        if (cred.credentialType === 'bot_token') {
+          message = 'Token is valid. Test message sent to #asdlc-notifications';
+          details = {
+            team: 'TestTeam',
+            team_id: 'T12345',
+            bot_id: 'B12345',
+            channel: '#asdlc-notifications',
+            timestamp: new Date().getTime().toString().slice(0, 10) + '.123456',
+          };
+        } else {
+          message = cred.credentialType + ' format is valid';
+        }
         break;
       case 'github':
         message = 'Valid token for user: testuser';
@@ -795,4 +801,61 @@ export function resetAllLLMConfigMocks(): void {
   ];
   mockAgentConfigs = [...defaultAgentConfigs];
   mockIntegrationCredentials = [...defaultIntegrationCredentials];
+}
+
+// ============================================================================
+// Mock Send Test Message (Slack Bot Token)
+// ============================================================================
+
+export interface SendTestMessageResponse {
+  success: boolean;
+  message: string;
+  channel?: string;
+  timestamp?: string;
+  testedAt: string;
+  error?: string | null;
+}
+
+export function sendMockTestMessage(credentialId: string, channel?: string): SendTestMessageResponse {
+  const cred = mockIntegrationCredentials.find((c) => c.id === credentialId);
+  
+  if (!cred) {
+    return {
+      success: false,
+      message: 'Credential not found',
+      testedAt: new Date().toISOString(),
+      error: 'Credential not found',
+    };
+  }
+  
+  if (cred.integrationType !== 'slack' || cred.credentialType !== 'bot_token') {
+    return {
+      success: false,
+      message: 'Only Slack bot tokens can send test messages',
+      testedAt: new Date().toISOString(),
+      error: 'Invalid credential type',
+    };
+  }
+  
+  // Simulate 90% success rate
+  const isSuccess = Math.random() > 0.1;
+  const targetChannel = channel || 'general';
+  
+  if (isSuccess) {
+    return {
+      success: true,
+      message: 'Test message sent successfully to #' + targetChannel,
+      channel: targetChannel,
+      timestamp: new Date().getTime().toString().slice(0, 10) + '.' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0'),
+      testedAt: new Date().toISOString(),
+      error: null,
+    };
+  } else {
+    return {
+      success: false,
+      message: 'Failed to send test message',
+      testedAt: new Date().toISOString(),
+      error: 'channel_not_found: The channel #' + targetChannel + ' was not found or bot is not a member',
+    };
+  }
 }

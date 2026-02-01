@@ -362,3 +362,81 @@ export const INTEGRATION_STATUS_LABELS: Record<IntegrationCredentialStatus, stri
   invalid: 'Invalid',
   untested: 'Untested',
 };
+
+// ============================================================================
+// Secrets Backend Types (P09-F01)
+// ============================================================================
+
+/** Secrets backend type */
+export type SecretsBackend = 'env' | 'infisical' | 'gcp';
+
+/** Secrets backend display names */
+export const SECRETS_BACKEND_NAMES: Record<SecretsBackend, string> = {
+  env: 'Environment Variables',
+  infisical: 'Infisical',
+  gcp: 'GCP Secret Manager',
+};
+
+/** Secrets backend health status */
+export type SecretsHealthStatus = 'healthy' | 'unhealthy' | 'degraded';
+
+/** Secrets backend health response */
+export interface SecretsHealthResponse {
+  /** Health status */
+  status: SecretsHealthStatus;
+  /** Backend type in use */
+  backend: SecretsBackend;
+  /** Additional details from the backend */
+  details?: Record<string, unknown>;
+  /** Error message if unhealthy */
+  error?: string;
+}
+
+/** Secrets environment */
+export type SecretsEnvironment = 'dev' | 'staging' | 'prod';
+
+/** Secrets environment display names */
+export const SECRETS_ENVIRONMENT_NAMES: Record<SecretsEnvironment, string> = {
+  dev: 'Development',
+  staging: 'Staging',
+  prod: 'Production',
+};
+
+/** Enhanced test response with Slack-specific details */
+export interface EnhancedTestIntegrationCredentialResponse {
+  /** Whether the credential is valid */
+  valid: boolean;
+  /** Message describing the result */
+  message: string;
+  /** Timestamp of the test */
+  testedAt: string;
+  /** Slack-specific details when testing Slack bot token */
+  details?: {
+    /** Team/workspace name */
+    team?: string;
+    /** Team ID */
+    team_id?: string;
+    /** Channel where test message was sent */
+    channel?: string;
+    /** Message timestamp */
+    timestamp?: string;
+    /** Additional details */
+    [key: string]: string | undefined;
+  };
+}
+
+/** Response from POST /api/integrations/{id}/test-message */
+export interface SendTestMessageResponse {
+  /** Whether the message was sent successfully */
+  success: boolean;
+  /** Message describing the result */
+  message: string;
+  /** Channel where message was sent */
+  channel?: string;
+  /** Slack message timestamp */
+  timestamp?: string;
+  /** When the test was performed */
+  testedAt: string;
+  /** Error message if failed */
+  error?: string | null;
+}

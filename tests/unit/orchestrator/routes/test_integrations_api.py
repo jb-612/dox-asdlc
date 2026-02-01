@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -201,3 +201,67 @@ class TestGetIntegrationCredential:
         response = client.get("/api/integrations/nonexistent")
 
         assert response.status_code == 404
+
+
+class TestSecretsHealth:
+    """Tests for GET /api/integrations/health."""
+
+    def test_health_returns_healthy_with_env_backend(self, client):
+        """Test health returns healthy status for env backend."""
+        with patch("src.orchestrator.routes.integrations_api.get_secrets_client") as mock_client:
+            mock_instance = MagicMock()
+            mock_instance.backend_type = "env"
+            mock_client.return_value = mock_instance
+
+            response = client.get("/api/integrations/health")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "healthy"
+            assert data["backend"] == "env"
+
+    def test_health_returns_healthy_with_infisical_backend(self, client):
+        """Test health returns healthy status for infisical backend."""
+        with patch("src.orchestrator.routes.integrations_api.get_secrets_client") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.backend_type = "infisical"
+            mock_instance.health_check = AsyncMock(return_value={"connected": True, "version": "0.1.0"})
+            mock_client.return_value = mock_instance
+
+            response = client.get("/api/integrations/health")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "healthy"
+            assert data["backend"] == "infisical"
+            assert data["details"]["connected"] is True
+
+    def test_health_returns_unhealthy_when_backend_fails(self, client):
+        """Test health returns unhealthy when backend check fails."""
+        with patch("src.orchestrator.routes.integrations_api.get_secrets_client") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.backend_type = "infisical"
+            mock_instance.health_check = AsyncMock(side_effect=Exception("Connection failed"))
+            mock_client.return_value = mock_instance
+
+            response = client.get("/api/integrations/health")
+
+            assert response.status_code == 503
+            data = response.json()
+            assert data["status"] == "unhealthy"
+            assert "Connection failed" in data["error"]
+
+    def test_health_returns_degraded_when_partial_failure(self, client):
+        """Test health returns degraded when backend partially fails."""
+        with patch("src.orchestrator.routes.integrations_api.get_secrets_client") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.backend_type = "gcp"
+            mock_instance.health_check = AsyncMock(return_value={"connected": True, "quota_warning": True})
+            mock_client.return_value = mock_instance
+
+            response = client.get("/api/integrations/health")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] in ["healthy", "degraded"]
+            assert data["backend"] == "gcp"
