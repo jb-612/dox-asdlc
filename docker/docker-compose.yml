@@ -187,6 +187,43 @@ services:
     networks:
       - asdlc-network
 
+  # Container 5: Slack HITL Bridge
+  # - Gate notifications to Slack channels
+  # - Decision capture via Slack button interactions
+  # - Ideas ingestion from Slack messages/reactions
+  slack-bridge:
+    build:
+      context: ..
+      dockerfile: docker/slack-bridge/Dockerfile
+    container_name: asdlc-slack-bridge
+    hostname: slack-bridge
+    ports:
+      - "8085:8085"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SERVICE_NAME=slack-bridge
+      - HEALTH_PORT=8085
+      # Slack credentials - must be set via .env or docker-compose override
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
+      # Optional: JSON config file path for routing policy and RBAC
+      - SLACK_CONFIG_FILE=${SLACK_CONFIG_FILE:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - asdlc-network
+    # Service is disabled by default - enable with profile or explicit start
+    profiles:
+      - slack
+
   # Container 4: HITL Web UI
   # - Gate request viewer and evidence explorer
   # - Approval pushes responses back to Redis Streams

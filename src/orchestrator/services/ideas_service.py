@@ -9,6 +9,7 @@ import logging
 import os
 import uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from elasticsearch import AsyncElasticsearch
 
@@ -19,6 +20,9 @@ from src.orchestrator.api.models.idea import (
     IdeaStatus,
     UpdateIdeaRequest,
 )
+
+if TYPE_CHECKING:
+    from src.workers.classification_worker import ClassificationWorker
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +41,22 @@ class IdeasService:
         ideas, total = await service.list_ideas(status=IdeaStatus.ACTIVE)
     """
 
-    def __init__(self, es_client: AsyncElasticsearch | None = None) -> None:
+    def __init__(
+        self,
+        es_client: AsyncElasticsearch | None = None,
+        auto_classify: bool = True,
+    ) -> None:
         """Initialize the ideas service.
 
         Args:
             es_client: Optional Elasticsearch client. If not provided,
                        will be created lazily using ELASTICSEARCH_URL env var.
+            auto_classify: If True, automatically queue ideas for classification
+                          on creation. Defaults to True.
         """
         self._es = es_client
+        self._auto_classify = auto_classify
+        self._classification_worker: ClassificationWorker | None = None
 
     def _get_es(self) -> AsyncElasticsearch:
         """Get the Elasticsearch client, creating it lazily if needed.
@@ -56,6 +68,40 @@ class IdeasService:
             es_url = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
             self._es = AsyncElasticsearch([es_url])
         return self._es
+
+    def _get_classification_worker(self) -> ClassificationWorker | None:
+        """Get the classification worker, creating it lazily if needed.
+
+        Returns:
+            ClassificationWorker | None: The worker instance, or None if unavailable.
+        """
+        if self._classification_worker is None and self._auto_classify:
+            try:
+                import redis.asyncio as redis
+
+                from src.orchestrator.services.classification_service import (
+                    get_classification_service,
+                )
+                from src.workers.classification_worker import ClassificationWorker
+
+                redis_url = os.environ.get("REDIS_URL")
+                if not redis_url:
+                    redis_host = os.environ.get("REDIS_HOST", "localhost")
+                    redis_port = os.environ.get("REDIS_PORT", "6379")
+                    redis_url = f"redis://{redis_host}:{redis_port}"
+
+                redis_client = redis.from_url(redis_url)
+                classification_service = get_classification_service()
+
+                self._classification_worker = ClassificationWorker(
+                    redis_client=redis_client,
+                    classification_service=classification_service,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize classification worker: {e}")
+                self._classification_worker = None
+
+        return self._classification_worker
 
     async def ensure_index(self) -> None:
         """Ensure the ideas index exists with proper mappings.
@@ -99,6 +145,9 @@ class IdeasService:
     async def create_idea(self, request: CreateIdeaRequest) -> Idea:
         """Create a new idea.
 
+        Creates the idea with initial classification of UNDETERMINED,
+        then queues it for async classification if auto_classify is enabled.
+
         Args:
             request: The idea creation request.
 
@@ -119,13 +168,18 @@ class IdeasService:
         now = datetime.now(UTC)
         idea_id = f"idea-{uuid.uuid4().hex[:12]}"
 
+        # Always set initial classification to UNDETERMINED for auto-classification
+        initial_classification = request.classification
+        if self._auto_classify and initial_classification == IdeaClassification.UNDETERMINED:
+            initial_classification = IdeaClassification.UNDETERMINED
+
         idea = Idea(
             id=idea_id,
             content=request.content,
             author_id=request.author_id,
             author_name=request.author_name,
             status=IdeaStatus.ACTIVE,
-            classification=request.classification,
+            classification=initial_classification,
             labels=request.labels,
             created_at=now,
             updated_at=now,
@@ -139,7 +193,34 @@ class IdeasService:
         )
         await es.indices.refresh(index=IDEAS_INDEX)
 
+        # Queue for async classification (non-blocking)
+        await self._enqueue_classification(idea_id)
+
         return idea
+
+    async def _enqueue_classification(self, idea_id: str) -> None:
+        """Enqueue an idea for async classification.
+
+        This is a non-blocking operation that silently handles failures.
+        Classification will happen asynchronously after idea creation.
+
+        Args:
+            idea_id: The ID of the idea to classify.
+        """
+        if not self._auto_classify:
+            return
+
+        worker = self._get_classification_worker()
+        if worker is None:
+            logger.debug(f"Skipping auto-classification for {idea_id}: worker unavailable")
+            return
+
+        try:
+            job_id = await worker.enqueue(idea_id)
+            logger.info(f"Queued classification job {job_id} for idea {idea_id}")
+        except Exception as e:
+            # Non-blocking - log and continue
+            logger.warning(f"Failed to queue classification for {idea_id}: {e}")
 
     async def get_idea(self, idea_id: str) -> Idea | None:
         """Get an idea by ID.

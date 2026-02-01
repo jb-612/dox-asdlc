@@ -6,6 +6,7 @@
  * - Selected idea for detail view
  * - CRUD operations
  * - UI state (loading, errors, form visibility)
+ * - Classification counts (P08-F03 T18)
  */
 
 import { create } from 'zustand';
@@ -18,6 +19,16 @@ import type {
 import * as ideasApi from '../api/ideas';
 
 /**
+ * Classification counts for filter display
+ */
+export interface ClassificationCounts {
+  functional: number;
+  non_functional: number;
+  undetermined: number;
+  total: number;
+}
+
+/**
  * Brainflare store state interface
  */
 export interface BrainflareState {
@@ -25,6 +36,7 @@ export interface BrainflareState {
   ideas: Idea[];
   selectedIdea: Idea | null;
   total: number;
+  classificationCounts: ClassificationCounts | null;
 
   // Filters
   filters: IdeaFilters;
@@ -37,6 +49,7 @@ export interface BrainflareState {
 
   // Actions
   fetchIdeas: () => Promise<void>;
+  fetchClassificationCounts: () => Promise<void>;
   selectIdea: (id: string | null) => void;
   setFilters: (filters: Partial<IdeaFilters>) => void;
   clearFilters: () => void;
@@ -57,6 +70,7 @@ export const useBrainflareStore = create<BrainflareState>((set, get) => ({
   ideas: [],
   selectedIdea: null,
   total: 0,
+  classificationCounts: null,
   filters: {},
   isLoading: false,
   error: null,
@@ -81,6 +95,19 @@ export const useBrainflareStore = create<BrainflareState>((set, get) => ({
         error: (e as Error).message,
         isLoading: false,
       });
+    }
+  },
+
+  /**
+   * Fetch classification counts (P08-F03 T18)
+   */
+  fetchClassificationCounts: async () => {
+    try {
+      const counts = await ideasApi.fetchClassificationCounts(get().filters.status);
+      set({ classificationCounts: counts });
+    } catch (e) {
+      // Silently fail - counts are optional enhancement
+      console.warn('Failed to fetch classification counts:', (e as Error).message);
     }
   },
 

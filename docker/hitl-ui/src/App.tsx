@@ -21,6 +21,7 @@ import MetricsPage from "./pages/MetricsPage";
 import SearchPage from "./pages/SearchPage";
 import AgentsDashboardPage from "./pages/AgentsDashboardPage";
 import LLMConfigPage from "./pages/LLMConfigPage";
+import AdminLabelsPage from "./pages/AdminLabelsPage";
 import BrainflareHubPage from "./pages/BrainflareHubPage";
 import { initMermaid } from "./config/mermaid";
 import { DevOpsNotificationBanner } from "./components/devops";
@@ -112,6 +113,7 @@ function App() {
           <Route path="rules" element={<RuleProposalsPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="admin/llm" element={<LLMConfigPage />} />
+          <Route path="admin/labels" element={<AdminLabelsPage />} />
           <Route path="brainflare" element={<BrainflareHubPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

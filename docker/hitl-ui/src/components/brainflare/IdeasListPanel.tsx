@@ -3,8 +3,7 @@
  *
  * Features:
  * - Header with count and new idea button
- * - Search input
- * - Status and classification filters
+ * - IdeasFilter component with classification counts (P08-F03 T18)
  * - Scrollable list of IdeaCard components
  * - Loading and empty states
  * - Syncs selection with graph view store
@@ -14,7 +13,8 @@ import { useEffect, useCallback } from 'react';
 import { useBrainflareStore } from '../../stores/brainflareStore';
 import { useGraphViewStore } from '../../stores/graphViewStore';
 import { IdeaCard } from './IdeaCard';
-import { PlusIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { IdeasFilter } from '../ideas/IdeasFilter';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 /**
@@ -28,7 +28,9 @@ export function IdeasListPanel() {
     isLoading,
     error,
     total,
+    classificationCounts,
     fetchIdeas,
+    fetchClassificationCounts,
     selectIdea,
     setFilters,
     clearFilters,
@@ -37,10 +39,11 @@ export function IdeasListPanel() {
 
   const { selectNode } = useGraphViewStore();
 
-  // Fetch ideas on mount
+  // Fetch ideas and classification counts on mount
   useEffect(() => {
     fetchIdeas();
-  }, [fetchIdeas]);
+    fetchClassificationCounts();
+  }, [fetchIdeas, fetchClassificationCounts]);
 
   // Check if any filters are active
   const hasActiveFilters = !!(filters.status || filters.classification || filters.search);
@@ -76,70 +79,14 @@ export function IdeasListPanel() {
           </button>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Search ideas..."
-            value={filters.search || ''}
-            onChange={(e) => setFilters({ search: e.target.value || undefined })}
-            className={clsx(
-              'w-full pl-9 pr-3 py-2 text-sm rounded-lg',
-              'border border-border-primary bg-bg-primary text-text-primary',
-              'placeholder:text-text-muted',
-              'focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-            )}
-            aria-label="Search ideas"
-          />
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-2 mt-3">
-          <select
-            value={filters.status || ''}
-            onChange={(e) =>
-              setFilters({
-                status: (e.target.value as 'active' | 'archived') || undefined,
-              })
-            }
-            className="text-sm border border-border-primary rounded-lg px-2 py-1 bg-bg-primary text-text-primary"
-            aria-label="Filter by status"
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="archived">Archived</option>
-          </select>
-
-          <select
-            value={filters.classification || ''}
-            onChange={(e) =>
-              setFilters({
-                classification:
-                  (e.target.value as 'functional' | 'non_functional' | 'undetermined') ||
-                  undefined,
-              })
-            }
-            className="text-sm border border-border-primary rounded-lg px-2 py-1 bg-bg-primary text-text-primary"
-            aria-label="Filter by classification"
-          >
-            <option value="">All Types</option>
-            <option value="functional">Functional</option>
-            <option value="non_functional">Non-Functional</option>
-            <option value="undetermined">Undetermined</option>
-          </select>
-
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-sm text-text-muted hover:text-text-primary flex items-center gap-1"
-              aria-label="Clear filters"
-            >
-              <XMarkIcon className="h-4 w-4" />
-              Clear
-            </button>
-          )}
-        </div>
+        {/* IdeasFilter component with classification counts (P08-F03 T18) */}
+        <IdeasFilter
+          filters={filters}
+          onFiltersChange={setFilters}
+          onClearFilters={clearFilters}
+          classificationCounts={classificationCounts ?? undefined}
+          isLoading={isLoading}
+        />
       </div>
 
       {/* List */}

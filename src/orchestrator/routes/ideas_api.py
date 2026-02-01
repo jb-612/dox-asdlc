@@ -136,7 +136,7 @@ async def create_idea(request: CreateIdeaRequest) -> Idea:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to create idea: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("", response_model=IdeaListResponse)
@@ -187,7 +187,7 @@ async def list_ideas(
         return IdeaListResponse(ideas=ideas, total=total, limit=limit, offset=offset)
     except Exception as e:
         logger.error(f"Failed to list ideas: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{idea_id}", response_model=Idea)
@@ -222,7 +222,7 @@ async def get_idea(
         raise
     except Exception as e:
         logger.error(f"Failed to get idea: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.put("/{idea_id}", response_model=Idea)
@@ -279,7 +279,7 @@ async def update_idea(
         raise
     except Exception as e:
         logger.error(f"Failed to update idea: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/{idea_id}")
@@ -315,4 +315,4 @@ async def delete_idea(
         raise
     except Exception as e:
         logger.error(f"Failed to delete idea: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

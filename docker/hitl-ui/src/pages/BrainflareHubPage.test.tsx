@@ -26,6 +26,8 @@ const mockOpenForm = vi.fn();
 const mockCloseForm = vi.fn();
 const mockClearError = vi.fn();
 
+const mockFetchClassificationCounts = vi.fn();
+
 const mockBrainflareStore = {
   ideas: [] as Idea[],
   selectedIdea: null as Idea | null,
@@ -35,6 +37,7 @@ const mockBrainflareStore = {
   error: null as string | null,
   isFormOpen: false,
   editingIdea: null as Idea | null,
+  classificationCounts: { functional: 0, non_functional: 0, undetermined: 0 },
   fetchIdeas: mockFetchIdeas,
   selectIdea: mockSelectIdea,
   setFilters: mockSetFilters,
@@ -46,6 +49,7 @@ const mockBrainflareStore = {
   openForm: mockOpenForm,
   closeForm: mockCloseForm,
   clearError: mockClearError,
+  fetchClassificationCounts: mockFetchClassificationCounts,
 };
 
 // Mock the store - handle both selector and no-selector calls
@@ -385,7 +389,8 @@ describe('BrainflareHubPage', () => {
 
       render(<BrainflareHubPage />);
 
-      expect(screen.getByText('functional')).toBeInTheDocument();
+      // ClassificationBadge displays 'Functional' - may appear multiple times (card + filter)
+      expect(screen.getAllByText('Functional').length).toBeGreaterThan(0);
     });
 
     it('displays labels', () => {
@@ -394,8 +399,9 @@ describe('BrainflareHubPage', () => {
 
       render(<BrainflareHubPage />);
 
+      // 'ui' is not in taxonomy so shown as-is, 'feature' is in taxonomy so shown as 'Feature'
       expect(screen.getByText('ui')).toBeInTheDocument();
-      expect(screen.getByText('feature')).toBeInTheDocument();
+      expect(screen.getByText('Feature')).toBeInTheDocument();
     });
 
     it('displays word count', () => {

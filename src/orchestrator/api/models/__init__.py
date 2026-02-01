@@ -1,5 +1,15 @@
 """Orchestrator API models package."""
 
+from src.orchestrator.api.models.classification import (
+    BatchClassificationRequest,
+    ClassificationJob,
+    ClassificationJobStatus,
+    ClassificationRequest,
+    ClassificationResult,
+    ClassificationType,
+    LabelDefinition,
+    LabelTaxonomy,
+)
 from src.orchestrator.api.models.devops_activity import (
     DevOpsActivity,
     DevOpsActivityResponse,
@@ -44,6 +54,15 @@ from src.orchestrator.api.models.llm_config import (
 )
 
 __all__ = [
+    # Classification models
+    "BatchClassificationRequest",
+    "ClassificationJob",
+    "ClassificationJobStatus",
+    "ClassificationRequest",
+    "ClassificationResult",
+    "ClassificationType",
+    "LabelDefinition",
+    "LabelTaxonomy",
     # DevOps activity models
     "DevOpsActivity",
     "DevOpsActivityResponse",

@@ -177,3 +177,53 @@ export async function deleteIdea(id: string): Promise<void> {
     throw new Error(`Failed to delete idea: ${res.statusText}`);
   }
 }
+
+/**
+ * Classification counts response
+ */
+export interface ClassificationCountsResponse {
+  functional: number;
+  non_functional: number;
+  undetermined: number;
+  total: number;
+}
+
+/**
+ * Fetch classification counts for ideas
+ *
+ * Returns the count of ideas per classification type.
+ * Optionally filters by status.
+ */
+export async function fetchClassificationCounts(
+  status?: 'active' | 'archived'
+): Promise<ClassificationCountsResponse> {
+  if (USE_MOCK) {
+    await simulateIdeaDelay(50, 100);
+
+    // Filter by status if provided
+    const filteredIdeas = status
+      ? mockIdeas.filter((i) => i.status === status)
+      : mockIdeas;
+
+    // Count by classification
+    const counts = filteredIdeas.reduce(
+      (acc, idea) => {
+        acc[idea.classification]++;
+        acc.total++;
+        return acc;
+      },
+      { functional: 0, non_functional: 0, undetermined: 0, total: 0 }
+    );
+
+    return counts;
+  }
+
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+
+  const res = await fetch(`${API_BASE}/counts?${params}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch classification counts: ${res.statusText}`);
+  }
+  return res.json();
+}

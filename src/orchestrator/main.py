@@ -39,6 +39,10 @@ from src.orchestrator.routes.llm_streaming_api import router as llm_streaming_ro
 from src.orchestrator.routes.integrations_api import router as integrations_router
 from src.orchestrator.routes.ideas_api import router as ideas_api_router
 from src.orchestrator.routes.correlation_api import router as correlation_api_router
+from src.orchestrator.routes.classification_api import (
+    router as classification_api_router,
+    admin_router as classification_admin_router,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -228,6 +232,10 @@ def create_app() -> FastAPI:
     # Correlation API endpoints (for Brainflare Hub graph/linking)
     app.include_router(correlation_api_router)
 
+    # Classification API endpoints (for idea classification and labels)
+    app.include_router(classification_api_router)
+    app.include_router(classification_admin_router)
+
     return app
 
 
@@ -255,6 +263,8 @@ def main() -> None:
     logger.info(f"Integrations API: http://localhost:{port}/api/integrations/")
     logger.info(f"Ideas API: http://localhost:{port}/api/brainflare/ideas")
     logger.info(f"Correlation API: http://localhost:{port}/api/brainflare/correlations")
+    logger.info(f"Classification API: http://localhost:{port}/api/ideas/classify")
+    logger.info(f"Taxonomy Admin API: http://localhost:{port}/api/admin/labels/taxonomy")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:

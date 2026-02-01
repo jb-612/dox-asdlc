@@ -1,0 +1,18 @@
+# Slack Bridge Dependencies
+# See .workitems/P08-F02-slack-integration for feature details
+
+# Slack SDK and Bolt framework
+slack-bolt==1.21.2
+slack-sdk==3.33.4
+
+# Redis client for event streams
+redis==5.2.1
+
+# Configuration and validation
+pydantic==2.10.4
+
+# HTTP server for health checks
+aiohttp==3.11.11
+
+# Logging
+python-json-logger==3.2.1

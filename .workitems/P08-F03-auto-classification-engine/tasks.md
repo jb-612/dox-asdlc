@@ -2,11 +2,11 @@
 
 ## Progress
 
-- Started: Not started
-- Tasks Complete: 0/18
-- Percentage: 0%
-- Status: PLANNED
-- Blockers: P08-F01 (Ideas Repository Core)
+- Started: 2026-02-01
+- Tasks Complete: 18/18
+- Percentage: 100%
+- Status: COMPLETE
+- Blockers: None
 
 ---
 
@@ -14,10 +14,10 @@
 
 ### T01: Create classification Pydantic models
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/api/models/test_classification.py`
-- [ ] Dependencies: P08-F01
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/api/models/test_classification.py`
+- [x] Dependencies: P08-F01
+- [x] Agent: backend
 
 **File:** `src/orchestrator/api/models/classification.py`
 
@@ -32,10 +32,10 @@
 
 ### T02: Create LabelTaxonomyService
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/orchestrator/services/test_label_taxonomy_service.py`
-- [ ] Dependencies: T01
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/orchestrator/services/test_label_taxonomy_service.py`
+- [x] Dependencies: T01
+- [x] Agent: backend
 
 **File:** `src/orchestrator/services/label_taxonomy_service.py`
 
@@ -54,10 +54,10 @@
 
 ### T03: Create classification TypeScript types
 
-- [ ] Estimate: 30min
-- [ ] Tests: N/A (types only)
-- [ ] Dependencies: T01
-- [ ] Agent: frontend
+- [x] Estimate: 30min
+- [x] Tests: N/A (types only)
+- [x] Dependencies: T01
+- [x] Agent: frontend
 
 **File:** `docker/hitl-ui/src/types/classification.ts`
 
@@ -73,10 +73,10 @@
 
 ### T04: Create ClassificationService core
 
-- [ ] Estimate: 2hr
-- [ ] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
-- [ ] Dependencies: T01, T02
-- [ ] Agent: backend
+- [x] Estimate: 2hr
+- [x] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
+- [x] Dependencies: T01, T02
+- [x] Agent: backend
 
 **File:** `src/orchestrator/services/classification_service.py`
 
@@ -93,10 +93,10 @@
 
 ### T05: Integrate with LLM factory
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
-- [ ] Dependencies: T04
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
+- [x] Dependencies: T04
+- [x] Agent: backend
 
 **File:** `src/orchestrator/services/classification_service.py` (addition)
 
@@ -111,10 +111,10 @@
 
 ### T06: Create classification prompts
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
-- [ ] Dependencies: T04
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/services/test_classification_service.py`
+- [x] Dependencies: T04
+- [x] Agent: backend
 
 **File:** `src/orchestrator/services/classification_prompts.py`
 
@@ -131,10 +131,10 @@
 
 ### T07: Create classification worker
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/workers/test_classification_worker.py`
-- [ ] Dependencies: T04
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/workers/test_classification_worker.py`
+- [x] Dependencies: T04
+- [x] Agent: backend
 
 **File:** `src/workers/classification_worker.py`
 
@@ -151,10 +151,10 @@
 
 ### T08: Create batch classification endpoint
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
-- [ ] Dependencies: T07
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
+- [x] Dependencies: T07
+- [x] Agent: backend
 
 **File:** `src/orchestrator/routes/classification_api.py`
 
@@ -171,10 +171,10 @@
 
 ### T09: Auto-trigger classification on idea creation
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/services/test_ideas_service.py`
-- [ ] Dependencies: T07, P08-F01
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/services/test_ideas_service.py`
+- [x] Dependencies: T07, P08-F01
+- [x] Agent: backend
 
 **File:** `src/orchestrator/services/ideas_service.py` (addition)
 
@@ -190,10 +190,10 @@
 
 ### T10: Create classification API router
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
-- [ ] Dependencies: T04, T07
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
+- [x] Dependencies: T04, T07
+- [x] Agent: backend
 
 **File:** `src/orchestrator/routes/classification_api.py`
 
@@ -211,10 +211,10 @@
 
 ### T11: Create taxonomy admin API
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
-- [ ] Dependencies: T02
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/orchestrator/routes/test_classification_api.py`
+- [x] Dependencies: T02
+- [x] Agent: backend
 
 **File:** `src/orchestrator/routes/classification_api.py` (addition)
 
@@ -229,10 +229,10 @@
 
 ### T12: Register classification routes
 
-- [ ] Estimate: 15min
-- [ ] Tests: Manual verification
-- [ ] Dependencies: T10, T11
-- [ ] Agent: backend
+- [x] Estimate: 15min
+- [x] Tests: Manual verification
+- [x] Dependencies: T10, T11
+- [x] Agent: backend
 
 **File:** `src/orchestrator/main.py`
 
@@ -247,10 +247,10 @@
 
 ### T13: Create ClassificationBadge component
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `docker/hitl-ui/src/components/ideas/ClassificationBadge.test.tsx`
-- [ ] Dependencies: T03
-- [ ] Agent: frontend
+- [x] Estimate: 1hr
+- [x] Tests: `docker/hitl-ui/src/components/ideas/ClassificationBadge.test.tsx`
+- [x] Dependencies: T03
+- [x] Agent: frontend
 
 **File:** `docker/hitl-ui/src/components/ideas/ClassificationBadge.tsx`
 
@@ -266,10 +266,10 @@
 
 ### T14: Create LabelEditor component
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `docker/hitl-ui/src/components/ideas/LabelEditor.test.tsx`
-- [ ] Dependencies: T03
-- [ ] Agent: frontend
+- [x] Estimate: 1.5hr
+- [x] Tests: `docker/hitl-ui/src/components/ideas/LabelEditor.test.tsx`
+- [x] Dependencies: T03
+- [x] Agent: frontend
 
 **File:** `docker/hitl-ui/src/components/ideas/LabelEditor.tsx`
 
@@ -286,10 +286,10 @@
 
 ### T15: Create AdminLabelsPage
 
-- [ ] Estimate: 2hr
-- [ ] Tests: `docker/hitl-ui/src/pages/AdminLabelsPage.test.tsx`
-- [ ] Dependencies: T03, T11
-- [ ] Agent: frontend
+- [x] Estimate: 2hr
+- [x] Tests: `docker/hitl-ui/src/pages/AdminLabelsPage.test.tsx`
+- [x] Dependencies: T03, T11
+- [x] Agent: frontend
 
 **File:** `docker/hitl-ui/src/pages/AdminLabelsPage.tsx`
 
@@ -306,12 +306,12 @@
 
 ### T16: Update IdeaCard with classification display
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `docker/hitl-ui/src/components/ideas/IdeaCard.test.tsx`
-- [ ] Dependencies: T13, T14, P08-F01
-- [ ] Agent: frontend
+- [x] Estimate: 1hr
+- [x] Tests: `docker/hitl-ui/src/components/brainflare/IdeaCard.test.tsx`
+- [x] Dependencies: T13, T14, P08-F01
+- [x] Agent: frontend
 
-**File:** `docker/hitl-ui/src/components/ideas/IdeaCard.tsx` (update)
+**File:** `docker/hitl-ui/src/components/brainflare/IdeaCard.tsx` (update)
 
 **Implement:**
 - Add ClassificationBadge to card
@@ -325,35 +325,40 @@
 
 ### T17: Integration tests for classification
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/integration/orchestrator/test_classification.py`
-- [ ] Dependencies: T10, T07
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/integration/orchestrator/test_classification.py` (32 tests)
+- [x] Dependencies: T10, T07
+- [x] Agent: backend
 
-**Implement:**
-- Test full classification flow
-- Test batch processing
-- Test taxonomy updates
-- Test async worker processing
-- Test LLM mock responses
-- Test error handling
+**Implemented:**
+- TestFullClassificationFlow: Tests for full classification with LLM success, non-functional, fallback to rule-based, and not found error
+- TestBatchClassificationProcessing: Tests for batch enqueue, job status tracking, and force reclassification
+- TestTaxonomyUpdates: Tests for GET, add, update, delete taxonomy labels with conflict/not found handling
+- TestLLMMockResponses: Tests for parsing JSON, markdown-wrapped JSON, invalid JSON, missing fields, normalization
+- TestClassificationErrorHandling: Tests for Redis connection errors, ideas service errors
+- TestClassificationAPIEndpoints: Tests for single classify, batch classify, job status, add/remove labels
+- TestLabelValidation: Tests for filtering invalid labels, empty list, all valid labels
 
 ---
 
 ### T18: Add classification filter to IdeasFilter
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `docker/hitl-ui/src/components/ideas/IdeasFilter.test.tsx`
-- [ ] Dependencies: T03, P08-F01
-- [ ] Agent: frontend
+- [x] Estimate: 1hr
+- [x] Tests: `docker/hitl-ui/src/components/ideas/IdeasFilter.test.tsx`
+- [x] Dependencies: T03, P08-F01
+- [x] Agent: frontend
 
-**File:** `docker/hitl-ui/src/components/ideas/IdeasFilter.tsx` (update)
+**File:** `docker/hitl-ui/src/components/ideas/IdeasFilter.tsx` (created)
 
-**Implement:**
-- Classification dropdown filter
-- Integration with existing filters
-- Clear filter functionality
-- Count per classification
+**Implemented:**
+- Classification dropdown filter with All Types, Functional, Non-Functional, Undetermined options
+- Integration with existing filters (status, search)
+- Clear filter functionality with Clear button
+- Count per classification displayed in dropdown options (e.g., "Functional (15)")
+- Loading state support with disabled inputs
+- Updated brainflareStore with fetchClassificationCounts action
+- Updated IdeasListPanel to use the new IdeasFilter component
+- 29 unit tests passing
 
 ---
 
@@ -385,16 +390,19 @@ T11 ───► T12
 ## Verification Checklist
 
 ### Unit Tests
-- [ ] `pytest tests/unit/orchestrator/api/models/test_classification.py`
-- [ ] `pytest tests/unit/orchestrator/services/test_classification_service.py`
-- [ ] `pytest tests/unit/orchestrator/services/test_label_taxonomy_service.py`
-- [ ] `pytest tests/unit/orchestrator/routes/test_classification_api.py`
-- [ ] `pytest tests/unit/workers/test_classification_worker.py`
-- [ ] `npm test -- src/components/ideas/ClassificationBadge`
-- [ ] `npm test -- src/components/ideas/LabelEditor`
+- [x] `pytest tests/unit/orchestrator/api/models/test_classification.py`
+- [x] `pytest tests/unit/orchestrator/services/test_classification_service.py`
+- [x] `pytest tests/unit/orchestrator/services/test_label_taxonomy_service.py`
+- [x] `pytest tests/unit/orchestrator/routes/test_classification_api.py`
+- [x] `pytest tests/unit/workers/test_classification_worker.py`
+- [x] `npm test -- src/components/ideas/ClassificationBadge`
+- [x] `npm test -- src/components/ideas/LabelEditor`
+- [x] `npm test -- src/components/ideas/IdeasFilter`
+- [x] `npm test -- src/pages/AdminLabelsPage`
+- [x] `npm test -- src/components/brainflare/IdeaCard`
 
 ### Integration Tests
-- [ ] `pytest tests/integration/orchestrator/test_classification.py`
+- [x] `pytest tests/integration/orchestrator/test_classification.py` (32 tests)
 
 ### Manual Verification
 1. Create idea -> Classification happens within 30s

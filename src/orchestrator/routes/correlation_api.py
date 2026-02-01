@@ -128,7 +128,7 @@ async def create_correlation(request: CreateCorrelationRequest) -> IdeaCorrelati
         return correlation
     except Exception as e:
         logger.error(f"Failed to create correlation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/ideas/{idea_id}/correlations", response_model=list[IdeaCorrelation])
@@ -178,7 +178,7 @@ async def get_idea_correlations(
         return correlations
     except Exception as e:
         logger.error(f"Failed to get correlations: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/correlations/{correlation_id}")
@@ -224,7 +224,7 @@ async def delete_correlation(
         raise
     except Exception as e:
         logger.error(f"Failed to delete correlation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/graph", response_model=GraphResponse)
@@ -317,4 +317,4 @@ async def get_graph() -> GraphResponse:
         return GraphResponse(nodes=nodes, edges=edges)
     except Exception as e:
         logger.error(f"Failed to get graph: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

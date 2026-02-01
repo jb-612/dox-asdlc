@@ -2,11 +2,12 @@
 
 ## Progress
 
-- Started: Not started
-- Tasks Complete: 0/24
-- Percentage: 0%
-- Status: PLANNED
-- Blockers: P08-F01 (Ideas Repository Core for Part C)
+- Started: 2026-02-01
+- Tasks Complete: 23/24 (T22 deferred)
+- Percentage: 96%
+- Status: IN_PROGRESS
+- Blockers: None
+- Deferred: T22 (requires real Slack workspace for E2E testing)
 
 ---
 
@@ -16,10 +17,10 @@
 
 #### T01: Create SlackBridgeConfig and ChannelConfig models
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_config.py`
-- [ ] Dependencies: None
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_config.py` (19 tests passing)
+- [x] Dependencies: None
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/config.py`
 
@@ -33,10 +34,10 @@
 
 #### T02: Create RBAC validator
 
-- [ ] Estimate: 45min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_rbac.py`
-- [ ] Dependencies: T01
-- [ ] Agent: backend
+- [x] Estimate: 45min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_rbac.py` (16 tests passing)
+- [x] Dependencies: T01
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/rbac.py`
 
@@ -50,10 +51,10 @@
 
 #### T03: Create routing policy lookup
 
-- [ ] Estimate: 45min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_policy.py`
-- [ ] Dependencies: T01
-- [ ] Agent: backend
+- [x] Estimate: 45min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_policy.py` (12 tests passing)
+- [x] Dependencies: T01
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/policy.py`
 
@@ -69,10 +70,10 @@
 
 #### T04: Create Block Kit message builders
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_blocks.py`
-- [ ] Dependencies: None
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_blocks.py` (18 tests passing)
+- [x] Dependencies: None
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/blocks.py`
 
@@ -88,10 +89,10 @@
 
 #### T05: Create GateConsumer class
 
-- [ ] Estimate: 2hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_gate_consumer.py`
-- [ ] Dependencies: T01, T03, T04
-- [ ] Agent: backend
+- [x] Estimate: 2hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_gate_consumer.py` (13 tests passing)
+- [x] Dependencies: T01, T03, T04
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/gate_consumer.py`
 
@@ -107,10 +108,10 @@
 
 #### T06: Implement duplicate detection for gate posts
 
-- [ ] Estimate: 45min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_gate_consumer.py`
-- [ ] Dependencies: T05
-- [ ] Agent: backend
+- [x] Estimate: 45min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_gate_consumer.py` (included in T05 tests)
+- [x] Dependencies: T05
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/gate_consumer.py` (addition)
 
@@ -128,10 +129,10 @@
 
 #### T07: Create main Slack Bolt app with Socket Mode
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py`
-- [ ] Dependencies: T01
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py` (12 tests passing)
+- [x] Dependencies: T01
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/bridge.py`
 
@@ -147,10 +148,10 @@
 
 #### T08: Create decision handler for button clicks
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] Dependencies: T02, T07
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (20 tests passing)
+- [x] Dependencies: T02, T07
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/decision_handler.py`
 
@@ -165,10 +166,10 @@
 
 #### T09: Implement message update after decision
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] Dependencies: T08
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (included in T08 tests)
+- [x] Dependencies: T08
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/decision_handler.py` (addition)
 
@@ -183,10 +184,10 @@
 
 #### T10: Implement rejection modal flow
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] Dependencies: T08
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (included in T08 tests)
+- [x] Dependencies: T08
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/decision_handler.py` (addition)
 
@@ -203,10 +204,10 @@
 
 #### T11: Create event publisher for decisions
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] Dependencies: T08
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (included in T08 tests)
+- [x] Dependencies: T08
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/decision_handler.py` (addition)
 
@@ -220,10 +221,10 @@
 
 #### T12: Handle already-decided gates
 
-- [ ] Estimate: 45min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] Dependencies: T08
-- [ ] Agent: backend
+- [x] Estimate: 45min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (included in T08 tests)
+- [x] Dependencies: T08
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/decision_handler.py` (addition)
 
@@ -241,10 +242,10 @@
 
 #### T13: Create IdeaHandler class
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py`
-- [ ] Dependencies: T01, P08-F01
-- [ ] Agent: backend
+- [x] Estimate: 1.5hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py` (24 tests passing)
+- [x] Dependencies: T01, P08-F01
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/idea_handler.py`
 
@@ -258,10 +259,10 @@
 
 #### T14: Implement idea creation from Slack message
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py`
-- [ ] Dependencies: T13
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py` (included in T13 tests)
+- [x] Dependencies: T13
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/idea_handler.py` (addition)
 
@@ -276,10 +277,10 @@
 
 #### T15: Implement reaction-based idea capture
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py`
-- [ ] Dependencies: T13, T14
-- [ ] Agent: backend
+- [x] Estimate: 1hr
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_idea_handler.py` (included in T13 tests)
+- [x] Dependencies: T13, T14
+- [x] Agent: backend
 
 **File:** `src/infrastructure/slack_bridge/idea_handler.py` (addition)
 
@@ -297,10 +298,10 @@
 
 #### T16: Create Dockerfile for Slack Bridge
 
-- [ ] Estimate: 45min
-- [ ] Tests: Manual verification
-- [ ] Dependencies: T07
-- [ ] Agent: devops
+- [x] Estimate: 45min
+- [x] Tests: Manual verification
+- [x] Dependencies: T07
+- [x] Agent: devops
 
 **File:** `docker/slack-bridge/Dockerfile`
 
@@ -315,10 +316,10 @@
 
 #### T17: Create requirements.txt for Slack Bridge
 
-- [ ] Estimate: 15min
-- [ ] Tests: N/A
-- [ ] Dependencies: None
-- [ ] Agent: devops
+- [x] Estimate: 15min
+- [x] Tests: N/A
+- [x] Dependencies: None
+- [x] Agent: devops
 
 **File:** `docker/slack-bridge/requirements.txt`
 
@@ -333,10 +334,10 @@
 
 #### T18: Add slack-bridge to docker-compose.yml
 
-- [ ] Estimate: 30min
-- [ ] Tests: Manual verification
-- [ ] Dependencies: T16, T17
-- [ ] Agent: devops
+- [x] Estimate: 30min
+- [x] Tests: Manual verification
+- [x] Dependencies: T16, T17
+- [x] Agent: devops
 
 **File:** `docker/docker-compose.yml` (addition)
 
@@ -353,10 +354,10 @@
 
 #### T19: Implement health check endpoint
 
-- [ ] Estimate: 45min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py`
-- [ ] Dependencies: T07
-- [ ] Agent: backend
+- [x] Estimate: 45min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py` (24 tests passing)
+- [x] Dependencies: T07
+- [x] Agent: devops
 
 **File:** `src/infrastructure/slack_bridge/bridge.py` (addition)
 
@@ -370,10 +371,10 @@
 
 #### T20: Implement startup validation
 
-- [ ] Estimate: 30min
-- [ ] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py`
-- [ ] Dependencies: T07
-- [ ] Agent: backend
+- [x] Estimate: 30min
+- [x] Tests: `tests/unit/infrastructure/slack_bridge/test_bridge.py` (24 tests passing)
+- [x] Dependencies: T07
+- [x] Agent: devops
 
 **File:** `src/infrastructure/slack_bridge/bridge.py` (addition)
 
@@ -392,10 +393,10 @@
 
 #### T21: Create integration tests with mocked Slack
 
-- [ ] Estimate: 2hr
-- [ ] Tests: `tests/integration/infrastructure/test_slack_bridge.py`
-- [ ] Dependencies: T05, T08, T13
-- [ ] Agent: backend
+- [x] Estimate: 2hr
+- [x] Tests: `tests/integration/infrastructure/test_slack_bridge.py` (29 tests)
+- [x] Dependencies: T05, T08, T13
+- [x] Agent: backend
 
 **Implement:**
 - Mock Slack WebClient responses
@@ -413,6 +414,7 @@
 - [ ] Tests: Manual execution
 - [ ] Dependencies: T21
 - [ ] Agent: backend
+- **Status: DEFERRED** - Requires real Slack workspace for E2E testing
 
 **File:** `tests/e2e/test_slack_bridge_e2e.py`
 
@@ -423,16 +425,18 @@
 - Simulates button click (if possible with test tokens)
 - Verifies decision event in Redis
 
+**Deferred Reason:** E2E testing requires a real Slack workspace with valid tokens. Integration tests with mocked Slack (T21) provide coverage for the code paths. Real E2E testing should be performed manually during deployment to a staging environment.
+
 ---
 
 ### Phase E2: Documentation
 
 #### T23: Create Slack app setup documentation
 
-- [ ] Estimate: 1hr
-- [ ] Tests: N/A (documentation)
-- [ ] Dependencies: T18
-- [ ] Agent: orchestrator
+- [x] Estimate: 1hr
+- [x] Tests: N/A (documentation)
+- [x] Dependencies: T18
+- [x] Agent: orchestrator
 
 **File:** `docs/integrations/slack-hitl-bridge.md`
 
@@ -448,10 +452,10 @@
 
 #### T24: Create RBAC configuration guide
 
-- [ ] Estimate: 30min
-- [ ] Tests: N/A (documentation)
-- [ ] Dependencies: T23
-- [ ] Agent: orchestrator
+- [x] Estimate: 30min
+- [x] Tests: N/A (documentation)
+- [x] Dependencies: T23
+- [x] Agent: orchestrator
 
 **File:** `docs/integrations/slack-hitl-bridge.md` (addition)
 
@@ -506,17 +510,17 @@ T18 ───► T23 ───► T24
 ## Verification Checklist
 
 ### Unit Tests
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_config.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_rbac.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_policy.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_blocks.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_gate_consumer.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_bridge.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_decision_handler.py`
-- [ ] `pytest tests/unit/infrastructure/slack_bridge/test_idea_handler.py`
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_config.py` (19 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_rbac.py` (16 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_policy.py` (12 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_blocks.py` (18 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_gate_consumer.py` (13 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_bridge.py` (24 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_decision_handler.py` (20 passed)
+- [x] `pytest tests/unit/infrastructure/slack_bridge/test_idea_handler.py` (24 passed)
 
 ### Integration Tests
-- [ ] `pytest tests/integration/infrastructure/test_slack_bridge.py`
+- [x] `pytest tests/integration/infrastructure/test_slack_bridge.py` (29 tests)
 
 ### Manual Verification
 1. Start bridge with valid config -> Logs "ready" message
