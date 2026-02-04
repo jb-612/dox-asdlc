@@ -5,6 +5,7 @@
 
 import { useCallback, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Excalidraw } from '@excalidraw/excalidraw';
+import '@excalidraw/excalidraw/index.css';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import clsx from 'clsx';
 import { useArchitectStore } from '../../stores/architectStore';

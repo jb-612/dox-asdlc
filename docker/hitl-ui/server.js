@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 const SERVICE_NAME = process.env.SERVICE_NAME || 'hitl-ui';
-const SERVICE_PORT = parseInt(process.env.SERVICE_PORT || '3000', 10);
+const SERVICE_PORT = parseInt(process.env.PORT || process.env.SERVICE_PORT || '3000', 10);
 const REDIS_HOST = process.env.REDIS_HOST || 'infrastructure';
 const REDIS_PORT = process.env.REDIS_PORT || '6379';
 const API_BACKEND_URL = process.env.API_BACKEND_URL || 'http://dox-asdlc-orchestrator:8080';
