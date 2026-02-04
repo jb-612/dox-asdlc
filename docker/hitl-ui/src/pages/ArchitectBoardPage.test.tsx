@@ -201,7 +201,7 @@ describe('ArchitectBoardPage', () => {
     it('has full height layout', () => {
       renderWithRouter(<ArchitectBoardPage />);
       const page = screen.getByTestId('architect-board-page');
-      expect(page).toHaveClass('h-full');
+      expect(page).toHaveClass('absolute');
     });
 
     it('has flex column layout', () => {

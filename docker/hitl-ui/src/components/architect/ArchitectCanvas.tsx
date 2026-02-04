@@ -49,17 +49,19 @@ const ArchitectCanvas = forwardRef<ArchitectCanvasRef, ArchitectCanvasProps>(
 
     return (
       <div
-        className={clsx('flex-1 h-full relative', className)}
-        style={{ width: '100%', height: '100%' }}
+        className={clsx('flex-1 min-h-0 relative overflow-hidden', className)}
         data-testid="architect-canvas"
       >
-        <Excalidraw
-          theme="dark"
-          onChange={handleChange}
-          excalidrawAPI={(api) => {
-            excalidrawAPIRef.current = api;
-          }}
-        />
+        {/* Absolute positioned inner wrapper to constrain Excalidraw height */}
+        <div className="absolute inset-0">
+          <Excalidraw
+            theme="dark"
+            onChange={handleChange}
+            excalidrawAPI={(api) => {
+              excalidrawAPIRef.current = api;
+            }}
+          />
+        </div>
       </div>
     );
   }

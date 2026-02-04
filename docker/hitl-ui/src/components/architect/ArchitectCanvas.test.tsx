@@ -70,7 +70,7 @@ describe('ArchitectCanvas', () => {
       render(<ArchitectCanvas />);
       const canvas = screen.getByTestId('architect-canvas');
       expect(canvas).toHaveClass('flex-1');
-      expect(canvas).toHaveClass('h-full');
+      expect(canvas).toHaveClass('min-h-0');
     });
   });
 

@@ -94,7 +94,7 @@ export default function ArchitectBoardPage({ className }: ArchitectBoardPageProp
 
   return (
     <div
-      className={clsx('h-full flex flex-col bg-bg-primary', className)}
+      className={clsx('absolute inset-0 top-16 flex flex-col bg-bg-primary', className)}
       data-testid="architect-board-page"
       role="main"
       tabIndex={0}
@@ -130,8 +130,8 @@ export default function ArchitectBoardPage({ className }: ArchitectBoardPageProp
         </div>
       </div>
 
-      {/* 3-panel layout area */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* 3-panel layout area - min-h-0 prevents flexbox overflow */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
         <ToolsPanel />
         <ArchitectCanvas />
         <OutputPanel />
