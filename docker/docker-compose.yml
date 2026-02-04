@@ -41,6 +41,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379
       - SERVICE_NAME=orchestrator
       - SERVICE_PORT=8080
       - GIT_WRITE_ACCESS=true

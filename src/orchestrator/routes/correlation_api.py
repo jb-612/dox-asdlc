@@ -267,8 +267,11 @@ async def get_graph() -> GraphResponse:
             )
     else:
         # Real mode - get from graph store
+        # Pass idea IDs so graph_store knows which nodes to query edges for
+        # (ideas are stored in ES, not in Redis GRAPH:ALL_NODES)
         try:
-            _, raw_edges = await graph_store.get_graph()
+            idea_ids = [idea.id for idea in all_ideas]
+            _, raw_edges = await graph_store.get_graph(node_ids=idea_ids)
             edges = [
                 GraphEdge(
                     id=e.get("id", f"edge-{e['source'][:6]}-{e['target'][:6]}"),
