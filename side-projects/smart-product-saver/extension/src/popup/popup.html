@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Product Saver</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Auth View -->
+      <div id="auth-view" class="view hidden">
+        <h2>Connect Account</h2>
+        <form id="auth-form">
+          <div class="form-group">
+            <label for="api-url">Server URL</label>
+            <input
+              type="url"
+              id="api-url"
+              placeholder="http://localhost:8000"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="api-key">API Key</label>
+            <input
+              type="text"
+              id="api-key"
+              placeholder="Your API key from settings"
+              required
+            />
+          </div>
+          <button type="submit" class="btn btn-primary">Connect</button>
+        </form>
+        <p class="help-text">
+          Get your API key from the web app settings page.
+        </p>
+      </div>
+
+      <!-- Save View -->
+      <div id="save-view" class="view hidden">
+        <div id="product-preview">
+          <img id="preview-image" src="" alt="" />
+          <div id="preview-info">
+            <h3 id="preview-title">Loading...</h3>
+            <p id="preview-price"></p>
+            <p id="preview-domain"></p>
+          </div>
+        </div>
+
+        <form id="save-form">
+          <div class="form-group">
+            <label for="notes">Notes (optional)</label>
+            <textarea
+              id="notes"
+              rows="2"
+              placeholder="Why are you saving this?"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="collection">Collection</label>
+            <select id="collection">
+              <option value="">None</option>
+            </select>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="save-btn">
+              Save Product
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Success View -->
+      <div id="success-view" class="view hidden">
+        <div class="success-icon">✓</div>
+        <h3>Product Saved!</h3>
+        <p>View in your collection</p>
+        <button class="btn btn-secondary" id="open-app-btn">Open App</button>
+      </div>
+
+      <!-- Error View -->
+      <div id="error-view" class="view hidden">
+        <div class="error-icon">✕</div>
+        <h3>Error</h3>
+        <p id="error-message"></p>
+        <button class="btn btn-secondary" id="retry-btn">Try Again</button>
+      </div>
+
+      <!-- Loading -->
+      <div id="loading" class="hidden">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
