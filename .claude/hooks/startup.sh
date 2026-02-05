@@ -27,9 +27,6 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
-# Valid roles that can be used as instance identities
-VALID_ROLES="backend frontend orchestrator devops pm"
-
 # Redis configuration
 REDIS_HOST="${REDIS_HOST:-localhost}"
 REDIS_PORT="${REDIS_PORT:-6379}"
@@ -58,41 +55,17 @@ log_error() {
     echo "[STARTUP ERROR] $*" >&2
 }
 
-# Check if a value is in the valid roles list
-is_valid_role() {
-    local role="$1"
-    for valid in $VALID_ROLES; do
-        if [[ "$role" == "$valid" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Map email to role (portable implementation without associative arrays)
-email_to_role() {
-    local email="$1"
-    case "$email" in
-        "claude-backend@asdlc.local")
-            echo "backend"
-            ;;
-        "claude-frontend@asdlc.local")
-            echo "frontend"
-            ;;
-        "claude-orchestrator@asdlc.local")
-            echo "orchestrator"
-            ;;
-        "claude-devops@asdlc.local")
-            echo "devops"
-            ;;
-        *)
-            echo ""
-            ;;
-    esac
+# Check if a value is a valid identity (any non-empty string except "unknown")
+is_valid_identity() {
+    local identity="$1"
+    if [[ -z "$identity" || "$identity" == "unknown" ]]; then
+        return 1
+    fi
+    return 0
 }
 
 # =============================================================================
-# Identity Validation (T10)
+# Identity Validation
 # =============================================================================
 
 resolve_identity() {
@@ -103,22 +76,9 @@ resolve_identity() {
     if [[ -n "${CLAUDE_INSTANCE_ID:-}" && "${CLAUDE_INSTANCE_ID:-}" != "unknown" ]]; then
         identity="$CLAUDE_INSTANCE_ID"
         source="CLAUDE_INSTANCE_ID"
-    else
-        # Priority 2: Fall back to git user.email
-        local git_email=""
-        if git_email=$(git config user.email 2>/dev/null); then
-            if [[ -n "$git_email" ]]; then
-                local mapped_role
-                mapped_role=$(email_to_role "$git_email")
-                if [[ -n "$mapped_role" ]]; then
-                    identity="$mapped_role"
-                    source="git email ($git_email)"
-                fi
-            fi
-        fi
     fi
 
-    # Priority 3: Default to "pm" if in main repository (not a worktree)
+    # Priority 2: Default to "pm" if in main repository (not a worktree)
     if [[ -z "$identity" ]]; then
         local is_worktree=false
         local worktree_root=""
@@ -135,30 +95,27 @@ resolve_identity() {
             # In main repository without specific identity = PM CLI (default)
             identity="pm"
             source="default (main repository)"
-            log_info "No specific identity set - defaulting to PM CLI role"
+            log_info "No specific identity set - defaulting to PM CLI"
         else
             # In a worktree without identity is an error
             log_error "Running in worktree but no identity configured."
             log_error "Worktree: $worktree_root"
             log_error ""
-            log_error "Worktrees should be created with:"
-            log_error "  ./scripts/start-agent-session.sh <role>"
+            log_error "Set the identity for your context:"
+            log_error "  export CLAUDE_INSTANCE_ID=<context-name>"
             log_error ""
-            log_error "Or manually set identity:"
-            log_error "  export CLAUDE_INSTANCE_ID=backend"
-            log_error ""
-            log_error "Valid roles: $VALID_ROLES"
+            log_error "Example:"
+            log_error "  export CLAUDE_INSTANCE_ID=p11-guardrails"
             return 1
         fi
     fi
 
-    if ! is_valid_role "$identity"; then
+    if ! is_valid_identity "$identity"; then
         log_error "Invalid identity: $identity"
         log_error ""
-        log_error "Valid roles: $VALID_ROLES"
-        log_error ""
-        log_error "To fix, set CLAUDE_INSTANCE_ID to a valid role:"
-        log_error "  export CLAUDE_INSTANCE_ID=backend"
+        log_error "Identity must be a non-empty string."
+        log_error "Use your feature context name:"
+        log_error "  export CLAUDE_INSTANCE_ID=p11-guardrails"
         return 1
     fi
 
@@ -218,11 +175,11 @@ register_presence() {
 }
 
 # =============================================================================
-# Worktree Verification (T18)
+# Worktree Verification
 # =============================================================================
 
 verify_worktree() {
-    local role="$1"
+    local identity="$1"
 
     # Check if current directory is inside a git worktree
     local is_worktree=false
@@ -238,30 +195,25 @@ verify_worktree() {
         fi
     fi
 
-    # Determine expected worktree location
-    local expected_worktree_pattern=".worktrees/$role"
-
-    if [[ "$role" == "pm" ]]; then
-        # PM CLI should be in main worktree, not agent worktree
+    if [[ "$identity" == "pm" ]]; then
+        # PM CLI should be in main repo, not a worktree
         if [[ "$is_worktree" == "true" ]]; then
-            log_warn "PM role is running in an agent worktree: $worktree_root"
+            log_warn "PM identity is running in a worktree: $worktree_root"
             log_warn "PM CLI typically runs in the main repository."
             log_warn "If intentional, you can ignore this warning."
         fi
     else
-        # Non-PM roles should be in their respective worktrees
+        # Non-PM identities typically run in worktrees
         if [[ "$is_worktree" == "false" ]]; then
-            log_warn "Agent role '$role' is not in a worktree."
-            log_warn "For proper isolation, agent sessions should run in:"
-            log_warn "  .worktrees/$role/"
-            log_warn ""
-            log_warn "To set up a worktree, run:"
-            log_warn "  scripts/start-agent-session.sh $role"
+            log_warn "Context '$identity' is running in main repository."
+            log_warn "For proper isolation, consider using a worktree:"
+            log_warn "  ./scripts/start-session.sh $identity"
         else
-            # Verify the worktree matches the role
-            if [[ "$worktree_root" != *"$expected_worktree_pattern"* ]]; then
-                log_warn "Worktree mismatch: role is '$role' but worktree is: $worktree_root"
-                log_warn "Expected worktree path to contain: $expected_worktree_pattern"
+            # Verify the worktree matches the identity
+            local expected_pattern=".worktrees/$identity"
+            if [[ "$worktree_root" != *"$expected_pattern"* ]]; then
+                log_warn "Worktree mismatch: identity is '$identity' but worktree is: $worktree_root"
+                log_warn "Expected worktree path to contain: $expected_pattern"
             fi
         fi
     fi
@@ -270,11 +222,11 @@ verify_worktree() {
 }
 
 # =============================================================================
-# SESSION_START Message Publishing (T20)
+# SESSION_START Message Publishing
 # =============================================================================
 
 publish_session_start() {
-    local role="$1"
+    local identity="$1"
 
     # Check if Redis is available
     if ! check_redis_available; then
@@ -291,24 +243,20 @@ publish_session_start() {
     local cwd
     cwd=$(pwd)
 
-    # Get git email for metadata
-    local git_email=""
-    git_email=$(git config user.email 2>/dev/null || echo "unknown")
-
     # Build JSON payload
     local json_payload
     json_payload=$(cat <<EOF
 {
     "id": "$msg_id",
     "type": "SESSION_START",
-    "from": "$role",
+    "from": "$identity",
     "to": "all",
     "timestamp": "$now",
     "requires_ack": false,
     "acknowledged": false,
     "payload": {
-        "subject": "Session started: $role",
-        "description": "Agent session started. Git email: $git_email, CWD: $cwd, Session ID: $SESSION_ID"
+        "subject": "Session started: $identity",
+        "description": "Session started. CWD: $cwd, Session ID: $SESSION_ID"
     }
 }
 EOF
@@ -330,11 +278,11 @@ EOF
 }
 
 # =============================================================================
-# Notification Check (T12)
+# Notification Check
 # =============================================================================
 
 check_notifications() {
-    local role="$1"
+    local identity="$1"
 
     # Check if Redis is available
     if ! check_redis_available; then
@@ -343,7 +291,7 @@ check_notifications() {
     fi
 
     # Check for pending messages in the inbox
-    local inbox_key="asdlc:coord:inbox:${role}"
+    local inbox_key="asdlc:coord:inbox:${identity}"
     local pending_count
 
     pending_count=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" SCARD "$inbox_key" 2>/dev/null || echo "0")
@@ -361,7 +309,7 @@ check_notifications() {
     fi
 
     # Also check notification queue (for offline notifications)
-    local queue_key="asdlc:coord:notifications:${role}"
+    local queue_key="asdlc:coord:notifications:${identity}"
     local queue_count
 
     queue_count=$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" LLEN "$queue_key" 2>/dev/null || echo "0")

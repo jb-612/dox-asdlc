@@ -8,7 +8,12 @@ This document defines the coordination protocol for multi-session agent communic
 
 ## Overview
 
-The coordination system enables multiple CLI sessions to work together on a project. Each session represents an agent role (PM CLI, backend, frontend, orchestrator, devops) and communicates via Redis-backed coordination messages.
+The coordination system enables multiple CLI sessions to work together on a project. Each session represents a **bounded context** (feature/epic like `p11-guardrails`, `p04-review-swarm`) and communicates via Redis-backed coordination messages.
+
+**Key Concepts:**
+- **Session Context**: Identified by CLAUDE_INSTANCE_ID (e.g., `p11-guardrails`)
+- **PM CLI**: Main session uses identity `pm`, runs in main repository
+- **Feature Sessions**: Run in worktrees with feature-specific identities
 
 ## Session Lifecycle
 
@@ -105,19 +110,19 @@ TTL: 300 seconds (auto-expires)
 
 ### Querying Presence
 
-Use `coord_get_presence` to get all agent presence records:
+Use `coord_get_presence` to get all session presence records:
 
 ```json
 {
   "agents": [
     {
-      "agent_id": "backend",
+      "agent_id": "p11-guardrails",
       "status": "active",
       "last_heartbeat": "2025-01-21T10:30:00Z",
       "session_id": "abc123"
     },
     {
-      "agent_id": "frontend",
+      "agent_id": "p04-review-swarm",
       "status": "stale",
       "last_heartbeat": "2025-01-21T10:20:00Z",
       "session_id": "def456"
@@ -128,19 +133,19 @@ Use `coord_get_presence` to get all agent presence records:
 
 ### Stale Detection
 
-An agent is considered stale when:
+A session is considered stale when:
 - Last heartbeat is more than 5 minutes old
 - The session may have crashed without sending SESSION_END
-- Messages sent to this agent may not be processed promptly
+- Messages sent to this session may not be processed promptly
 
-**PM CLI handling of stale agents:**
+**PM CLI handling of stale sessions:**
 
 ```
-Backend agent is stale (last seen 8 minutes ago).
+Session p11-guardrails is stale (last seen 8 minutes ago).
 
 Options:
- A) Send task anyway (agent may pick it up later)
- B) Wait for agent to come online
+ A) Send task anyway (session may pick it up later)
+ B) Wait for session to come online
  C) Run the work in this session
 ```
 
@@ -149,11 +154,9 @@ Options:
 ### Presence Keys
 
 ```
-asdlc:presence:pm-cli      -> Presence record for PM CLI
-asdlc:presence:backend     -> Presence record for backend agent
-asdlc:presence:frontend    -> Presence record for frontend agent
-asdlc:presence:orchestrator -> Presence record for orchestrator
-asdlc:presence:devops      -> Presence record for devops agent
+asdlc:presence:pm              -> Presence record for PM CLI (main repo)
+asdlc:presence:p11-guardrails  -> Presence record for P11 feature session
+asdlc:presence:p04-review-swarm -> Presence record for P04 feature session
 ```
 
 ### Message Keys
@@ -180,12 +183,12 @@ Published when a CLI session begins. This message is published by the startup ho
 | Field | Type | Description |
 |-------|------|-------------|
 | type | string | `SESSION_START` |
-| from | string | Agent identifier |
+| from | string | Session context identifier |
 | to | string | Always `all` (broadcast) |
 | timestamp | string | ISO-8601 timestamp |
 | requires_ack | boolean | Always `false` |
-| payload.subject | string | `Session started: <role>` |
-| payload.description | string | Includes git_email, CWD, session_id |
+| payload.subject | string | `Session started: <context>` |
+| payload.description | string | Includes CWD, session_id |
 
 **Published by:** `.claude/hooks/startup.sh`
 
@@ -194,32 +197,32 @@ Published when a CLI session begins. This message is published by the startup ho
 {
   "id": "msg-1738756800-12345",
   "type": "SESSION_START",
-  "from": "backend",
+  "from": "p11-guardrails",
   "to": "all",
   "timestamp": "2026-02-05T10:00:00Z",
   "requires_ack": false,
   "payload": {
-    "subject": "Session started: backend",
-    "description": "Agent session started. Git email: claude-backend@asdlc.local, CWD: /path/to/.worktrees/backend, Session ID: session-1738756800-12345"
+    "subject": "Session started: p11-guardrails",
+    "description": "Session started. CWD: /path/to/.worktrees/p11-guardrails, Session ID: session-1738756800-12345"
   }
 }
 ```
 
 ### SESSION_END
 
-Published when a CLI session ends gracefully. This message is published by the teardown script (`scripts/worktree/teardown-agent.sh`) before removing the worktree.
+Published when a CLI session ends gracefully. This message is published by the teardown script (`scripts/worktree/teardown-worktree.sh`) before removing the worktree.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | type | string | `SESSION_END` |
-| from | string | Agent identifier |
+| from | string | Session context identifier |
 | to | string | Always `all` (broadcast) |
 | timestamp | string | ISO-8601 timestamp |
 | requires_ack | boolean | Always `false` |
-| payload.subject | string | `Session ended: <role>` |
+| payload.subject | string | `Session ended: <context>` |
 | payload.description | string | Includes reason for termination |
 
-**Published by:** `scripts/worktree/teardown-agent.sh`
+**Published by:** `scripts/worktree/teardown-worktree.sh`
 
 **Reason values:**
 - `user_exit` - User requested teardown (--abandon or interactive cancel)
@@ -231,13 +234,13 @@ Published when a CLI session ends gracefully. This message is published by the t
 {
   "id": "msg-1738760400-67890",
   "type": "SESSION_END",
-  "from": "backend",
+  "from": "p11-guardrails",
   "to": "all",
   "timestamp": "2026-02-05T11:00:00Z",
   "requires_ack": false,
   "payload": {
-    "subject": "Session ended: backend",
-    "description": "Agent session ended. Reason: task_complete"
+    "subject": "Session ended: p11-guardrails",
+    "description": "Session ended. Reason: task_complete"
   }
 }
 ```
@@ -417,37 +420,37 @@ If presence cannot be updated:
 2. Manually check Redis for the message
 3. Ensure target agents call `coord_check_messages`
 
-### Duplicate sessions for same agent
+### Duplicate sessions for same context
 
 **Symptoms:** Multiple presence records or conflicting session IDs
 
 **Possible causes:**
 1. Previous session didn't end cleanly
-2. Multiple CLI windows for same role
+2. Multiple CLI windows for same context
 3. TTL not expiring old records
 
 **Resolution:**
 1. Check for multiple CLI windows
 2. Wait for TTL to expire old sessions
-3. Manually clean up: `redis-cli DEL asdlc:presence:<agent-id>`
+3. Manually clean up: `redis-cli DEL asdlc:presence:<context>`
 
 ## Integration with Workflow
 
 ### At Workflow Start
 
-1. PM CLI checks presence of all agents
-2. Reports which agents are available
-3. Advises user if critical agents are missing
+1. PM CLI checks presence of all sessions
+2. Reports which feature contexts are active
+3. Advises user if expected sessions are missing
 
 ### During Delegation
 
-1. PM CLI checks target agent presence
-2. Warns if agent is stale
-3. Offers alternatives if agent is offline
+1. PM CLI checks target session presence
+2. Warns if session is stale
+3. Offers alternatives if session is offline
 
 ### After Task Completion
 
-1. Agent publishes STATUS_UPDATE
+1. Session publishes STATUS_UPDATE
 2. PM CLI receives update on next message check
 3. Workflow continues based on outcome
 

@@ -1,22 +1,23 @@
 #!/bin/bash
-# Merge agent branch changes back to main.
+# Merge feature branch changes back to main.
 #
-# Usage: ./scripts/worktree/merge-agent.sh <role>
+# Usage: ./scripts/worktree/merge-worktree.sh <context>
 #
 # This script:
-# - Verifies the agent branch exists
+# - Verifies the feature branch exists
 # - Attempts fast-forward merge first
 # - Falls back to merge commit if needed
 # - Detects and reports conflicts (exit code 1)
 # - Does NOT auto-resolve conflicts
+#
+# Examples:
+#   ./scripts/worktree/merge-worktree.sh p11-guardrails
+#   ./scripts/worktree/merge-worktree.sh p04-review-swarm
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-# Valid roles for agent worktrees
-VALID_ROLES=("backend" "frontend" "orchestrator" "devops")
 
 # Colors for output
 RED='\033[0;31m'
@@ -25,15 +26,12 @@ YELLOW='\033[0;33m'
 NC='\033[0m'
 
 usage() {
-    echo "Usage: $0 <role>"
+    echo "Usage: $0 <context>"
     echo ""
-    echo "Merge agent branch changes back to main."
+    echo "Merge feature branch changes back to main."
     echo ""
     echo "Arguments:"
-    echo "  role    Agent role (required)"
-    echo ""
-    echo "Valid roles:"
-    echo "  backend, frontend, orchestrator, devops"
+    echo "  context    Bounded context name (required)"
     echo ""
     echo "Options:"
     echo "  -h, --help   Show this help message"
@@ -45,8 +43,8 @@ usage() {
     echo "  - Exit code 0 on success, 1 on failure/conflict"
     echo ""
     echo "Examples:"
-    echo "  $0 backend     # Merge agent/backend/active to main"
-    echo "  $0 frontend    # Merge agent/frontend/active to main"
+    echo "  $0 p11-guardrails     # Merge feature/p11-guardrails to main"
+    echo "  $0 p04-review-swarm   # Merge feature/p04-review-swarm to main"
 }
 
 log_info() {
@@ -61,18 +59,8 @@ log_error() {
     echo -e "${RED}ERROR:${NC} $1" >&2
 }
 
-validate_role() {
-    local role="$1"
-    for valid in "${VALID_ROLES[@]}"; do
-        if [[ "$role" == "$valid" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 main() {
-    local role=""
+    local context=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -87,8 +75,8 @@ main() {
                 exit 1
                 ;;
             *)
-                if [[ -z "$role" ]]; then
-                    role="$1"
+                if [[ -z "$context" ]]; then
+                    context="$1"
                 else
                     log_error "Too many arguments"
                     usage
@@ -99,31 +87,25 @@ main() {
         esac
     done
 
-    # Validate role
-    if [[ -z "$role" ]]; then
-        log_error "Missing required argument: role"
+    # Validate context
+    if [[ -z "$context" ]]; then
+        log_error "Missing required argument: context"
         usage
         exit 1
     fi
 
-    if ! validate_role "$role"; then
-        log_error "Invalid role: $role"
-        echo "Valid roles: ${VALID_ROLES[*]}"
-        exit 1
-    fi
-
     # Define branch name
-    local branch_name="agent/$role/active"
+    local branch_name="feature/$context"
 
     # Change to project root
     cd "$PROJECT_ROOT"
 
-    # Verify agent branch exists
+    # Verify feature branch exists
     if ! git show-ref --verify --quiet "refs/heads/$branch_name"; then
-        log_error "Agent branch does not exist: $branch_name"
+        log_error "Feature branch does not exist: $branch_name"
         echo ""
-        echo "Has the agent worktree been set up?"
-        echo "Run: ./scripts/worktree/setup-agent.sh $role"
+        echo "Has the worktree been set up?"
+        echo "Run: ./scripts/start-session.sh $context"
         exit 1
     fi
 

@@ -4,46 +4,43 @@ description: Coordination rules for parallel CLI instances
 
 # Parallel CLI Coordination
 
-Multiple CLI roles work in parallel with domain boundaries.
+Multiple CLI sessions work in parallel with domain boundaries. Sessions are identified by **bounded context** (feature/epic), while subagent roles determine path restrictions.
 
-## Roles
+## Concepts
 
-| Role | Domain | Git Email |
-|------|--------|-----------|
-| backend | Workers, infra (P01-P03, P06) | `claude-backend@asdlc.local` |
-| frontend | HITL UI (P05) | `claude-frontend@asdlc.local` |
-| orchestrator | Meta files, coordination | `claude-orchestrator@asdlc.local` |
-| devops | Docker, K8s, cloud, GitHub Actions | `claude-devops@asdlc.local` |
+| Concept | Purpose | Example |
+|---------|---------|---------|
+| **Session Context** (CLAUDE_INSTANCE_ID) | Which feature worktree | `p11-guardrails`, `p04-review-swarm` |
+| **Subagent Role** | Path restrictions within a session | `backend`, `frontend`, `orchestrator`, `devops` |
+
+## Subagent Roles (Path Restrictions)
+
+| Role | Domain |
+|------|--------|
+| backend | Workers, infra (P01-P03, P06) |
+| frontend | HITL UI (P05) |
+| orchestrator | Meta files, coordination |
+| devops | Docker, K8s, cloud, GitHub Actions |
 
 ## Sender Identity
 
-The coordination MCP server automatically identifies the sender based on git configuration. This ensures all messages have proper attribution for routing and audit purposes.
+The coordination MCP server identifies the sender based on `CLAUDE_INSTANCE_ID` environment variable.
 
-### Git Email to Instance ID Mapping
+### CLAUDE_INSTANCE_ID (Required for Worktrees)
 
-| Git Email | Instance ID |
-|-----------|-------------|
-| `claude-backend@asdlc.local` | `backend` |
-| `claude-frontend@asdlc.local` | `frontend` |
-| `claude-orchestrator@asdlc.local` | `orchestrator` |
-| `claude-devops@asdlc.local` | `devops` |
-
-The MCP server reads `git config user.email` at startup and maps it to the corresponding instance ID.
-
-### CLAUDE_INSTANCE_ID Override
-
-The `CLAUDE_INSTANCE_ID` environment variable takes precedence over git config:
+The `CLAUDE_INSTANCE_ID` environment variable identifies the session context:
 
 1. If `CLAUDE_INSTANCE_ID` is set and not empty or "unknown", use it
-2. Otherwise, derive from `git config user.email`
-3. If neither is available, fail with error
+2. Otherwise, default to `pm` in main repository
+3. In a worktree without CLAUDE_INSTANCE_ID, session startup will warn
 
 ```bash
-# Example: Override identity via environment
-CLAUDE_INSTANCE_ID=backend python -m src.infrastructure.coordination.mcp_server
+# Example: Set identity for a feature context
+export CLAUDE_INSTANCE_ID=p11-guardrails
+claude
 ```
 
-**Note:** Empty string or "unknown" values for `CLAUDE_INSTANCE_ID` are ignored and fall back to git config detection.
+**Note:** Any non-empty string is valid as CLAUDE_INSTANCE_ID. Use work item naming format (e.g., `p11-guardrails`, `p04-review-swarm`).
 
 ### Fail-Fast Behavior
 
@@ -64,7 +61,7 @@ Messages with invalid sender identity are rejected:
 {
   "success": false,
   "error": "Invalid sender identity. Cannot publish messages with unknown sender.",
-  "hint": "Set CLAUDE_INSTANCE_ID or configure git user.email"
+  "hint": "Set CLAUDE_INSTANCE_ID environment variable"
 }
 ```
 
@@ -74,26 +71,19 @@ Messages with invalid sender identity are rejected:
 
 If the MCP server fails to start with identity error:
 
-1. **Check git identity:**
+1. **Check environment variable:**
    ```bash
-   git config user.email
+   echo $CLAUDE_INSTANCE_ID
    ```
 
-2. **Verify email is recognized:**
-   Must be one of:
-   - `claude-backend@asdlc.local`
-   - `claude-frontend@asdlc.local`
-   - `claude-orchestrator@asdlc.local`
-   - `claude-devops@asdlc.local`
-
-3. **Set git identity if needed:**
+2. **Set identity for your context:**
    ```bash
-   git config user.email "claude-backend@asdlc.local"
+   export CLAUDE_INSTANCE_ID=p11-guardrails
    ```
 
-4. **Or use environment override:**
+3. **Or use PM identity in main repo:**
    ```bash
-   export CLAUDE_INSTANCE_ID=backend
+   export CLAUDE_INSTANCE_ID=pm
    ```
 
 #### Verify Current Identity
@@ -101,10 +91,7 @@ If the MCP server fails to start with identity error:
 To check the current identity that would be used:
 
 ```bash
-# Check git email
-git config user.email
-
-# Check environment override
+# Check environment variable
 echo $CLAUDE_INSTANCE_ID
 ```
 
@@ -112,8 +99,8 @@ echo $CLAUDE_INSTANCE_ID
 
 | Error Message | Cause | Solution |
 |---------------|-------|----------|
-| `RuntimeError: Cannot determine instance identity` | No valid git email or env var | Set git email or CLAUDE_INSTANCE_ID |
-| `Invalid sender identity. Cannot publish messages with unknown sender.` | Identity resolved to "unknown" | Verify git email is in the mapping table |
+| `RuntimeError: Cannot determine instance identity` | CLAUDE_INSTANCE_ID not set | Set CLAUDE_INSTANCE_ID |
+| `Invalid sender identity. Cannot publish messages with unknown sender.` | Identity is empty or "unknown" | Set valid CLAUDE_INSTANCE_ID |
 
 ## Path Restrictions
 

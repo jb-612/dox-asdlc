@@ -1,10 +1,10 @@
 #!/bin/bash
-# List all agent worktrees and their status.
+# List all worktrees and their status.
 #
-# Usage: ./scripts/worktree/list-agents.sh [-h|--help]
+# Usage: ./scripts/worktree/list-worktrees.sh [-h|--help]
 #
 # Outputs JSON array with worktree information:
-# - role: Agent role name
+# - context: Bounded context name
 # - branch: Current branch name
 # - path: Absolute path to worktree
 # - status: clean, modified, or unknown
@@ -23,20 +23,20 @@ NC='\033[0m'
 usage() {
     echo "Usage: $0 [-h|--help]"
     echo ""
-    echo "List all agent worktrees in .worktrees/ and their status."
+    echo "List all worktrees in .worktrees/ and their status."
     echo ""
     echo "Options:"
     echo "  -h, --help   Show this help message"
     echo ""
     echo "Output:"
     echo "  JSON array with objects containing:"
-    echo "  - role: Agent role name (backend, frontend, etc.)"
+    echo "  - context: Bounded context name (p11-guardrails, p04-review-swarm, etc.)"
     echo "  - branch: Current branch name"
     echo "  - path: Absolute path to worktree"
     echo "  - status: clean, modified, or unknown"
     echo ""
     echo "Example output:"
-    echo '  [{"role":"backend","branch":"agent/backend/active","path":"/path/.worktrees/backend","status":"clean"}]'
+    echo '  [{"context":"p11-guardrails","branch":"feature/p11-guardrails","path":"/path/.worktrees/p11-guardrails","status":"clean"}]'
 }
 
 get_worktree_status() {
@@ -114,8 +114,8 @@ main() {
     # Iterate over directories in .worktrees/
     for entry in "$worktrees_dir"/*; do
         if [[ -d "$entry" ]]; then
-            local role
-            role=$(basename "$entry")
+            local context
+            context=$(basename "$entry")
             local worktree_path
             worktree_path=$(cd "$entry" && pwd)
 
@@ -141,7 +141,7 @@ main() {
             local escaped_path
             escaped_path=$(echo "$worktree_path" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
 
-            json_array+="{\"role\":\"$role\",\"branch\":\"$branch\",\"path\":\"$escaped_path\",\"status\":\"$status\"}"
+            json_array+="{\"context\":\"$context\",\"branch\":\"$branch\",\"path\":\"$escaped_path\",\"status\":\"$status\"}"
         fi
     done
 

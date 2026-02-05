@@ -1,7 +1,7 @@
 #!/bin/bash
-# Remove an agent worktree cleanly.
+# Remove a worktree cleanly.
 #
-# Usage: ./scripts/worktree/teardown-agent.sh <role> [--merge|--abandon]
+# Usage: ./scripts/worktree/teardown-worktree.sh <context> [--merge|--abandon]
 #
 # This script:
 # - Checks for uncommitted changes in the worktree
@@ -10,14 +10,15 @@
 # - Prompts user if uncommitted changes and no flag specified
 # - Removes the worktree with git worktree remove
 # - Deletes the branch if fully merged
+#
+# Examples:
+#   ./scripts/worktree/teardown-worktree.sh p11-guardrails --merge
+#   ./scripts/worktree/teardown-worktree.sh p04-review-swarm --abandon
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-# Valid roles for agent worktrees
-VALID_ROLES=("backend" "frontend" "orchestrator" "devops")
 
 # Colors for output
 RED='\033[0;31m'
@@ -30,27 +31,24 @@ REDIS_HOST="${REDIS_HOST:-localhost}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 
 usage() {
-    echo "Usage: $0 <role> [--merge|--abandon]"
+    echo "Usage: $0 <context> [--merge|--abandon]"
     echo ""
-    echo "Remove an agent worktree cleanly."
+    echo "Remove a worktree cleanly."
     echo ""
     echo "Arguments:"
-    echo "  role       Agent role (required)"
+    echo "  context    Bounded context name (required)"
     echo ""
     echo "Options:"
     echo "  --merge    Merge changes to main before removing worktree"
     echo "  --abandon  Remove worktree without merging (lose uncommitted changes)"
     echo "  -h, --help Show this help message"
     echo ""
-    echo "Valid roles:"
-    echo "  backend, frontend, orchestrator, devops"
-    echo ""
     echo "If uncommitted changes exist and no flag is specified, the script"
     echo "will prompt for action (requires interactive terminal)."
     echo ""
     echo "Examples:"
-    echo "  $0 backend --merge     # Merge backend changes, then remove"
-    echo "  $0 frontend --abandon  # Remove frontend worktree, discard changes"
+    echo "  $0 p11-guardrails --merge     # Merge changes, then remove"
+    echo "  $0 p04-review-swarm --abandon # Remove worktree, discard changes"
 }
 
 log_info() {
@@ -65,18 +63,8 @@ log_error() {
     echo -e "${RED}ERROR:${NC} $1" >&2
 }
 
-validate_role() {
-    local role="$1"
-    for valid in "${VALID_ROLES[@]}"; do
-        if [[ "$role" == "$valid" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
 # =============================================================================
-# Redis Coordination Functions (T19, T20)
+# Redis Coordination Functions
 # =============================================================================
 
 check_redis_available() {
@@ -88,7 +76,7 @@ check_redis_available() {
 }
 
 deregister_presence() {
-    local role="$1"
+    local context="$1"
 
     # Check if Redis is available
     if ! check_redis_available; then
@@ -104,10 +92,10 @@ deregister_presence() {
 
     # Update presence fields to mark inactive
     if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" HSET "$presence_key" \
-        "${role}.active" "0" \
-        "${role}.last_heartbeat" "$now" \
+        "${context}.active" "0" \
+        "${context}.last_heartbeat" "$now" \
         > /dev/null 2>&1; then
-        log_info "Presence deregistered for role: $role"
+        log_info "Presence deregistered for context: $context"
     else
         log_warn "Failed to deregister presence - may show as stale"
     fi
@@ -116,7 +104,7 @@ deregister_presence() {
 }
 
 publish_session_end() {
-    local role="$1"
+    local context="$1"
     local reason="${2:-user_exit}"
 
     # Check if Redis is available
@@ -136,14 +124,14 @@ publish_session_end() {
 {
     "id": "$msg_id",
     "type": "SESSION_END",
-    "from": "$role",
+    "from": "$context",
     "to": "all",
     "timestamp": "$now",
     "requires_ack": false,
     "acknowledged": false,
     "payload": {
-        "subject": "Session ended: $role",
-        "description": "Agent session ended. Reason: $reason"
+        "subject": "Session ended: $context",
+        "description": "Session ended. Reason: $reason"
     }
 }
 EOF
@@ -190,8 +178,8 @@ has_uncommitted_changes() {
 }
 
 merge_to_main() {
-    local role="$1"
-    local branch_name="agent/$role/active"
+    local context="$1"
+    local branch_name="feature/$context"
 
     log_info "Merging $branch_name to main..."
 
@@ -227,7 +215,7 @@ merge_to_main() {
 }
 
 main() {
-    local role=""
+    local context=""
     local action=""
 
     # Parse arguments
@@ -251,8 +239,8 @@ main() {
                 exit 1
                 ;;
             *)
-                if [[ -z "$role" ]]; then
-                    role="$1"
+                if [[ -z "$context" ]]; then
+                    context="$1"
                 else
                     log_error "Too many arguments"
                     usage
@@ -263,22 +251,16 @@ main() {
         esac
     done
 
-    # Validate role
-    if [[ -z "$role" ]]; then
-        log_error "Missing required argument: role"
+    # Validate context
+    if [[ -z "$context" ]]; then
+        log_error "Missing required argument: context"
         usage
         exit 1
     fi
 
-    if ! validate_role "$role"; then
-        log_error "Invalid role: $role"
-        echo "Valid roles: ${VALID_ROLES[*]}"
-        exit 1
-    fi
-
     # Define paths
-    local worktree_dir="$PROJECT_ROOT/.worktrees/$role"
-    local branch_name="agent/$role/active"
+    local worktree_dir="$PROJECT_ROOT/.worktrees/$context"
+    local branch_name="feature/$context"
 
     # Check if worktree exists
     if [[ ! -d "$worktree_dir" ]]; then
@@ -330,16 +312,16 @@ main() {
 
     # Merge if requested
     if [[ "$action" == "merge" ]]; then
-        if ! merge_to_main "$role"; then
+        if ! merge_to_main "$context"; then
             exit 1
         fi
     fi
 
-    # Deregister presence from Redis before removing worktree (T19)
+    # Deregister presence from Redis before removing worktree
     log_info "Deregistering session presence..."
-    deregister_presence "$role"
+    deregister_presence "$context"
 
-    # Publish SESSION_END message (T20)
+    # Publish SESSION_END message
     log_info "Publishing SESSION_END message..."
     local teardown_reason="user_exit"
     if [[ "$action" == "merge" ]]; then
@@ -347,7 +329,7 @@ main() {
     elif [[ "$action" == "abandon" ]]; then
         teardown_reason="user_exit"
     fi
-    publish_session_end "$role" "$teardown_reason"
+    publish_session_end "$context" "$teardown_reason"
 
     # Remove worktree
     log_info "Removing worktree: $worktree_dir"

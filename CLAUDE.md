@@ -166,73 +166,81 @@ MCP servers connect to localhost services exposed by Docker Compose or K8s port-
 
 ## Multi-Session Infrastructure
 
-The project supports running multiple Claude CLI sessions in parallel, each in an isolated git worktree with a unique identity.
+The project supports running multiple Claude CLI sessions in parallel, each in an isolated git worktree with a unique identity. Worktrees are organized by **bounded context** (feature/epic), not by agent role.
+
+### Key Concept: Bounded Context Model
+
+Each worktree represents a feature or work item context (e.g., `p11-guardrails`, `p04-review-swarm`). Within a single CLI session, multiple subagents (backend, frontend, reviewer) can work on the same worktree because they're contributing to the same bounded context.
+
+| Aspect | Description |
+|--------|-------------|
+| Worktree path | `.worktrees/<context>/` (e.g., `.worktrees/p11-guardrails/`) |
+| Branch name | `feature/<context>` (e.g., `feature/p11-guardrails`) |
+| CLAUDE_INSTANCE_ID | Context name (e.g., `p11-guardrails`) |
+| Path restrictions | Determined by subagent role, not worktree |
 
 ### Quick Start
 
-To start an agent session in a separate terminal:
+To start a session for a specific feature context:
 
 ```bash
-# Start backend agent session
-./scripts/start-agent-session.sh backend
+# Create worktree for a feature
+./scripts/start-session.sh p11-guardrails
 
 # Follow the printed instructions:
-cd .worktrees/backend && export CLAUDE_INSTANCE_ID=backend && claude
+cd .worktrees/p11-guardrails && export CLAUDE_INSTANCE_ID=p11-guardrails && claude
 ```
 
 ### Worktree Commands
 
 | Command | Purpose |
 |---------|---------|
-| `./scripts/start-agent-session.sh <role>` | Complete setup for an agent session |
-| `./scripts/worktree/setup-agent.sh <role>` | Create worktree and branch |
-| `./scripts/worktree/list-agents.sh` | List all agent worktrees (JSON) |
-| `./scripts/worktree/teardown-agent.sh <role> [--merge\|--abandon]` | Remove worktree |
-| `./scripts/worktree/merge-agent.sh <role>` | Merge agent branch to main |
+| `./scripts/start-session.sh <context>` | Complete setup for a session |
+| `./scripts/worktree/setup-worktree.sh <context>` | Create worktree and branch |
+| `./scripts/worktree/list-worktrees.sh` | List all worktrees (JSON) |
+| `./scripts/worktree/teardown-worktree.sh <context> [--merge\|--abandon]` | Remove worktree |
+| `./scripts/worktree/merge-worktree.sh <context>` | Merge feature branch to main |
 
-Valid roles: `backend`, `frontend`, `orchestrator`, `devops`
+Context names follow work item format: `p11-guardrails`, `p04-review-swarm`, `sp01-smart-saver`
 
 ### Session Lifecycle
 
 ```
-1. Setup     -> ./scripts/start-agent-session.sh <role>
-               - Creates worktree at .worktrees/<role>/
-               - Creates branch agent/<role>/active
-               - Configures git identity
+1. Setup     -> ./scripts/start-session.sh <context>
+               - Creates worktree at .worktrees/<context>/
+               - Creates branch feature/<context>
+               - Sets CLAUDE_INSTANCE_ID
 
-2. Work      -> cd .worktrees/<role> && export CLAUDE_INSTANCE_ID=<role> && claude
+2. Work      -> cd .worktrees/<context> && export CLAUDE_INSTANCE_ID=<context> && claude
                - Session validates identity on startup
                - Registers presence in Redis
-               - Checks for pending notifications
+               - Multiple subagents can work in same worktree
 
-3. Commit    -> Work is committed to agent/<role>/active branch
-               - Isolated from main and other agents
+3. Commit    -> Work is committed to feature/<context> branch
+               - Isolated from main and other contexts
 
-4. Merge     -> ./scripts/worktree/merge-agent.sh <role>
-               - Merges agent branch to main
-               - Fast-forward preferred
+4. Merge     -> ./scripts/worktree/merge-worktree.sh <context>
+               - Human reviews as "Librarian" gatekeeper
+               - Merges feature branch to main via PR
 
-5. Teardown  -> ./scripts/worktree/teardown-agent.sh <role> --merge
+5. Teardown  -> ./scripts/worktree/teardown-worktree.sh <context> --merge
                - Deregisters session presence
                - Removes worktree
                - Optionally merges changes first
 ```
 
-### Session Identity
+### Session Identity vs Agent Role
 
-Each agent session has a unique identity:
+Identity and role serve different purposes:
 
-| Role | Git Email | CLAUDE_INSTANCE_ID |
-|------|-----------|-------------------|
-| backend | claude-backend@asdlc.local | backend |
-| frontend | claude-frontend@asdlc.local | frontend |
-| orchestrator | claude-orchestrator@asdlc.local | orchestrator |
-| devops | claude-devops@asdlc.local | devops |
-| pm | (main repo email) | pm |
+| Concept | Purpose | Example |
+|---------|---------|---------|
+| **Session Identity** (CLAUDE_INSTANCE_ID) | Which feature/context | `p11-guardrails` |
+| **Agent Role** (subagent) | Which paths are allowed | `backend`, `frontend` |
 
 Identity is resolved from:
-1. `CLAUDE_INSTANCE_ID` environment variable (preferred)
-2. `git config user.email` (fallback)
+1. `CLAUDE_INSTANCE_ID` environment variable (required for worktrees)
+2. Default to `pm` in main repository
 
 ### Presence Tracking
 
@@ -247,30 +255,45 @@ Check presence with the coordination MCP:
 coord_get_presence
 ```
 
+### Shared Resource Rules
+
+When multiple worktrees are active, watch for conflicts in shared resources:
+
+| Resource | Risk | Rule |
+|----------|------|------|
+| `package-lock.json` | Merge conflicts | One context installs deps at a time |
+| DB Migrations | ID collisions | Sequential, never parallel |
+| Local ports | Collisions | Use different ports per session |
+| `.git/` staging area | Conflicts | Worktrees solve this |
+
+### Librarian Merge Protocol
+
+Human acts as Integration Gatekeeper:
+1. Push feature branches, create PRs for review
+2. Merge one branch at a time to main
+3. Rebase other branches after merge
+
 ### Troubleshooting
 
-**Session identity not recognized:**
+**Session identity not set:**
 ```bash
-# Set identity explicitly
-export CLAUDE_INSTANCE_ID=backend
-
-# Or configure git email
-git config user.email claude-backend@asdlc.local
+# Set identity explicitly for the context
+export CLAUDE_INSTANCE_ID=p11-guardrails
 ```
 
 **Worktree already exists:**
 ```bash
 # Script is idempotent - safe to run again
-./scripts/worktree/setup-agent.sh backend
+./scripts/worktree/setup-worktree.sh p11-guardrails
 ```
 
 **Uncommitted changes in worktree:**
 ```bash
 # Merge changes to main before removing
-./scripts/worktree/teardown-agent.sh backend --merge
+./scripts/worktree/teardown-worktree.sh p11-guardrails --merge
 
 # Or abandon changes
-./scripts/worktree/teardown-agent.sh backend --abandon
+./scripts/worktree/teardown-worktree.sh p11-guardrails --abandon
 ```
 
 **Redis not available:**
@@ -280,18 +303,12 @@ git config user.email claude-backend@asdlc.local
 
 **Merge conflicts:**
 ```bash
-# merge-agent.sh will report conflicts
-./scripts/worktree/merge-agent.sh backend
-
-# Resolve manually in main repo, then teardown
-cd /path/to/main/repo
-git status  # see conflicts
-# ... resolve conflicts ...
-git add <files>
-git commit
-
-# Then teardown worktree
-./scripts/worktree/teardown-agent.sh backend --abandon
+# Resolve by rebasing on main
+cd .worktrees/p11-guardrails
+git fetch origin
+git rebase origin/main
+# Fix conflicts, then:
+git push origin feature/p11-guardrails --force
 ```
 
 ## Related Docs

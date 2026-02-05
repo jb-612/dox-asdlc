@@ -1,16 +1,27 @@
 ---
-description: Role subagents and PM CLI as default main session
+description: Session identity (bounded context) vs subagent roles (path restrictions)
 paths:
   - "**/*"
 ---
 
-# Role Subagents
+# Session Identity vs Subagent Roles
 
-This project uses role-specific subagents in `.claude/agents/` for specialized work. The main Claude session acts as PM CLI by default.
+This project distinguishes between two concepts:
+- **Session Identity** (CLAUDE_INSTANCE_ID): Which feature context (e.g., `p11-guardrails`)
+- **Subagent Role**: Which paths are allowed (e.g., `backend`, `frontend`)
+
+## Key Concepts
+
+| Concept | Purpose | Example | Stored In |
+|---------|---------|---------|-----------|
+| **Session Identity** | Identifies the feature worktree | `p11-guardrails`, `pm` | CLAUDE_INSTANCE_ID env var |
+| **Subagent Role** | Determines path restrictions | `backend`, `frontend` | Subagent invocation |
+
+A single worktree (bounded context) can have multiple subagents working on it because they're all contributing to the same feature.
 
 ## PM CLI as Default
 
-The main Claude session operates as the Project Manager (PM CLI). This is the default behavior - no agent selection is needed.
+The main Claude session operates as the Project Manager (PM CLI) with identity `pm`. This is the default behavior when running in the main repository.
 
 **PM CLI behavior:**
 - Plans and coordinates overall work
@@ -33,13 +44,13 @@ See `.claude/rules/pm-cli.md` for full PM CLI specification.
 | Updating meta files, committing | Delegate to orchestrator |
 | Infrastructure, deploys | Delegate to devops (HITL required) |
 
-**Key principle:** PM CLI coordinates. Agents implement.
+**Key principle:** PM CLI coordinates. Subagents implement.
 
-## Available Subagents
+## Available Subagent Roles
 
-| Subagent | Domain | Use For |
-|----------|--------|---------|
-| `planner` | .workitems/ | Creating planning artifacts (design.md, user_stories.md, tasks.md) |
+| Role | Domain | Path Restrictions |
+|------|--------|-------------------|
+| `planner` | .workitems/ | Creating planning artifacts |
 | `backend` | Workers, infra | P01-P03, P06 implementation |
 | `frontend` | HITL UI | P05 implementation |
 | `reviewer` | All (read-only) | Code review and validation |
@@ -57,18 +68,19 @@ See `.claude/rules/pm-cli.md` for full PM CLI specification.
 "Use the devops subagent to deploy to Kubernetes"
 ```
 
-## Git Identity
+## Session Identity Examples
 
-Agents that commit use appropriate git identity:
+| Context | CLAUDE_INSTANCE_ID | Description |
+|---------|-------------------|-------------|
+| Main repo (PM) | `pm` | Default for main repository |
+| P11 Guardrails | `p11-guardrails` | Feature worktree |
+| P04 Review Swarm | `p04-review-swarm` | Feature worktree |
+| Side Project | `sp01-smart-saver` | Side project worktree |
 
-| Subagent | Git Email |
-|----------|-----------|
-| backend | `claude-backend@asdlc.local` |
-| frontend | `claude-frontend@asdlc.local` |
-| orchestrator | `claude-orchestrator@asdlc.local` |
-| devops | `claude-devops@asdlc.local` |
-
-Note: planner and reviewer do not commit, so no git identity is needed for these agents.
+Setting identity for a worktree:
+```bash
+export CLAUDE_INSTANCE_ID=p11-guardrails
+```
 
 ## DevOps Agent Special Restrictions
 

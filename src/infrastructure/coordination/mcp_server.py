@@ -23,14 +23,6 @@ from src.infrastructure.coordination.types import MessageQuery, MessageType
 
 logger = logging.getLogger(__name__)
 
-# Mapping of known git emails to instance IDs
-EMAIL_TO_INSTANCE: dict[str, str] = {
-    "claude-backend@asdlc.local": "backend",
-    "claude-frontend@asdlc.local": "frontend",
-    "claude-orchestrator@asdlc.local": "orchestrator",
-    "claude-devops@asdlc.local": "devops",
-}
-
 
 class CoordinationMCPServer:
     """MCP server providing coordination tools.
@@ -59,49 +51,58 @@ class CoordinationMCPServer:
         logger.info(f"Coordination MCP server initialized with identity: {self._instance_id}")
 
     def _resolve_instance_id(self) -> str:
-        """Resolve instance identity from environment or git config.
+        """Resolve instance identity from environment variable.
 
         Priority:
         1. CLAUDE_INSTANCE_ID environment variable (if not empty or "unknown")
-        2. Derive from git user.email
-        3. Raise error if neither available
+        2. Default to "pm" if in main repository
+        3. Raise error if in worktree without CLAUDE_INSTANCE_ID
 
         Returns:
-            Instance ID string (e.g., "backend", "frontend", "orchestrator", "devops")
+            Instance ID string (e.g., "p11-guardrails", "pm", "p04-review-swarm")
 
         Raises:
             RuntimeError: If instance identity cannot be determined
         """
         # Check environment variable first
         env_id = os.environ.get("CLAUDE_INSTANCE_ID")
-        if env_id and env_id != "unknown":
+        if env_id and env_id.lower() != "unknown":
             return env_id
 
-        # Try to derive from git user.email
+        # Check if we're in a worktree
         try:
             result = subprocess.run(
-                ["git", "config", "user.email"],
+                ["git", "rev-parse", "--show-toplevel"],
                 capture_output=True,
                 text=True,
                 timeout=5,
                 cwd=os.getcwd(),
             )
-            email = result.stdout.strip()
+            repo_root = result.stdout.strip()
 
-            # Map email to instance ID
-            if email in EMAIL_TO_INSTANCE:
-                return EMAIL_TO_INSTANCE[email]
+            # Check if .git is a file (worktree) or directory (main repo)
+            git_path = os.path.join(repo_root, ".git")
+            if os.path.isfile(git_path):
+                # We're in a worktree without CLAUDE_INSTANCE_ID
+                raise RuntimeError(
+                    "Running in worktree without CLAUDE_INSTANCE_ID. "
+                    "Set CLAUDE_INSTANCE_ID environment variable to the context name "
+                    "(e.g., export CLAUDE_INSTANCE_ID=p11-guardrails)"
+                )
+
+            # We're in main repo, default to "pm"
+            logger.info("In main repository without CLAUDE_INSTANCE_ID, defaulting to 'pm'")
+            return "pm"
 
         except subprocess.TimeoutExpired:
-            logger.warning("Timeout reading git config user.email")
+            logger.warning("Timeout checking git repository")
         except subprocess.SubprocessError as e:
-            logger.warning(f"Failed to read git config: {e}")
+            logger.warning(f"Failed to check git repository: {e}")
 
         # Cannot determine identity
         raise RuntimeError(
             "Cannot determine instance identity. Set CLAUDE_INSTANCE_ID "
-            "environment variable or configure git user.email to a known "
-            "role (e.g., claude-backend@asdlc.local)"
+            "environment variable (e.g., export CLAUDE_INSTANCE_ID=p11-guardrails)"
         )
 
     async def _get_client(self) -> CoordinationClient:
