@@ -18,6 +18,7 @@ import {
   UserGroupIcon,
   SparklesIcon,
   PaintBrushIcon,
+  CodeBracketIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -48,6 +49,7 @@ const navigationSections: NavSection[] = [
       { name: 'Ideation Studio', href: '/studio/ideation', icon: LightBulbIcon },
       { name: 'Architect Board', href: '/architect', icon: PaintBrushIcon },
       { name: 'Brainflare Hub', href: '/brainflare', icon: SparklesIcon },
+      { name: 'Code Review', href: '/review', icon: CodeBracketIcon },
       { name: 'HITL Gates', href: '/gates', icon: ShieldCheckIcon },
       { name: 'Artifacts', href: '/artifacts', icon: FolderIcon },
     ],

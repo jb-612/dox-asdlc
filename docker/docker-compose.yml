@@ -112,6 +112,43 @@ services:
     networks:
       - asdlc-network
 
+  # Container 2b: Review Swarm
+  # - Parallel code review using Claude SDK
+  # - 3 specialized reviewers (security, performance, style)
+  # - Stores sessions and results in Redis
+  review-swarm:
+    build:
+      context: ..
+      dockerfile: docker/review-swarm/Dockerfile
+    container_name: asdlc-review-swarm
+    hostname: review-swarm
+    ports:
+      - "8082:8082"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - SERVICE_NAME=review-swarm
+      - SERVICE_PORT=8082
+      - GIT_WRITE_ACCESS=false
+      - KNOWLEDGE_STORE_BACKEND=elasticsearch
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ../:/app/workspace:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - asdlc-network
+
   # Container 3: Redis
   # - Event streams and task state caches
   redis:

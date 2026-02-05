@@ -1,0 +1,67 @@
+# Default values for review-swarm subchart
+
+enabled: true
+
+# Single replica (no HPA initially)
+replicaCount: 1
+
+image:
+  repository: dox-asdlc/review-swarm
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8082
+
+# Health probes
+livenessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Environment configuration
+env:
+  REDIS_HOST: "dox-asdlc-redis"
+  REDIS_PORT: "6379"
+  ELASTICSEARCH_URL: "http://dox-asdlc-elasticsearch:9200"
+  KNOWLEDGE_STORE_BACKEND: "elasticsearch"
+  LOG_LEVEL: "INFO"
+  SERVICE_NAME: "review-swarm"
+  SERVICE_PORT: "8082"
+  GIT_WRITE_ACCESS: "false"
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8082"
+  prometheus.io/path: "/metrics"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}

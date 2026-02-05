@@ -46,6 +46,11 @@ class TestMessageType:
             # Session lifecycle
             "SESSION_START",
             "SESSION_END",
+            # Swarm coordination
+            "SWARM_STARTED",
+            "SWARM_REVIEWER_COMPLETE",
+            "SWARM_COMPLETE",
+            "SWARM_FAILED",
         }
         actual_types = {t.value for t in MessageType}
         assert actual_types == expected_types
@@ -209,6 +214,100 @@ class TestMessageType:
         parsed = json.loads(json_str)
         assert parsed["type"] == "SESSION_START"
         assert parsed["from"] == "frontend"
+
+    def test_swarm_message_types_exist(self) -> None:
+        """Test that all swarm coordination message types are defined."""
+        assert MessageType.SWARM_STARTED.value == "SWARM_STARTED"
+        assert MessageType.SWARM_REVIEWER_COMPLETE.value == "SWARM_REVIEWER_COMPLETE"
+        assert MessageType.SWARM_COMPLETE.value == "SWARM_COMPLETE"
+        assert MessageType.SWARM_FAILED.value == "SWARM_FAILED"
+
+    def test_swarm_started_in_coordination_message(self) -> None:
+        """Test that SWARM_STARTED can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-swarm-start",
+            type=MessageType.SWARM_STARTED,
+            from_instance="orchestrator",
+            to_instance="all",
+            timestamp=datetime(2026, 2, 5, 10, 0, 0, tzinfo=timezone.utc),
+            requires_ack=False,
+            payload=MessagePayload(
+                subject="Swarm review started",
+                description="Starting parallel review swarm for src/workers/"
+            ),
+        )
+        assert msg.type == MessageType.SWARM_STARTED
+        assert msg.to_dict()["type"] == "SWARM_STARTED"
+
+    def test_swarm_reviewer_complete_in_coordination_message(self) -> None:
+        """Test that SWARM_REVIEWER_COMPLETE can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-swarm-reviewer",
+            type=MessageType.SWARM_REVIEWER_COMPLETE,
+            from_instance="backend",
+            to_instance="orchestrator",
+            timestamp=datetime(2026, 2, 5, 10, 5, 0, tzinfo=timezone.utc),
+            requires_ack=False,
+            payload=MessagePayload(
+                subject="Security reviewer complete",
+                description="Security review completed with 3 findings"
+            ),
+        )
+        assert msg.type == MessageType.SWARM_REVIEWER_COMPLETE
+        assert msg.to_dict()["type"] == "SWARM_REVIEWER_COMPLETE"
+
+    def test_swarm_complete_in_coordination_message(self) -> None:
+        """Test that SWARM_COMPLETE can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-swarm-done",
+            type=MessageType.SWARM_COMPLETE,
+            from_instance="orchestrator",
+            to_instance="all",
+            timestamp=datetime(2026, 2, 5, 10, 10, 0, tzinfo=timezone.utc),
+            requires_ack=True,
+            payload=MessagePayload(
+                subject="Swarm review complete",
+                description="All reviewers completed with 5 total findings"
+            ),
+        )
+        assert msg.type == MessageType.SWARM_COMPLETE
+        assert msg.to_dict()["type"] == "SWARM_COMPLETE"
+
+    def test_swarm_failed_in_coordination_message(self) -> None:
+        """Test that SWARM_FAILED can be used in CoordinationMessage."""
+        msg = CoordinationMessage(
+            id="msg-swarm-fail",
+            type=MessageType.SWARM_FAILED,
+            from_instance="orchestrator",
+            to_instance="all",
+            timestamp=datetime(2026, 2, 5, 10, 3, 0, tzinfo=timezone.utc),
+            requires_ack=True,
+            payload=MessagePayload(
+                subject="Swarm review failed",
+                description="Error: All reviewers timed out"
+            ),
+        )
+        assert msg.type == MessageType.SWARM_FAILED
+        assert msg.to_dict()["type"] == "SWARM_FAILED"
+
+    def test_swarm_message_json_serialization(self) -> None:
+        """Test that SWARM message types serialize to JSON correctly."""
+        msg = CoordinationMessage(
+            id="msg-swarm-json",
+            type=MessageType.SWARM_STARTED,
+            from_instance="orchestrator",
+            to_instance="all",
+            timestamp=datetime(2026, 2, 5, 10, 0, 0, tzinfo=timezone.utc),
+            requires_ack=False,
+            payload=MessagePayload(
+                subject="Swarm started",
+                description="Parallel review swarm in progress"
+            ),
+        )
+        json_str = msg.to_json()
+        parsed = json.loads(json_str)
+        assert parsed["type"] == "SWARM_STARTED"
+        assert parsed["from"] == "orchestrator"
 
 
 class TestMessagePayload:

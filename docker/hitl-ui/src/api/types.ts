@@ -605,3 +605,192 @@ export interface DiagramContent {
 // ============================================================================
 
 export * from './types/kubernetes';
+
+// ============================================================================
+// Code Review Types (P04-F06)
+// ============================================================================
+
+/**
+ * Severity level for code review findings
+ */
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+/**
+ * Type of reviewer agent
+ */
+export type ReviewerType = 'security' | 'performance' | 'style';
+
+/**
+ * A single finding from a code review
+ */
+export interface ReviewFinding {
+  id: string;
+  reviewer_type: ReviewerType;
+  severity: Severity;
+  category: string;
+  title: string;
+  description: string;
+  file_path: string;
+  line_start: number | null;
+  line_end: number | null;
+  code_snippet: string | null;
+  recommendation: string;
+  confidence: number;
+}
+
+/**
+ * Result from a single reviewer
+ */
+export interface ReviewerResult {
+  reviewer_type: ReviewerType;
+  status: 'success' | 'failed' | 'timeout';
+  findings: ReviewFinding[];
+  duration_seconds: number;
+  files_reviewed: string[];
+  error_message: string | null;
+}
+
+/**
+ * Unified report from all reviewers
+ */
+export interface UnifiedReport {
+  swarm_id: string;
+  target_path: string;
+  created_at: string;
+  reviewers_completed: string[];
+  reviewers_failed: string[];
+  critical_findings: ReviewFinding[];
+  high_findings: ReviewFinding[];
+  medium_findings: ReviewFinding[];
+  low_findings: ReviewFinding[];
+  info_findings: ReviewFinding[];
+  total_findings: number;
+  findings_by_reviewer: Record<string, number>;
+  findings_by_category: Record<string, number>;
+  duplicates_removed: number;
+}
+
+// ============================================================================
+// Swarm Review API Types (P04-F06)
+// ============================================================================
+
+/**
+ * Request to trigger a swarm review
+ */
+export interface SwarmReviewRequest {
+  target_path: string;
+  reviewer_types?: ReviewerType[];
+  timeout_seconds?: number;
+}
+
+/**
+ * Response from triggering a swarm review
+ */
+export interface SwarmReviewResponse {
+  swarm_id: string;
+  status: string;
+  poll_url: string;
+}
+
+/**
+ * Status of a single reviewer in the swarm
+ */
+export interface ReviewerStatus {
+  status: 'pending' | 'in_progress' | 'complete' | 'failed';
+  files_reviewed: number;
+  findings_count: number;
+  progress_percent: number;
+  duration_seconds?: number;
+}
+
+/**
+ * Status response from polling a swarm review
+ */
+export interface SwarmStatusResponse {
+  swarm_id: string;
+  status: 'pending' | 'in_progress' | 'aggregating' | 'complete' | 'failed';
+  reviewers: Record<string, ReviewerStatus>;
+  unified_report?: UnifiedReport;
+  duration_seconds?: number;
+  error_message?: string;
+}
+
+// ============================================================================
+// Code Review Labels and Mappings (P04-F06)
+// ============================================================================
+
+/**
+ * Human-readable labels for severity levels
+ */
+export const SEVERITY_LABELS: Record<Severity, string> = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  info: 'Info',
+};
+
+/**
+ * Human-readable labels for reviewer types
+ */
+export const REVIEWER_LABELS: Record<ReviewerType, string> = {
+  security: 'Security',
+  performance: 'Performance',
+  style: 'Style',
+};
+
+/**
+ * Tailwind CSS background color classes for severity levels
+ */
+export const SEVERITY_COLORS: Record<Severity, string> = {
+  critical: 'bg-red-600',
+  high: 'bg-orange-500',
+  medium: 'bg-yellow-500',
+  low: 'bg-blue-500',
+  info: 'bg-gray-500',
+};
+
+/**
+ * Tailwind CSS text color classes for severity levels
+ */
+export const SEVERITY_TEXT_COLORS: Record<Severity, string> = {
+  critical: 'text-red-600',
+  high: 'text-orange-500',
+  medium: 'text-yellow-500',
+  low: 'text-blue-500',
+  info: 'text-gray-500',
+};
+
+/**
+ * Tailwind CSS border color classes for severity levels
+ */
+export const SEVERITY_BORDER_COLORS: Record<Severity, string> = {
+  critical: 'border-red-600',
+  high: 'border-orange-500',
+  medium: 'border-yellow-500',
+  low: 'border-blue-500',
+  info: 'border-gray-500',
+};
+
+/**
+ * Icon names for reviewer types (for use with icon libraries)
+ */
+export const REVIEWER_ICONS: Record<ReviewerType, string> = {
+  security: 'shield',
+  performance: 'zap',
+  style: 'code',
+};
+
+/**
+ * Configuration for a code review request (frontend form state)
+ */
+export interface ReviewConfig {
+  target: string;
+  scope: 'full_repo' | 'changed_files' | 'custom_path';
+  customPath?: string;
+  reviewers: {
+    security: boolean;
+    performance: boolean;
+    style: boolean;
+  };
+}

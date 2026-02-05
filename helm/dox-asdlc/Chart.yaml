@@ -42,6 +42,10 @@ dependencies:
     version: "0.1.0"
     condition: workers.enabled
     repository: "file://charts/workers"
+  - name: review-swarm
+    version: "0.1.0"
+    condition: reviewSwarm.enabled
+    repository: "file://charts/review-swarm"
   - name: hitl-ui
     version: "0.1.0"
     condition: hitlUI.enabled

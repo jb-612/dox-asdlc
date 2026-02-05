@@ -55,6 +55,9 @@ secrets:
     create: true
     # Claude API key (MUST be overridden)
     claudeApiKey: ""
+    # Anthropic API key for review-swarm (MUST be overridden)
+    anthropicApiKey: ""
+
 
 # Redis subchart configuration
 redis:
@@ -125,6 +128,18 @@ workers:
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilization: 70
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Review Swarm subchart configuration
+reviewSwarm:
+  enabled: true
+  replicaCount: 1
   resources:
     requests:
       memory: "256Mi"

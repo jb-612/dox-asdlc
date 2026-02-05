@@ -198,3 +198,12 @@ export {
   delay as architectDelay,
   randomDelay as architectRandomDelay,
 } from './architect';
+
+// Swarm Review mocks (P04-F06)
+export {
+  mockTriggerSwarmReview,
+  mockFetchSwarmStatus,
+  resetMockSwarms,
+  getMockSwarmState,
+  simulateSwarmDelay,
+} from './swarm';

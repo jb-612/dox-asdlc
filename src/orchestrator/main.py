@@ -44,6 +44,7 @@ from src.orchestrator.routes.classification_api import (
     admin_router as classification_admin_router,
 )
 from src.orchestrator.routes.architect_api import router as architect_api_router
+from src.orchestrator.routes.swarm import router as swarm_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -240,6 +241,9 @@ def create_app() -> FastAPI:
     # Architect Board API endpoints (for diagram translation)
     app.include_router(architect_api_router)
 
+    # Swarm Review API endpoints (for parallel code review)
+    app.include_router(swarm_api_router)
+
     return app
 
 
@@ -270,6 +274,7 @@ def main() -> None:
     logger.info(f"Classification API: http://localhost:{port}/api/ideas/classify")
     logger.info(f"Taxonomy Admin API: http://localhost:{port}/api/admin/labels/taxonomy")
     logger.info(f"Architect API: http://localhost:{port}/api/architect/translate")
+    logger.info(f"Swarm API: http://localhost:{port}/api/swarm/review")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:

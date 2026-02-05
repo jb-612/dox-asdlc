@@ -16,6 +16,7 @@ import DocDetailPage from "./pages/DocDetailPage";
 import StudioDiscoveryPage from "./pages/StudioDiscoveryPage";
 import StudioIdeationPage from "./pages/StudioIdeationPage";
 import RuleProposalsPage from "./pages/RuleProposalsPage";
+import CodeReviewPage from "./pages/CodeReviewPage";
 import K8sPage from "./pages/K8sPage";
 import MetricsPage from "./pages/MetricsPage";
 import SearchPage from "./pages/SearchPage";
@@ -117,6 +118,7 @@ function App() {
           <Route path="studio/discovery" element={<Navigate to="/studio" replace />} />
           <Route path="studio/ideation" element={<StudioIdeationPage />} />
           <Route path="rules" element={<RuleProposalsPage />} />
+          <Route path="review" element={<CodeReviewPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="admin/llm" element={<LLMConfigPage />} />
           <Route path="admin/labels" element={<AdminLabelsPage />} />

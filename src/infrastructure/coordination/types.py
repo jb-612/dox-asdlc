@@ -50,6 +50,12 @@ class MessageType(str, Enum):
     SESSION_START = "SESSION_START"
     SESSION_END = "SESSION_END"
 
+    # Swarm coordination
+    SWARM_STARTED = "SWARM_STARTED"
+    SWARM_REVIEWER_COMPLETE = "SWARM_REVIEWER_COMPLETE"
+    SWARM_COMPLETE = "SWARM_COMPLETE"
+    SWARM_FAILED = "SWARM_FAILED"
+
 
 class MessagePayload(BaseModel):
     """Payload content for coordination messages."""

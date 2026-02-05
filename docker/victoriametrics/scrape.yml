@@ -18,6 +18,14 @@ scrape_configs:
           service: 'workers'
     metrics_path: /metrics
 
+
+  - job_name: 'review-swarm'
+    static_configs:
+      - targets: ['review-swarm:8082']
+        labels:
+          service: 'review-swarm'
+    metrics_path: /metrics
+
   - job_name: 'victoriametrics'
     static_configs:
       - targets: ['localhost:8428']

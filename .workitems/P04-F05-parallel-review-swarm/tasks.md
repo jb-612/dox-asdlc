@@ -549,11 +549,11 @@ Integration tests for Redis storage layer.
 - Create `tests/integration/workers/swarm/test_redis_integration.py`
 
 **Acceptance Criteria:**
-- [ ] Test session CRUD with real Redis
-- [ ] Test result storage and retrieval
-- [ ] Test TTL expiration
-- [ ] Test atomic operations under concurrent access
-- [ ] Uses pytest-redis fixture
+- [x] Test session CRUD with real Redis
+- [x] Test result storage and retrieval
+- [x] Test TTL expiration
+- [x] Test atomic operations under concurrent access
+- [x] Uses pytest-redis fixture
 
 ---
 
@@ -569,11 +569,11 @@ Integration tests for parallel task execution.
 - Create `tests/integration/workers/swarm/test_parallel_dispatch.py`
 
 **Acceptance Criteria:**
-- [ ] Test parallel execution timing
-- [ ] Test partial failure handling
-- [ ] Test timeout handling
-- [ ] Test coordination message publishing
-- [ ] Uses stub reviewers for deterministic behavior
+- [x] Test parallel execution timing
+- [x] Test partial failure handling
+- [x] Test timeout handling
+- [x] Test coordination message publishing
+- [x] Uses stub reviewers for deterministic behavior
 
 ---
 
@@ -589,11 +589,11 @@ End-to-end test of complete swarm flow.
 - Create `tests/integration/workers/swarm/test_swarm_e2e.py`
 
 **Acceptance Criteria:**
-- [ ] Test: trigger swarm -> poll -> get results
-- [ ] Test: API response formats
-- [ ] Test: unified report structure
-- [ ] Test: failure scenarios via API
-- [ ] Uses TestClient for FastAPI
+- [x] Test: trigger swarm -> poll -> get results
+- [x] Test: API response formats
+- [x] Test: unified report structure
+- [x] Test: failure scenarios via API
+- [x] Uses TestClient for FastAPI
 
 ---
 
@@ -602,41 +602,41 @@ End-to-end test of complete swarm flow.
 ### Checklist by Phase
 
 **Phase 1: Data Models**
-- [ ] T01: Create Swarm Data Models
-- [ ] T02: Add Swarm Message Types
-- [ ] T03: Create Swarm Configuration
+- [x] T01: Create Swarm Data Models
+- [x] T02: Add Swarm Message Types
+- [x] T03: Create Swarm Configuration
 
 **Phase 2: Redis Storage**
-- [ ] T04: Implement SwarmRedisStore Core Operations
-- [ ] T05: Implement Result Storage Operations
-- [ ] T06: Implement Completion Waiting
+- [x] T04: Implement SwarmRedisStore Core Operations
+- [x] T05: Implement Result Storage Operations
+- [x] T06: Implement Completion Waiting
 
 **Phase 3: Specialized Reviewers**
-- [ ] T07: Create Reviewer Base Protocol
-- [ ] T08: Implement Security Reviewer
-- [ ] T09: Implement Performance Reviewer
-- [ ] T10: Implement Style Reviewer
+- [x] T07: Create Reviewer Base Protocol
+- [x] T08: Implement Security Reviewer
+- [x] T09: Implement Performance Reviewer
+- [x] T10: Implement Style Reviewer
 
 **Phase 4: Swarm Dispatcher**
-- [ ] T11: Create Swarm Session Manager
-- [ ] T12: Implement Parallel Task Spawning
-- [ ] T13: Implement Result Collection
-- [ ] T14: Add Coordination Messages
+- [x] T11: Create Swarm Session Manager
+- [x] T12: Implement Parallel Task Spawning
+- [x] T13: Implement Result Collection
+- [x] T14: Add Coordination Messages
 
 **Phase 5: Result Aggregator**
-- [ ] T15: Implement Basic Aggregation
-- [ ] T16: Implement Duplicate Detection
-- [ ] T17: Integrate Aggregator with Dispatcher
+- [x] T15: Implement Basic Aggregation
+- [x] T16: Implement Duplicate Detection
+- [x] T17: Integrate Aggregator with Dispatcher
 
 **Phase 6: API Endpoints**
-- [ ] T18: Implement Swarm Trigger Endpoint
-- [ ] T19: Implement Swarm Status Endpoint
-- [ ] T20: Add Input Validation and Rate Limiting
+- [x] T18: Implement Swarm Trigger Endpoint
+- [x] T19: Implement Swarm Status Endpoint
+- [x] T20: Add Input Validation and Rate Limiting
 
 **Phase 7: Integration Testing**
-- [ ] T21: Integration Test: Redis Operations
-- [ ] T22: Integration Test: Parallel Dispatch
-- [ ] T23: E2E Test: Full Swarm Flow
+- [x] T21: Integration Test: Redis Operations
+- [x] T22: Integration Test: Parallel Dispatch
+- [x] T23: E2E Test: Full Swarm Flow
 
 ---
 
