@@ -190,25 +190,123 @@ See `docs/environments/README.md` for detailed guides.
 
 ## Multi-CLI Coordination
 
-When devops operations are needed, PM CLI presents options to the user:
+PM CLI is the default role when starting `claude` normally. It coordinates work and can spin off isolated agent sessions when needed.
+
+### Worktree-Based Delegation
+
+When delegating implementation work, PM CLI offers three options:
+
+```
+[Task]: Backend implementation for T01-T04
+
+Options:
+ A) Run backend subagent here (same session, I'll wait)
+ B) Create isolated worktree for separate CLI session
+ C) Show instructions only (I'll handle manually)
+```
+
+**Option A: Same Session**
+- Run subagent in current session
+- Blocks PM CLI until complete
+- Good for quick, focused tasks
+
+**Option B: Create Worktree (Recommended for parallel work)**
+- PM CLI runs: `./scripts/worktree/setup-agent.sh <role>`
+- Creates `.worktrees/<role>/` with branch `agent/<role>/active`
+- Configures git identity automatically
+- User opens new terminal:
+  ```
+  cd .worktrees/<role>
+  claude
+  ```
+- Work happens in isolation, no branch conflicts
+- PM CLI can continue other work
+
+**Option C: Manual Instructions**
+- PM CLI outputs context and task description
+- User handles execution manually
+
+### Worktree Delegation Flow
+
+```
+User: "Implement the worker pool feature"
+
+PM CLI:
+1. Creates tasks from tasks.md
+2. Identifies backend work needed
+3. Asks user:
+
+   "Backend implementation needed for T01-T04 (worker pool).
+
+   Options:
+    A) Run backend subagent here
+    B) Create backend worktree for parallel work
+    C) Show instructions only
+
+   Recommendation: B (allows you to continue other work)"
+
+User: "B"
+
+PM CLI:
+1. Runs: ./scripts/worktree/setup-agent.sh backend
+2. Reports:
+
+   "✓ Created worktree at .worktrees/backend/
+   ✓ Branch: agent/backend/active
+   ✓ Identity: claude-backend@asdlc.local
+
+   To start the backend session:
+   ─────────────────────────────
+   cd .worktrees/backend
+   claude
+   ─────────────────────────────
+
+   I'll continue here. The backend CLI will see its tasks
+   via coord_get_notifications when it starts."
+
+3. Publishes task details via coord_publish_message
+```
+
+### Managing Active Worktrees
+
+PM CLI can check and manage worktrees:
+
+```bash
+# List active worktrees
+./scripts/worktree/list-agents.sh
+
+# Merge completed work back to main
+./scripts/worktree/merge-agent.sh backend
+
+# Cleanup after work is done
+./scripts/worktree/teardown-agent.sh backend --merge
+```
+
+### When to Recommend Worktrees
+
+PM CLI should recommend Option B (worktree) when:
+- Task will take significant time
+- User wants to continue other work in parallel
+- Multiple agents needed simultaneously
+- Complex implementation requiring focused context
+
+PM CLI should recommend Option A (same session) when:
+- Quick, single-file changes
+- User wants to watch progress
+- Simple task that won't block long
+
+### DevOps Operations
+
+DevOps always requires HITL confirmation:
 
 ```
 DevOps operation needed: [description]
 
 Options:
  A) Run devops agent here (I'll wait)
- B) Send notification to separate DevOps CLI
+ B) Create devops worktree for separate CLI
  C) Show me instructions (I'll run manually)
 ```
-
-### Option A: Local Execution
-Invoke devops agent in current session. User confirms each operation.
-
-### Option B: Separate DevOps CLI
-Send notification via Redis MCP. DevOps CLI in separate window executes with full permissions.
-
-### Option C: Manual Instructions
-Output step-by-step instructions for user to execute manually or paste into Claude Chrome extension.
 
 ### DevOps Message Types
 

@@ -118,19 +118,38 @@ resolve_identity() {
         fi
     fi
 
-    # Validate the resolved identity
+    # Priority 3: Default to "pm" if in main repository (not a worktree)
     if [[ -z "$identity" ]]; then
-        log_error "Cannot determine session identity."
-        log_error ""
-        log_error "To fix, set one of the following:"
-        log_error "  1. Set CLAUDE_INSTANCE_ID environment variable"
-        log_error "     export CLAUDE_INSTANCE_ID=backend"
-        log_error ""
-        log_error "  2. Configure git user.email to a known role:"
-        log_error "     git config user.email claude-backend@asdlc.local"
-        log_error ""
-        log_error "Valid roles: $VALID_ROLES"
-        return 1
+        local is_worktree=false
+        local worktree_root=""
+
+        if git rev-parse --show-toplevel &>/dev/null; then
+            worktree_root=$(git rev-parse --show-toplevel)
+            # A worktree has a .git file (not directory) that points to the main repo
+            if [[ -f "$worktree_root/.git" ]]; then
+                is_worktree=true
+            fi
+        fi
+
+        if [[ "$is_worktree" == "false" ]]; then
+            # In main repository without specific identity = PM CLI (default)
+            identity="pm"
+            source="default (main repository)"
+            log_info "No specific identity set - defaulting to PM CLI role"
+        else
+            # In a worktree without identity is an error
+            log_error "Running in worktree but no identity configured."
+            log_error "Worktree: $worktree_root"
+            log_error ""
+            log_error "Worktrees should be created with:"
+            log_error "  ./scripts/start-agent-session.sh <role>"
+            log_error ""
+            log_error "Or manually set identity:"
+            log_error "  export CLAUDE_INSTANCE_ID=backend"
+            log_error ""
+            log_error "Valid roles: $VALID_ROLES"
+            return 1
+        fi
     fi
 
     if ! is_valid_role "$identity"; then
