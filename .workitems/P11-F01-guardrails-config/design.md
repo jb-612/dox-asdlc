@@ -907,6 +907,34 @@ export interface AuditLogEntry {
 }
 ```
 
+
+### 8.4.1 JSON Casing Convention
+
+Because the frontend TypeScript types (Section 8.4) use camelCase  
+(e.g., `createdAt`, `toolsAllowed`, `gateThreshold`), the public REST API  
+MUST also use camelCase in all JSON payloads.
+
+Python models should remain snake_case internally.  
+Conversion to camelCase MUST be handled automatically via Pydantic using
+`alias_generator=to_camel`.
+
+Recommended base model:
+
+```python
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
+
+class BaseAPIModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+```
+All API-facing models SHOULD inherit from `BaseAPIModel` to ensure consistent
+camelCase JSON output.
+
+
+
 ### 8.5 Store Design
 
 ```typescript
