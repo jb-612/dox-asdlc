@@ -1,164 +1,332 @@
-# GCP Cloud Run Deployment Guide (Cost-Optimized)
+# GCP Cloud Run Deployment (All-in-Cloud-Run, Cost-Optimized)
 
-**Status:** Analysis / Recommendation
-**Optimization Target:** Cost (not performance or resilience)
+**Status:** Approved
+**Optimization:** Cost (ephemeral data, scale-to-zero)
 **Date:** 2026-02-06
 
-## Service Classification
+## Design Decisions
 
-| Service | Port | Stateful? | Cloud Run? | Notes |
-|---------|------|-----------|------------|-------|
-| Orchestrator | 8080 | No (external DB) | ✅ Yes | Needs Cloud SQL connector |
-| Workers | 8081 | No | ✅ Yes | Redis Streams consumer — needs always-on CPU |
-| Review Swarm | 8082 | No | ✅ Yes | Ephemeral sessions in Redis |
-| HITL-UI | 3000 | No | ✅ Yes | Static SPA + Express proxy |
-| Slack Bridge | 8085 | No | ✅ Yes | Optional; Socket Mode (long-lived conn) |
-| Redis | 6379 | **YES** | ❌ No | Event streams, task state, coordination |
-| Elasticsearch | 9200 | **YES** | ❌ No | Vector search / RAG backend |
-| PostgreSQL | 5432 | **YES** | ❌ No | Ideation session persistence |
-| VictoriaMetrics | 8428 | **YES** | ❌ No | Replace with Cloud Monitoring |
+1. **Everything on Cloud Run** — no VMs, no Cloud SQL, no managed services
+2. **Stateful services run as sidecars** — Redis, Postgres, ES share `localhost` with app
+3. **Data is ephemeral** — good for demos and E2E testing, not long-term storage
+4. **Postgres dumps to GCS** — survives instance recycling, restores on cold start
+5. **Redis and ES are ephemeral** — data lost on restart (acceptable for demo/testing)
+6. **VictoriaMetrics dropped** — use Cloud Run built-in metrics instead
 
-## Recommended Architecture
+## Why Sidecars?
+
+Cloud Run only accepts HTTP/gRPC/WebSocket ingress. Redis uses its own TCP protocol,
+PostgreSQL uses wire protocol. They **cannot** run as standalone Cloud Run services
+that other services connect to. The solution: bundle them as sidecars sharing
+`localhost` with the app containers.
+
+## Architecture
 
 ```
-                        ┌──────────────────────────────┐
-                        │       Cloud Run (Serverless)  │
-                        │                              │
-                        │  ┌────────────┐ scale-to-0   │
-   Internet ──────────► │  │  HITL-UI   │──────────┐   │
-        │               │  └────────────┘          │   │
-        │               │  ┌────────────┐          │   │
-        └──────────────►│  │Orchestrator│──┐   ┌───┘   │
-                        │  └────────────┘  │   │       │
-                        │  ┌────────────┐  │   │       │
-                        │  │  Workers   │──┤   │       │
-                        │  └────────────┘  │   │       │
-                        │  ┌────────────┐  │   │       │
-                        │  │Review Swarm│──┤   │       │
-                        │  └────────────┘  │   │       │
-                        └──────────────────┼───┼───────┘
-                                           │   │
-                    ┌──────────────────────┐│   │
-                    │  e2-small VM (~$13)  ││   │
-                    │                      ││   │
-                    │  ┌────────┐          ││   │
-                    │  │ Redis  │◄─────────┘│   │
-                    │  │ 7-alp  │           │   │
-                    │  └────────┘           │   │
-                    │  ┌─────────────────┐  │   │
-                    │  │ Elasticsearch   │◄─┘   │
-                    │  │ 8.17 (512MB hp) │      │
-                    │  └─────────────────┘      │
-                    └──────────────────────┘    │
-                    ┌──────────────────────┐    │
-                    │  Cloud SQL (Postgres) │    │
-                    │  db-f1-micro (shared) │◄───┘
-                    │  ~$7/mo               │
-                    └──────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Cloud Run Service: "asdlc-backend"                             │
+│  (multi-container, 2 vCPU, 4Gi RAM)                            │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ INGRESS (HTTP :8080)                                     │   │
+│  │ ┌──────────────┐                                         │   │
+│  │ │ orchestrator  │ ← external traffic via Cloud Run URL   │   │
+│  │ │ (FastAPI)     │                                         │   │
+│  │ └──────┬───────┘                                         │   │
+│  └────────┼─────────────────────────────────────────────────┘   │
+│           │ localhost                                             │
+│  ┌────────┼─────────────────────────────────────────────────┐   │
+│  │ SIDECARS (share localhost network)                       │   │
+│  │                                                           │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │   │
+│  │  │  postgres   │  │   redis    │  │  elasticsearch     │ │   │
+│  │  │  :5432      │  │   :6379    │  │  :9200             │ │   │
+│  │  │  GCS dump/  │  │  ephemeral │  │  ephemeral         │ │   │
+│  │  │  restore    │  │  (no AOF)  │  │  (indexes rebuilt) │ │   │
+│  │  └────────────┘  └────────────┘  └────────────────────┘ │   │
+│  │                                                           │   │
+│  │  ┌────────────┐  ┌──────────────┐                        │   │
+│  │  │  workers   │  │ review-swarm │                        │   │
+│  │  │  :8081     │  │ :8082        │                        │   │
+│  │  │  streams   │  │ Claude SDK   │                        │   │
+│  │  └────────────┘  └──────────────┘                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Cloud Run Service: "hitl-ui"                                    │
+│  (single container, 1 vCPU, 256Mi RAM)                          │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ ┌──────────┐                                             │   │
+│  │ │ hitl-ui  │ ← public traffic                            │   │
+│  │ │ :3000    │ → proxies /api to asdlc-backend URL         │   │
+│  │ └──────────┘                                             │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  GCS Bucket: "asdlc-pgdump"                                     │
+│  ┌──────────────────────────┐                                    │
+│  │ latest.sql.gz  (~few MB) │ ← Postgres dumps here on SIGTERM │
+│  │                          │ → Postgres restores on cold start  │
+│  └──────────────────────────┘                                    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-## Cost Estimates
+## Cost Estimate
 
-### Option A: Full Stack (~$22-27/month)
+| Component | Cost/month |
+|-----------|-----------|
+| Cloud Run "asdlc-backend" (scale-to-zero, ~4Gi) | $0-8 |
+| Cloud Run "hitl-ui" (scale-to-zero, 256Mi) | $0-1 |
+| GCS bucket (few MB of pg dumps) | ~$0.01 |
+| Artifact Registry (Docker images) | $0-1 |
+| **Total** | **$0-10/month** |
 
-| Component | GCP Service | Spec | Cost/month |
-|-----------|------------|------|------------|
-| Cloud Run (4 services) | Cloud Run | scale-to-0, 1 vCPU each | $0-5 |
-| PostgreSQL | Cloud SQL | db-f1-micro, 10GB SSD | ~$7 |
-| Redis + ES | Compute Engine | e2-small (2GB RAM) | ~$13 |
-| Disk | Persistent Disk | 30GB pd-standard | ~$1.20 |
-| Images | Artifact Registry | <1GB storage | ~$0-1 |
-| **Total** | | | **~$22-27** |
+Scale-to-zero means you pay nothing when the system is idle. Cloud Run free tier
+includes 2M requests/month, 360k vCPU-seconds, and 180k GiB-seconds.
 
-### Option B: Minimal (~$8-13/month)
+## Data Persistence Model
 
-Drop Elasticsearch, use e2-micro (free-tier eligible):
+| Service | Persistence | Survives Restart? | Notes |
+|---------|-------------|-------------------|-------|
+| PostgreSQL | GCS dump/restore | **Yes** | Dumps on SIGTERM, restores on startup |
+| Redis | None (ephemeral) | No | Event streams and cache rebuilt on use |
+| Elasticsearch | None (ephemeral) | No | Indexes created on demand by services |
+| VictoriaMetrics | Dropped | N/A | Use Cloud Run built-in metrics |
 
-| Component | GCP Service | Spec | Cost/month |
-|-----------|------------|------|------------|
-| Cloud Run (4 services) | Cloud Run | scale-to-0 | $0-5 |
-| PostgreSQL | Cloud SQL | db-f1-micro | ~$7 |
-| Redis | Compute Engine | e2-micro (1GB, free tier) | $0 |
-| Disk | Persistent Disk | 10GB pd-standard | ~$0.40 |
-| **Total** | | | **~$8-13** |
+### PostgreSQL GCS Dump/Restore Lifecycle
 
-### What NOT to Use (Cost Traps)
+```
+Cold Start:
+  1. Container starts
+  2. Check GCS for gs://${BUCKET}/latest.sql.gz
+  3. If found: restore into fresh Postgres
+  4. If not found: run init.sql (fresh schema)
+  5. Start accepting connections
 
-| Service | Minimum Cost | Why to Avoid |
-|---------|-------------|-------------|
-| Memorystore (Redis) | ~$29/mo | Overkill for lab; run Redis on VM instead |
-| Elastic Cloud | ~$95/mo | Run ES on VM or use lighter alternative |
-| GKE Autopilot | ~$72/mo | Cluster management fee alone is $72 |
-| Cloud Run always-on | +$20-40/mo | Only use for workers if stream consumption needed |
+Running:
+  6. Periodic dump every 5 minutes (background)
+  7. Upload to gs://${BUCKET}/latest.sql.gz
 
-## Cloud Run Service Configuration
-
-### Orchestrator
-
-```bash
-gcloud run deploy orchestrator \
-  --image=${REGION}-docker.pkg.dev/${PROJECT}/asdlc/orchestrator:latest \
-  --region=${REGION} \
-  --memory=512Mi \
-  --cpu=1 \
-  --min-instances=0 \
-  --max-instances=2 \
-  --concurrency=80 \
-  --timeout=300 \
-  --set-env-vars="REDIS_HOST=${VM_IP},REDIS_PORT=6379,REDIS_PASSWORD=${REDIS_PW}" \
-  --set-env-vars="ELASTICSEARCH_URL=http://${VM_IP}:9200" \
-  --set-env-vars="GIT_WRITE_ACCESS=true" \
-  --add-cloudsql-instances=${PROJECT}:${REGION}:asdlc-db \
-  --set-env-vars="POSTGRES_HOST=/cloudsql/${PROJECT}:${REGION}:asdlc-db" \
-  --set-env-vars="POSTGRES_USER=asdlc,POSTGRES_DB=asdlc_ideation" \
-  --set-secrets="POSTGRES_PASSWORD=asdlc-db-password:latest" \
-  --allow-unauthenticated=false \
-  --ingress=internal-and-cloud-load-balancing
+Shutdown (SIGTERM):
+  8. Final pg_dump → GCS
+  9. Stop Postgres gracefully
+  10. Exit
 ```
 
-### Workers
+## Cloud Run Service Definitions
 
-```bash
-gcloud run deploy workers \
-  --image=${REGION}-docker.pkg.dev/${PROJECT}/asdlc/workers:latest \
-  --region=${REGION} \
-  --memory=512Mi \
-  --cpu=1 \
-  --min-instances=0 \
-  --max-instances=4 \
-  --concurrency=10 \
-  --timeout=3600 \
-  --no-cpu-throttling \
-  --set-env-vars="REDIS_HOST=${VM_IP},REDIS_PORT=6379,REDIS_PASSWORD=${REDIS_PW}" \
-  --set-env-vars="ELASTICSEARCH_URL=http://${VM_IP}:9200" \
-  --set-env-vars="GIT_WRITE_ACCESS=false" \
-  --allow-unauthenticated=false \
-  --ingress=internal
+### Service 1: asdlc-backend (multi-container)
+
+```yaml
+# cloud-run-backend.yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: asdlc-backend
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cpu-throttling: "false"    # workers need always-on CPU
+        run.googleapis.com/startup-cpu-boost: "true"   # faster ES startup
+        autoscaling.knative.dev/minScale: "0"          # scale to zero
+        autoscaling.knative.dev/maxScale: "1"          # single instance (shared state)
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 3600
+      serviceAccountName: asdlc-backend-sa
+
+      containers:
+        # === INGRESS CONTAINER ===
+        - name: orchestrator
+          image: REGION-docker.pkg.dev/PROJECT/asdlc/orchestrator:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: REDIS_HOST
+              value: "localhost"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              value: "cloudrun-redis-pw"
+            - name: ELASTICSEARCH_URL
+              value: "http://localhost:9200"
+            - name: POSTGRES_HOST
+              value: "localhost"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: "asdlc_ideation"
+            - name: POSTGRES_USER
+              value: "asdlc"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-password
+            - name: IDEATION_PERSISTENCE_BACKEND
+              value: "postgres"
+            - name: SERVICE_NAME
+              value: "orchestrator"
+            - name: SERVICE_PORT
+              value: "8080"
+            - name: GIT_WRITE_ACCESS
+              value: "true"
+            - name: LLM_CONFIG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-encryption-key
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 30
+
+        # === SIDECAR: PostgreSQL with GCS dump/restore ===
+        - name: postgres
+          image: REGION-docker.pkg.dev/PROJECT/asdlc/postgres-gcs:latest
+          env:
+            - name: POSTGRES_USER
+              value: "asdlc"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-password
+            - name: POSTGRES_DB
+              value: "asdlc_ideation"
+            - name: GCS_BUCKET
+              value: "PROJECT-asdlc-pgdump"
+            - name: DUMP_INTERVAL_SECONDS
+              value: "300"
+          resources:
+            limits:
+              cpu: "0.25"
+              memory: "256Mi"
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "asdlc"]
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            failureThreshold: 30
+
+        # === SIDECAR: Redis (ephemeral, no persistence) ===
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server"]
+          args:
+            - "--bind"
+            - "0.0.0.0"
+            - "--port"
+            - "6379"
+            - "--requirepass"
+            - "cloudrun-redis-pw"
+            - "--maxmemory"
+            - "256mb"
+            - "--maxmemory-policy"
+            - "allkeys-lru"
+            - "--save"
+            - ""
+            - "--appendonly"
+            - "no"
+          resources:
+            limits:
+              cpu: "0.25"
+              memory: "300Mi"
+          startupProbe:
+            exec:
+              command: ["redis-cli", "-a", "cloudrun-redis-pw", "ping"]
+            periodSeconds: 2
+            failureThreshold: 15
+
+        # === SIDECAR: Elasticsearch (ephemeral) ===
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+          env:
+            - name: discovery.type
+              value: "single-node"
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms384m -Xmx384m"
+            - name: cluster.name
+              value: "asdlc-cloudrun"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "768Mi"
+          startupProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 30
+
+        # === SIDECAR: Workers (stream consumer) ===
+        - name: workers
+          image: REGION-docker.pkg.dev/PROJECT/asdlc/workers:latest
+          env:
+            - name: REDIS_HOST
+              value: "localhost"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              value: "cloudrun-redis-pw"
+            - name: ELASTICSEARCH_URL
+              value: "http://localhost:9200"
+            - name: SERVICE_NAME
+              value: "workers"
+            - name: SERVICE_PORT
+              value: "8081"
+            - name: GIT_WRITE_ACCESS
+              value: "false"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
+
+        # === SIDECAR: Review Swarm ===
+        - name: review-swarm
+          image: REGION-docker.pkg.dev/PROJECT/asdlc/review-swarm:latest
+          env:
+            - name: REDIS_HOST
+              value: "localhost"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              value: "cloudrun-redis-pw"
+            - name: ELASTICSEARCH_URL
+              value: "http://localhost:9200"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: anthropic-api-key
+            - name: SERVICE_NAME
+              value: "review-swarm"
+            - name: SERVICE_PORT
+              value: "8082"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "512Mi"
 ```
 
-> **Note:** `--no-cpu-throttling` is needed because workers consume Redis Streams
-> (background processing). This increases cost — see "Workers Caveat" below.
-
-### Review Swarm
-
-```bash
-gcloud run deploy review-swarm \
-  --image=${REGION}-docker.pkg.dev/${PROJECT}/asdlc/review-swarm:latest \
-  --region=${REGION} \
-  --memory=512Mi \
-  --cpu=1 \
-  --min-instances=0 \
-  --max-instances=2 \
-  --concurrency=5 \
-  --timeout=3600 \
-  --set-env-vars="REDIS_HOST=${VM_IP},REDIS_PORT=6379,REDIS_PASSWORD=${REDIS_PW}" \
-  --set-env-vars="ELASTICSEARCH_URL=http://${VM_IP}:9200" \
-  --set-secrets="ANTHROPIC_API_KEY=anthropic-api-key:latest" \
-  --allow-unauthenticated=false \
-  --ingress=internal
-```
-
-### HITL-UI
+### Service 2: hitl-ui (standalone)
 
 ```bash
 gcloud run deploy hitl-ui \
@@ -169,246 +337,197 @@ gcloud run deploy hitl-ui \
   --min-instances=0 \
   --max-instances=2 \
   --concurrency=200 \
-  --timeout=60 \
-  --set-env-vars="API_BACKEND_URL=https://orchestrator-xxxx-uc.a.run.app" \
-  --set-env-vars="REDIS_HOST=${VM_IP},REDIS_PORT=6379" \
+  --timeout=3600 \
+  --set-env-vars="API_BACKEND_URL=${BACKEND_URL}" \
+  --set-env-vars="SERVICE_NAME=hitl-ui,SERVICE_PORT=3000" \
   --allow-unauthenticated
 ```
 
-## Backing Services Setup
+Where `BACKEND_URL` is the Cloud Run URL of `asdlc-backend`
+(e.g., `https://asdlc-backend-xxxxx-uc.a.run.app`).
 
-### Cloud SQL (PostgreSQL)
+## Postgres GCS Wrapper
 
-```bash
-# Create instance (smallest possible)
-gcloud sql instances create asdlc-db \
-  --database-version=POSTGRES_16 \
-  --tier=db-f1-micro \
-  --region=${REGION} \
-  --storage-size=10 \
-  --storage-type=HDD \
-  --no-backup \
-  --availability-type=zonal
+A custom Dockerfile wraps the official `postgres:16-alpine` image with a
+dump/restore entrypoint. See `docker/postgres-gcs/` for implementation.
 
-# Create database
-gcloud sql databases create asdlc_ideation --instance=asdlc-db
+**Lifecycle:**
+- **Startup:** Downloads `gs://${BUCKET}/latest.sql.gz` → restores into Postgres
+- **Running:** Background dump every `DUMP_INTERVAL_SECONDS` (default: 300s / 5 min)
+- **Shutdown (SIGTERM):** Final dump to GCS → graceful Postgres stop
 
-# Create user
-gcloud sql users create asdlc \
-  --instance=asdlc-db \
-  --password=${DB_PASSWORD}
+**Required IAM:** The Cloud Run service account needs `roles/storage.objectAdmin`
+on the GCS bucket.
 
-# Store password in Secret Manager
-echo -n "${DB_PASSWORD}" | gcloud secrets create asdlc-db-password --data-file=-
-```
+## Resource Totals (asdlc-backend)
 
-Cost optimizations applied:
-- `db-f1-micro`: shared CPU, 0.6GB RAM (~$7/mo)
-- `HDD` storage: cheaper than SSD for lab use
-- `--no-backup`: skip automated backups (lab only)
-- `zonal`: no HA replica
+| Container | CPU | Memory |
+|-----------|-----|--------|
+| orchestrator | 1.0 | 512Mi |
+| postgres | 0.25 | 256Mi |
+| redis | 0.25 | 300Mi |
+| elasticsearch | 0.5 | 768Mi |
+| workers | 0.5 | 512Mi |
+| review-swarm | 0.5 | 512Mi |
+| **Total** | **3.0** | **2860Mi** |
 
-### Compute Engine VM (Redis + Elasticsearch)
+Set the Cloud Run service to `--cpu=4 --memory=4Gi` to give headroom.
 
-```bash
-# Create VM
-gcloud compute instances create asdlc-backing \
-  --machine-type=e2-small \
-  --zone=${REGION}-a \
-  --boot-disk-size=30GB \
-  --boot-disk-type=pd-standard \
-  --tags=asdlc-backing \
-  --metadata-from-file=startup-script=scripts/gcp/vm-startup.sh
+## Deployment Steps
 
-# Firewall: allow Cloud Run → VM
-gcloud compute firewall-rules create allow-cloudrun-to-backing \
-  --direction=INGRESS \
-  --action=ALLOW \
-  --rules=tcp:6379,tcp:9200 \
-  --target-tags=asdlc-backing \
-  --source-ranges="0.0.0.0/0" \
-  # Replace with Cloud Run egress range for production
-```
-
-VM runs a minimal docker-compose:
-
-```yaml
-# docker-compose.gcp-backing.yml
-services:
-  redis:
-    image: redis:7-alpine
-    command: redis-server /etc/redis/redis.conf
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-      - ./redis.conf:/etc/redis/redis.conf:ro
-    restart: unless-stopped
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    restart: unless-stopped
-
-volumes:
-  redis-data:
-  es-data:
-```
-
-### VictoriaMetrics Replacement
-
-Drop VictoriaMetrics entirely. Cloud Run provides built-in metrics:
-- Request count, latency (p50/p95/p99), error rate
-- Instance count, CPU/memory utilization
-- Available in Cloud Console → Cloud Run → Metrics tab
-
-For custom application metrics, use Cloud Monitoring client library (free for GCP resources).
-
-## Networking
-
-### Option 1: Public IP + Firewall (Cheapest, $0)
-
-- VM gets a public ephemeral IP
-- Firewall rules restrict access to Cloud Run egress IPs
-- Cloud SQL uses built-in Cloud Run connector (no VPC needed)
+### Prerequisites
 
 ```bash
-# Get VM IP
-VM_IP=$(gcloud compute instances describe asdlc-backing \
-  --zone=${REGION}-a --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+export PROJECT=your-gcp-project
+export REGION=us-central1
+export BUCKET=${PROJECT}-asdlc-pgdump
 ```
 
-### Option 2: VPC Connector (~$7/month additional)
-
-- Private networking between Cloud Run and VM
-- More secure, no public exposure of Redis/ES
+### 1. Enable APIs
 
 ```bash
-gcloud compute networks vpc-access connectors create asdlc-connector \
-  --region=${REGION} \
-  --range=10.8.0.0/28 \
-  --min-instances=2 \
-  --max-instances=3 \
-  --machine-type=e2-micro
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com \
+  storage.googleapis.com
 ```
 
-**Recommendation:** Use public IP for lab. Switch to VPC connector for staging/production.
-
-## Artifact Registry
+### 2. Create Artifact Registry
 
 ```bash
-# Create repository
 gcloud artifacts repositories create asdlc \
   --repository-format=docker \
   --location=${REGION}
+```
 
-# Build and push images
+### 3. Create GCS Bucket (for Postgres dumps)
+
+```bash
+gsutil mb -l ${REGION} gs://${BUCKET}
+gsutil lifecycle set <(echo '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30}}]}') gs://${BUCKET}
+```
+
+### 4. Store Secrets
+
+```bash
+echo -n "your-pg-password" | gcloud secrets create postgres-password --data-file=-
+echo -n "your-anthropic-key" | gcloud secrets create anthropic-api-key --data-file=-
+echo -n "your-encryption-key" | gcloud secrets create llm-encryption-key --data-file=-
+```
+
+### 5. Build and Push Images
+
+```bash
+# Configure Docker auth
+gcloud auth configure-docker ${REGION}-docker.pkg.dev
+
+# Build all images
 docker build -f docker/orchestrator/Dockerfile -t ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/orchestrator:latest .
 docker build -f docker/workers/Dockerfile -t ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/workers:latest .
 docker build -f docker/review-swarm/Dockerfile -t ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/review-swarm:latest .
 docker build -f docker/hitl-ui/Dockerfile -t ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/hitl-ui:latest .
+docker build -f docker/postgres-gcs/Dockerfile -t ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/postgres-gcs:latest docker/postgres-gcs/
 
-docker push ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/orchestrator:latest
-docker push ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/workers:latest
-docker push ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/review-swarm:latest
-docker push ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/hitl-ui:latest
+# Push all
+for img in orchestrator workers review-swarm hitl-ui postgres-gcs; do
+  docker push ${REGION}-docker.pkg.dev/${PROJECT}/asdlc/${img}:latest
+done
 ```
 
-## Known Caveats and Mitigations
-
-### Workers: Redis Streams on Cloud Run
-
-**Problem:** Workers consume Redis Streams via blocking reads (XREADGROUP). Cloud Run
-throttles CPU between requests by default, which breaks background stream consumption.
-
-**Options (ranked by cost):**
-
-1. **`--no-cpu-throttling`** (~$5-15/mo extra): CPU always allocated. Workers stay
-   warm and consume streams. Simplest migration path.
-
-2. **Refactor to HTTP-triggered** ($0 extra): Change workers from stream consumers to
-   HTTP endpoints. Orchestrator calls workers via HTTP instead of publishing to streams.
-   Requires code changes but is the Cloud Run-native pattern.
-
-3. **Cloud Run Jobs** ($0 extra): Run workers as Cloud Run Jobs triggered by Cloud
-   Scheduler or Pub/Sub. Good for batch processing, not real-time events.
-
-### Orchestrator: Workspace Volume
-
-**Problem:** Orchestrator mounts the git workspace as a read-write volume (`../:/app/workspace`).
-Cloud Run has no persistent filesystem.
-
-**Options:**
-1. **Clone repo at startup** — add a startup script that `git clone`s into `/tmp/workspace`
-2. **Cloud Storage FUSE** — mount a GCS bucket as a filesystem (read-write, ~$0.02/GB/mo)
-3. **Skip workspace mount** — if orchestrator only needs it for git operations, consider
-   using the GitHub API instead
-
-### HITL-UI: WebSocket/Socket.io
-
-**Problem:** HITL-UI uses Socket.io for real-time updates. Cloud Run supports HTTP/2
-streaming and WebSocket since 2021, but connections are limited to request timeout.
-
-**Mitigation:** Set `--timeout=3600` (1 hour max) on HITL-UI, or switch to
-Server-Sent Events (SSE) which work more naturally with Cloud Run.
-
-### Cold Starts
-
-All services set to `min-instances=0` for cost. Expect 2-5 second cold starts on
-first request after idle period. Python services (orchestrator, workers) will be
-slower than Node.js (hitl-ui).
-
-**Mitigation:** If cold starts are unacceptable for HITL-UI, set `--min-instances=1`
-(adds ~$5-10/month).
-
-## Deployment Order
-
-1. Create Artifact Registry repository
-2. Build and push all Docker images
-3. Create Cloud SQL PostgreSQL instance + database + user
-4. Run schema migration (init.sql) against Cloud SQL
-5. Create Compute Engine VM with Redis + Elasticsearch
-6. Wait for VM startup, note its IP address
-7. Store secrets in Secret Manager (DB password, Redis password, Anthropic key)
-8. Deploy Cloud Run services (orchestrator first, then workers, review-swarm, hitl-ui)
-9. Configure Cloud Run service-to-service auth (orchestrator → workers)
-10. Test health endpoints on all services
-11. (Optional) Set up Cloud Load Balancer for custom domain
-
-## Elasticsearch Alternatives (Further Cost Savings)
-
-If ES is too heavy for the VM:
-
-| Alternative | RAM | ES-Compatible API? | Vector Search? | Notes |
-|-------------|-----|--------------------|----------------|-------|
-| Keep ES 8.17 | 512MB-1GB | Yes | Yes (kNN) | Needs e2-small minimum |
-| Zinc | ~50MB | Partial | No | Drop-in for basic search |
-| Meilisearch | ~100MB | No | No | Fast, lightweight |
-| Typesense | ~100MB | No | Yes | Vector + full-text |
-| Skip entirely | 0 | N/A | N/A | Disable KnowledgeStore |
-
-**To use Zinc as a drop-in:** Your `KnowledgeStore` interface already supports backend
-swapping (see `src/core/interfaces.py`). Implement a Zinc adapter or disable the feature.
-
-## Secrets Management
-
-Use GCP Secret Manager (free for first 10k access operations/month):
+### 6. Grant IAM Permissions
 
 ```bash
-# Store secrets
-gcloud secrets create redis-password --data-file=- <<< "${REDIS_PW}"
-gcloud secrets create anthropic-api-key --data-file=- <<< "${ANTHROPIC_KEY}"
-gcloud secrets create asdlc-db-password --data-file=- <<< "${DB_PW}"
-gcloud secrets create llm-encryption-key --data-file=- <<< "${ENC_KEY}"
+SA=$(gcloud run services describe asdlc-backend --region=${REGION} \
+  --format='value(spec.template.spec.serviceAccountName)' 2>/dev/null || \
+  echo "${PROJECT_NUMBER}-compute@developer.gserviceaccount.com")
 
-# Grant Cloud Run access
-gcloud secrets add-iam-policy-binding redis-password \
-  --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"
+# GCS access for Postgres dumps
+gcloud storage buckets add-iam-policy-binding gs://${BUCKET} \
+  --member="serviceAccount:${SA}" \
+  --role="roles/storage.objectAdmin"
+
+# Secret Manager access
+for secret in postgres-password anthropic-api-key llm-encryption-key; do
+  gcloud secrets add-iam-policy-binding ${secret} \
+    --member="serviceAccount:${SA}" \
+    --role="roles/secretmanager.secretAccessor"
+done
+```
+
+### 7. Deploy
+
+```bash
+# Deploy backend (multi-container)
+./scripts/gcp/deploy-cloud-run.sh
+
+# Deploy HITL UI
+BACKEND_URL=$(gcloud run services describe asdlc-backend \
+  --region=${REGION} --format='value(status.url)')
+
+gcloud run deploy hitl-ui \
+  --image=${REGION}-docker.pkg.dev/${PROJECT}/asdlc/hitl-ui:latest \
+  --region=${REGION} \
+  --memory=256Mi --cpu=1 \
+  --min-instances=0 --max-instances=2 \
+  --set-env-vars="API_BACKEND_URL=${BACKEND_URL}" \
+  --allow-unauthenticated
+```
+
+### 8. Verify
+
+```bash
+BACKEND_URL=$(gcloud run services describe asdlc-backend --region=${REGION} --format='value(status.url)')
+FRONTEND_URL=$(gcloud run services describe hitl-ui --region=${REGION} --format='value(status.url)')
+
+echo "Backend:  ${BACKEND_URL}/health"
+echo "Frontend: ${FRONTEND_URL}"
+
+curl -s ${BACKEND_URL}/health | python3 -m json.tool
+```
+
+## Known Limitations
+
+### Single Instance Constraint
+
+`maxScale: 1` is set because Redis, Postgres, and ES hold in-memory state. If
+Cloud Run scaled to 2 instances, each would have its own Redis/Postgres — data
+would diverge. For a demo/testing deployment this is fine.
+
+### Cold Start Time
+
+With 6 containers, cold start is ~30-45 seconds (Elasticsearch dominates at ~20-30s).
+After the first request warms the instance, subsequent requests are fast.
+
+Use `--min-instances=1` during active demo sessions (~$30-60/month) to eliminate cold starts.
+
+### Instance Recycling
+
+Cloud Run may recycle instances at any time (typically every few hours to days).
+When this happens:
+- **Postgres**: Restores from last GCS dump (max 5 min data loss)
+- **Redis**: Starts empty (event streams and cache rebuilt on use)
+- **ES**: Starts empty (indexes recreated on demand by KnowledgeStore)
+
+### CPU Throttling Disabled
+
+`cpu-throttling: false` is required because workers consume Redis Streams in the
+background. This means CPU is always allocated while the instance is active,
+increasing cost slightly vs throttled mode.
+
+### Memory Pressure
+
+4Gi is tight for 6 containers. Elasticsearch heap is reduced to 384MB (from 512MB
+in local dev). Monitor memory usage and bump to 8Gi if OOM kills occur.
+
+## Teardown
+
+```bash
+gcloud run services delete asdlc-backend --region=${REGION} --quiet
+gcloud run services delete hitl-ui --region=${REGION} --quiet
+gsutil rm -r gs://${BUCKET}
+gcloud artifacts repositories delete asdlc --location=${REGION} --quiet
+for secret in postgres-password anthropic-api-key llm-encryption-key; do
+  gcloud secrets delete ${secret} --quiet
+done
 ```
