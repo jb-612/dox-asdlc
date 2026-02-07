@@ -12,7 +12,6 @@ import json
 import logging
 import os
 import signal
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -29,81 +28,12 @@ from src.infrastructure.slack_bridge.decision_handler import (
     RBACDeniedException,
 )
 from src.infrastructure.slack_bridge.gate_consumer import GateConsumer
+from src.infrastructure.slack_bridge.http_ideas_service import HttpIdeasService
 from src.infrastructure.slack_bridge.idea_handler import IdeaHandler
 from src.infrastructure.slack_bridge.policy import RoutingPolicy
-from src.orchestrator.api.models.idea import (
-    CreateIdeaRequest,
-    Idea,
-    IdeaClassification,
-    IdeaStatus,
-)
 
 logger = logging.getLogger(__name__)
 
-
-class RedisIdeasService:
-    """Lightweight adapter that writes ideas to Redis Streams.
-
-    This keeps the Slack Bridge stateless by writing ideas to Redis
-    for downstream processing, rather than requiring a full IdeasService.
-    """
-
-    # Redis Stream name for ideas
-    IDEAS_STREAM = "ideas_stream"
-
-    def __init__(self, redis_client: redis.Redis) -> None:
-        """Initialize the Redis-backed ideas service.
-
-        Args:
-            redis_client: Redis client instance.
-        """
-        self.redis = redis_client
-
-    async def create_idea(self, request: CreateIdeaRequest) -> Idea:
-        """Create an idea by writing to Redis Streams.
-
-        Args:
-            request: The idea creation request.
-
-        Returns:
-            The created Idea object.
-        """
-        idea_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
-        word_count = len(request.content.split())
-
-        # Build event data for Redis Stream
-        event_data = {
-            "id": idea_id,
-            "content": request.content,
-            "author_id": request.author_id,
-            "author_name": request.author_name,
-            "status": IdeaStatus.ACTIVE.value,
-            "classification": request.classification.value,
-            "labels": json.dumps(request.labels),
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-            "word_count": str(word_count),
-        }
-
-        # Write to Redis Stream
-        await self.redis.xadd(self.IDEAS_STREAM, event_data)
-
-        logger.info(f"Published idea {idea_id} to Redis Stream {self.IDEAS_STREAM}")
-
-        # Return the created Idea
-        return Idea(
-            id=idea_id,
-            content=request.content,
-            author_id=request.author_id,
-            author_name=request.author_name,
-            status=IdeaStatus.ACTIVE,
-            classification=request.classification,
-            labels=request.labels,
-            created_at=now,
-            updated_at=now,
-            word_count=word_count,
-        )
 
 # Version for startup logging
 __version__ = "1.0.0"
@@ -265,10 +195,11 @@ class SlackBridge:
             config=self.config,
         )
 
-        # Initialize idea handler with Redis-backed service
-        # This keeps the bridge stateless - ideas are written to Redis for processing
+        # Initialize idea handler with HTTP-backed service
+        # Ideas are sent to the orchestrator REST API for persistence in Elasticsearch
+        orchestrator_url = os.environ.get("ORCHESTRATOR_URL", "http://localhost:8080")
         self.idea_handler = IdeaHandler(
-            ideas_service=RedisIdeasService(redis_client),
+            ideas_service=HttpIdeasService(base_url=orchestrator_url),
             slack_client=self.app.client,
             config=self.config,
         )
@@ -811,6 +742,13 @@ class SlackBridge:
                 await self._consumer_task
             except asyncio.CancelledError:
                 pass
+
+        # Close HTTP ideas service session
+        if self.idea_handler and hasattr(self.idea_handler.ideas_service, "close"):
+            try:
+                await self.idea_handler.ideas_service.close()
+            except Exception as e:
+                logger.warning(f"Error closing HTTP ideas service: {e}")
 
         # Close Redis connection if we own it
         if self._redis_client:

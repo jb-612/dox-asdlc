@@ -549,85 +549,63 @@ class TestIdeaNewCommandHandler:
         assert "failed" in call_kwargs.get("text", "").lower()
 
 
-class TestRedisIdeasService:
-    """Tests for RedisIdeasService adapter."""
+class TestHttpIdeasServiceWiring:
+    """Tests that SlackBridge wires HttpIdeasService into IdeaHandler."""
+
+    @pytest.fixture
+    def config(self) -> SlackBridgeConfig:
+        """Sample config for testing."""
+        return SlackBridgeConfig(
+            bot_token=SecretStr("xoxb-test"),
+            app_token=SecretStr("xapp-test"),
+            signing_secret=SecretStr("secret"),
+            routing_policy={
+                "hitl_4_code": ChannelConfig(
+                    channel_id="C-CODE",
+                    required_role="reviewer",
+                ),
+            },
+            rbac_map={"U001": ["reviewer"]},
+        )
 
     @pytest.fixture
     def mock_redis(self) -> AsyncMock:
         """Mock Redis client."""
-        mock = AsyncMock()
-        mock.xadd = AsyncMock(return_value="1234567890-0")
-        return mock
+        return AsyncMock()
 
-    @pytest.mark.asyncio
-    async def test_create_idea_writes_to_redis_stream(self, mock_redis: AsyncMock):
-        """Create idea writes event to Redis Stream."""
-        from src.infrastructure.slack_bridge.bridge import RedisIdeasService
-        from src.orchestrator.api.models.idea import CreateIdeaRequest
+    def test_bridge_uses_http_ideas_service(
+        self, config: SlackBridgeConfig, mock_redis: AsyncMock
+    ):
+        """Bridge creates IdeaHandler with HttpIdeasService."""
+        from src.infrastructure.slack_bridge.bridge import SlackBridge
+        from src.infrastructure.slack_bridge.http_ideas_service import HttpIdeasService
 
-        service = RedisIdeasService(mock_redis)
+        bridge = SlackBridge(config=config, redis_client=mock_redis)
 
-        request = CreateIdeaRequest(
-            content="Test idea content",
-            author_id="U001",
-            author_name="Test User",
-            labels=["source_ref:slack:command:C-IDEAS:U001"],
-        )
+        assert bridge.idea_handler is not None
+        assert isinstance(bridge.idea_handler.ideas_service, HttpIdeasService)
 
-        result = await service.create_idea(request)
+    def test_bridge_http_ideas_service_uses_default_url(
+        self, config: SlackBridgeConfig, mock_redis: AsyncMock
+    ):
+        """HttpIdeasService uses default orchestrator URL."""
+        from src.infrastructure.slack_bridge.bridge import SlackBridge
 
-        # Verify Redis xadd was called
-        mock_redis.xadd.assert_called_once()
-        call_args = mock_redis.xadd.call_args
-        assert call_args[0][0] == "ideas_stream"
+        with patch.dict("os.environ", {}, clear=False):
+            bridge = SlackBridge(config=config, redis_client=mock_redis)
 
-        # Verify event data
-        event_data = call_args[0][1]
-        assert event_data["content"] == "Test idea content"
-        assert event_data["author_id"] == "U001"
-        assert event_data["author_name"] == "Test User"
-        assert event_data["status"] == "active"
+        assert bridge.idea_handler.ideas_service._base_url == "http://localhost:8080"
 
-    @pytest.mark.asyncio
-    async def test_create_idea_returns_idea_object(self, mock_redis: AsyncMock):
-        """Create idea returns properly formed Idea object."""
-        from src.infrastructure.slack_bridge.bridge import RedisIdeasService
-        from src.orchestrator.api.models.idea import CreateIdeaRequest, IdeaStatus
+    def test_bridge_http_ideas_service_uses_env_url(
+        self, config: SlackBridgeConfig, mock_redis: AsyncMock
+    ):
+        """HttpIdeasService uses ORCHESTRATOR_URL env var."""
+        from src.infrastructure.slack_bridge.bridge import SlackBridge
 
-        service = RedisIdeasService(mock_redis)
+        with patch.dict("os.environ", {"ORCHESTRATOR_URL": "http://orchestrator:9090"}):
+            bridge = SlackBridge(config=config, redis_client=mock_redis)
 
-        request = CreateIdeaRequest(
-            content="My great idea",
-            author_id="U001",
-            author_name="Test User",
-        )
-
-        result = await service.create_idea(request)
-
-        assert result.content == "My great idea"
-        assert result.author_id == "U001"
-        assert result.author_name == "Test User"
-        assert result.status == IdeaStatus.ACTIVE
-        assert result.word_count == 3  # "My great idea" = 3 words
-        assert result.id is not None
-
-    @pytest.mark.asyncio
-    async def test_create_idea_calculates_word_count(self, mock_redis: AsyncMock):
-        """Create idea correctly calculates word count."""
-        from src.infrastructure.slack_bridge.bridge import RedisIdeasService
-        from src.orchestrator.api.models.idea import CreateIdeaRequest
-
-        service = RedisIdeasService(mock_redis)
-
-        request = CreateIdeaRequest(
-            content="One two three four five six seven",
-            author_id="U001",
-            author_name="Test User",
-        )
-
-        result = await service.create_idea(request)
-
-        assert result.word_count == 7
+        assert bridge.idea_handler.ideas_service._base_url == "http://orchestrator:9090"
 
 
 class TestGracefulShutdown:
