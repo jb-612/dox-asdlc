@@ -1,6 +1,6 @@
 # GitHub Issue: BUG: Slack /idea-new command does not persist ideas to Brainflare Hub
 
-**Status:** OPEN
+**Status:** CLOSED (fixed in commit e14809a)
 **Label:** bug
 **Created:** 2026-02-06
 
