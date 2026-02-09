@@ -1,0 +1,78 @@
+{
+  "gemini_1": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Security & Data Flow",
+    "slug": "gemini-security",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "Prompt injection vectors in hook inputs (stdin JSON parsing)",
+      "Path traversal in guardrails-enforce.py sanitization",
+      "Elasticsearch query injection in guardrails_store.py",
+      "Unsafe deserialization of guideline JSON from ES",
+      "TOCTOU race conditions in cache file reads/writes (/tmp/guardrails-*.json)",
+      "Missing input validation on REST API endpoints",
+      "Audit log tampering or information leakage",
+      "Fail-open vs fail-closed behavior correctness",
+      "MCP tool parameter validation and error handling",
+      "Cross-tenant data leakage with index prefix feature"
+    ]
+  },
+  "gemini_2": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Architecture & Design Patterns",
+    "slug": "gemini-architecture",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "Separation of concerns between core/, infrastructure/, orchestrator/ layers",
+      "Frozen dataclass immutability guarantees in models.py",
+      "Evaluator caching strategy and invalidation correctness",
+      "ES store async patterns and connection lifecycle",
+      "Hook cross-process state sharing via /tmp files",
+      "Config loading patterns (from_env) and defaults",
+      "Exception hierarchy completeness and HTTP status mapping",
+      "MCP server transport and tool registration patterns",
+      "REST API router organization and dependency injection",
+      "Bootstrap idempotency and versioning strategy"
+    ]
+  },
+  "codex_1": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Code Quality & Error Handling",
+    "slug": "codex-quality",
+    "flags": "--full-auto",
+    "checklist": [
+      "Consistent error handling across all modules",
+      "Resource cleanup (async contexts, ES connections, file handles)",
+      "Type annotation completeness and correctness",
+      "Dead code or unreachable branches",
+      "Logging consistency and appropriate log levels",
+      "Magic strings/numbers that should be constants",
+      "Docstring quality and accuracy",
+      "Import organization and circular dependency risks",
+      "Code duplication across hooks, MCP, and API layers",
+      "Python best practices (dataclass usage, enum patterns, etc.)"
+    ]
+  },
+  "codex_2": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Test Coverage & Edge Cases",
+    "slug": "codex-testing",
+    "flags": "--full-auto",
+    "checklist": [
+      "Missing test coverage for error paths and edge cases",
+      "Test isolation (no shared mutable state between tests)",
+      "Mock correctness (are mocks testing real behavior?)",
+      "Missing integration test scenarios",
+      "Boundary value testing (priority 0/1000, empty lists, null fields)",
+      "Concurrent access testing for cache and ES store",
+      "Hook stdin/stdout contract testing",
+      "API endpoint validation testing (invalid inputs, missing fields)",
+      "Bootstrap idempotency testing",
+      "Evaluator condition matching edge cases (all wildcards, no match, etc.)"
+    ]
+  }
+}
