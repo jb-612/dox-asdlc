@@ -101,14 +101,14 @@ As a project maintainer, I want to configure agent behavior through modular guid
 
 ---
 
-### US-F01-06: Extend MCP with guardrails_get_context
+### US-F01-06: Implement guardrails_get_context in Standalone Guardrails MCP
 
 **As an** agent
 **I want** to call `guardrails_get_context` to get applicable guidelines
 **So that** I receive focused context for my current task
 
 **Acceptance Criteria:**
-- [ ] `guardrails_get_context` tool added to KnowledgeStoreMCPServer
+- [ ] `guardrails_get_context` tool implemented in the standalone Guardrails MCP server (`src/infrastructure/guardrails/guardrails_mcp.py`)
 - [ ] Tool accepts agent, domain, action, paths, event parameters
 - [ ] Response includes matching guidelines sorted by priority
 - [ ] Response includes combined instruction text
@@ -120,14 +120,14 @@ As a project maintainer, I want to configure agent behavior through modular guid
 
 ---
 
-### US-F01-07: Extend MCP with guardrails_log_decision
+### US-F01-07: Implement guardrails_log_decision in Standalone Guardrails MCP
 
 **As an** agent
 **I want** to log gate decisions via MCP
 **So that** decisions are recorded for audit
 
 **Acceptance Criteria:**
-- [ ] `guardrails_log_decision` tool added to MCP server
+- [ ] `guardrails_log_decision` tool implemented in the standalone Guardrails MCP server (`src/infrastructure/guardrails/guardrails_mcp.py`)
 - [ ] Tool accepts guideline_id, context, result, reason
 - [ ] Decision logged to audit index
 - [ ] Returns audit entry ID

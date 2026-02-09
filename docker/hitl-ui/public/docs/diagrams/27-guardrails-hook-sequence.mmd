@@ -1,0 +1,80 @@
+%% File: docs/diagrams/27-guardrails-hook-sequence.mmd
+%% Description: P11-F01 Guardrails - Hook Lifecycle Sequence (UserPromptSubmit + PreToolUse + SubagentStart)
+%% Updated: 2026-02-05
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+sequenceDiagram
+    participant User
+    participant CLI as Claude Code CLI
+    participant UPS as guardrails-inject.py<br/>(UserPromptSubmit)
+    participant PTU as guardrails-enforce.py<br/>(PreToolUse)
+    participant SAS as guardrails-subagent.py<br/>(SubagentStart)
+    participant MCP as Guardrails MCP
+    participant ES as Elasticsearch
+    participant Agent as Subagent
+
+    Note over User,ES: Phase 1: Context Injection (every user prompt)
+
+    User->>CLI: "Implement worker pool for P01"
+    CLI->>UPS: Hook fires (stdin: prompt JSON)
+    UPS->>UPS: ContextDetector: keyword match<br/>domain=P01, action=implement, agent=backend
+
+    alt Keywords matched
+        UPS->>MCP: guardrails_get_context(agent=backend, domain=P01, action=implement)
+    else Ambiguous - LLM fallback
+        UPS->>UPS: Haiku classify (~500ms, cached)
+        UPS->>MCP: guardrails_get_context(...)
+    end
+
+    MCP->>ES: Query guardrails-config<br/>(enabled=true)
+    ES-->>MCP: All enabled guidelines
+    MCP->>MCP: GuardrailsEvaluator<br/>condition_matches() + priority sort
+    MCP-->>UPS: 5 matching guidelines (of 50 total)
+
+    UPS-->>CLI: {additionalContext: "[GUARDRAILS] Backend P01 rules..."}
+    CLI->>CLI: Claude sees filtered rules<br/>(~200 words, not 2000+)
+
+    Note over User,ES: Phase 2: Tool Enforcement (every tool call)
+
+    CLI->>CLI: Claude decides: Edit("src/workers/pool.py")
+    CLI->>PTU: Hook fires (stdin: tool=Edit, path=src/workers/pool.py)
+    PTU->>PTU: Check path against cached guardrails
+    PTU-->>CLI: exit 0 (allowed - path in backend domain)
+
+    CLI->>CLI: Claude decides: Write("src/hitl_ui/Button.tsx")
+    CLI->>PTU: Hook fires (stdin: tool=Write, path=src/hitl_ui/Button.tsx)
+    PTU->>PTU: Check path against cached guardrails
+    PTU-->>CLI: exit 2 BLOCK<br/>{reason: "cognitive-backend blocks Write to src/hitl_ui/"}
+
+    CLI->>User: Tool blocked by guardrail
+
+    Note over User,ES: Phase 3: Subagent Injection (agent spawn)
+
+    CLI->>CLI: PM spawns backend subagent
+    CLI->>SAS: Hook fires (stdin: agentName=backend)
+    SAS->>MCP: guardrails_get_context(agent=backend)
+    MCP->>ES: Query guardrails-config<br/>(condition.agents contains "backend")
+    ES-->>MCP: Backend-specific guidelines
+    MCP-->>SAS: Agent guidelines
+    SAS-->>CLI: {additionalContext: "## Backend Agent Rules\n- Path: src/workers/...\n- TDD required..."}
+    CLI->>Agent: Subagent starts with injected guardrails
+
+    Note over User,ES: Phase 4: Audit Logging (decisions)
+
+    Agent->>CLI: Completes task
+    CLI->>MCP: guardrails_log_decision(guideline_id, context, result=approved)
+    MCP->>ES: Index to guardrails-audit
+    ES-->>MCP: audit_id
+
+    Note over User,ES: Fallback: ES Unavailable
+
+    rect rgb(255, 240, 240)
+        User->>CLI: Another prompt
+        CLI->>UPS: Hook fires
+        UPS->>MCP: guardrails_get_context(...)
+        MCP--xES: Connection refused
+        MCP-->>UPS: Error: ES unavailable
+        UPS-->>CLI: Prompt user for fallback mode
+        CLI->>User: "Guardrails unavailable. A) Continue without B) Load static rules"
+    end

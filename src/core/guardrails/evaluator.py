@@ -1,0 +1,317 @@
+"""Evaluates guidelines against task context.
+
+Provides :class:`GuardrailsEvaluator` which accepts a
+:class:`~src.infrastructure.guardrails.guardrails_store.GuardrailsStore`
+and evaluates which guidelines apply to a given
+:class:`~src.core.guardrails.models.TaskContext`.
+
+This module is the core of the guardrails evaluation pipeline.  Condition
+matching (T06), conflict resolution (T07), and full evaluation flow (T08)
+will be added incrementally.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import logging
+from datetime import datetime, timezone
+from typing import Any
+
+from src.core.guardrails.models import (
+    EvaluatedContext,
+    EvaluatedGuideline,
+    GateDecision,
+    Guideline,
+    GuidelineCondition,
+    TaskContext,
+)
+from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+logger = logging.getLogger(__name__)
+
+
+class GuardrailsEvaluator:
+    """Evaluates guidelines against task context.
+
+    Takes a :class:`GuardrailsStore` and evaluates which guidelines apply
+    to a given :class:`TaskContext`.
+
+    Args:
+        store: The guardrails store for guideline retrieval and audit logging.
+        cache_ttl: Time-to-live for cached guidelines in seconds. Default 60.0.
+                   Set to 0.0 to disable caching.
+
+    Example:
+        ```python
+        evaluator = GuardrailsEvaluator(store=my_store)
+        result = await evaluator.get_context(task_context)
+        ```
+    """
+
+    def __init__(self, store: GuardrailsStore, cache_ttl: float = 60.0) -> None:
+        self._store = store
+        self._cache_ttl = cache_ttl
+        self._cached_guidelines: list[Guideline] | None = None
+        self._cache_timestamp: datetime | None = None
+
+    def _count_non_none_fields(self, condition: GuidelineCondition) -> int:
+        """Count the number of non-None/non-empty fields in a condition.
+
+        This is used to calculate the match score denominator.
+
+        Args:
+            condition: The guideline condition to count.
+
+        Returns:
+            The count of non-None, non-empty fields.
+        """
+        count = 0
+        if condition.agents:
+            count += 1
+        if condition.domains:
+            count += 1
+        if condition.actions:
+            count += 1
+        if condition.paths:
+            count += 1
+        if condition.events:
+            count += 1
+        if condition.gate_types:
+            count += 1
+        return count
+
+    def _condition_matches(
+        self,
+        condition: GuidelineCondition,
+        context: TaskContext,
+    ) -> tuple[bool, tuple[str, ...]]:
+        """Check if a condition matches the given context.
+
+        Returns ``(matches, matched_fields)`` where:
+
+        - *matches*: ``True`` if **all** specified condition fields match
+          (AND logic).
+        - *matched_fields*: tuple of field names that were checked and
+          matched.
+
+        Rules:
+
+        - ``None`` or empty-list condition fields act as wildcards (always
+          match, not counted as a matched field).
+        - List fields use OR logic (any item in the list matching the
+          context value is sufficient).
+        - All non-wildcard condition fields must match for the overall
+          result to be ``True`` (AND logic).
+        - Path matching uses :func:`fnmatch.fnmatch` for glob patterns.
+
+        Args:
+            condition: The guideline condition to evaluate.
+            context: The task context to evaluate against.
+
+        Returns:
+            A tuple of ``(matches, matched_fields)``.
+        """
+        matched: list[str] = []
+
+        # Define simple (scalar) field mappings:
+        #   (condition_field_name, condition_value, context_value)
+        scalar_checks: list[tuple[str, list[str] | None, str | None]] = [
+            ("agents", condition.agents, context.agent),
+            ("domains", condition.domains, context.domain),
+            ("actions", condition.actions, context.action),
+            ("events", condition.events, context.event),
+            ("gate_types", condition.gate_types, context.gate_type),
+        ]
+
+        for field_name, cond_values, ctx_value in scalar_checks:
+            # Wildcard: None or empty list -> skip
+            if not cond_values:
+                continue
+            # Condition specifies values but context field is None -> no match
+            if ctx_value is None:
+                return False, ()
+            # OR logic: any condition value matching context value
+            if ctx_value in cond_values:
+                matched.append(field_name)
+            else:
+                return False, ()
+
+        # Path matching (list-to-list with glob patterns)
+        cond_paths = condition.paths
+        if cond_paths:
+            # Condition has path patterns but context has no paths -> no match
+            if not context.paths:
+                return False, ()
+            # OR logic: any context path matching any condition pattern
+            path_matched = any(
+                fnmatch.fnmatch(ctx_path, pattern)
+                for pattern in cond_paths
+                for ctx_path in context.paths
+            )
+            if path_matched:
+                matched.append("paths")
+            else:
+                return False, ()
+
+        return True, tuple(matched)
+
+    def _resolve_conflicts(
+        self,
+        matched: list[EvaluatedGuideline],
+        context: TaskContext,
+    ) -> EvaluatedContext:
+        """Resolve conflicts between matched guidelines.
+
+        Guidelines are sorted by priority (highest first) using a stable
+        sort so that equal-priority items retain their original order.
+        Tool lists are merged as unions, with ``tools_denied`` always
+        winning over ``tools_allowed`` (if a tool appears in both sets it
+        is removed from allowed).  HITL gates are collected as a union of
+        unique gate types.  Instructions are concatenated in priority
+        order separated by double newlines.
+
+        Args:
+            matched: List of evaluated guidelines (may be unsorted).
+            context: The task context being evaluated.
+
+        Returns:
+            A fully resolved :class:`EvaluatedContext`.
+        """
+        # Stable sort by priority descending
+        sorted_matched = sorted(
+            matched, key=lambda eg: eg.guideline.priority, reverse=True
+        )
+
+        instructions: list[str] = []
+        tools_allowed: set[str] = set()
+        tools_denied: set[str] = set()
+        hitl_gates: set[str] = set()
+
+        for eg in sorted_matched:
+            action = eg.guideline.action
+
+            if action.instruction:
+                instructions.append(action.instruction)
+
+            if action.tools_allowed is not None:
+                tools_allowed.update(action.tools_allowed)
+
+            if action.tools_denied is not None:
+                tools_denied.update(action.tools_denied)
+
+            if action.gate_type is not None:
+                hitl_gates.add(action.gate_type)
+
+        # Deny always wins over allow
+        final_tools_allowed = tools_allowed - tools_denied
+
+        return EvaluatedContext(
+            context=context,
+            matched_guidelines=tuple(sorted_matched),
+            combined_instruction="\n\n".join(instructions),
+            tools_allowed=tuple(sorted(final_tools_allowed)),
+            tools_denied=tuple(sorted(tools_denied)),
+            hitl_gates=tuple(sorted(hitl_gates)),
+        )
+
+    def invalidate_cache(self) -> None:
+        """Invalidate the cached guidelines.
+
+        Forces the next call to :meth:`get_context` to fetch fresh
+        guidelines from the store.
+        """
+        self._cached_guidelines = None
+        self._cache_timestamp = None
+
+    async def get_context(self, context: TaskContext) -> EvaluatedContext:
+        """Evaluate all enabled guidelines against the given context.
+
+        Returns an :class:`EvaluatedContext` with matched guidelines sorted
+        by priority, combined instructions, and aggregated tool lists.
+
+        Condition matching filters guidelines whose conditions match the
+        context.  Conflict resolution merges tool lists and instructions
+        across matched guidelines.  Guidelines are cached with a
+        configurable TTL to reduce Elasticsearch queries.
+
+        Args:
+            context: The task context to evaluate against.
+
+        Returns:
+            An EvaluatedContext containing matched guidelines and
+            aggregated results.
+        """
+        # Check cache validity
+        now = datetime.now(timezone.utc)
+        cache_valid = False
+
+        if self._cache_ttl > 0.0 and self._cached_guidelines is not None:
+            if self._cache_timestamp is not None:
+                elapsed = (now - self._cache_timestamp).total_seconds()
+                cache_valid = elapsed < self._cache_ttl
+
+        # Fetch from store if cache invalid
+        if cache_valid:
+            guidelines = self._cached_guidelines
+        else:
+            guidelines, _ = await self._store.list_guidelines(
+                enabled=True, page_size=1000
+            )
+            # Update cache
+            if self._cache_ttl > 0.0:
+                self._cached_guidelines = guidelines
+                self._cache_timestamp = now
+
+        matched: list[EvaluatedGuideline] = []
+        for guideline in guidelines:
+            matches, matched_fields = self._condition_matches(
+                guideline.condition, context
+            )
+            if matches:
+                # Calculate match_score as matched_fields / total_non_none_fields
+                total_fields = self._count_non_none_fields(guideline.condition)
+                match_score = (
+                    len(matched_fields) / total_fields if total_fields > 0 else 1.0
+                )
+
+                matched.append(
+                    EvaluatedGuideline(
+                        guideline=guideline,
+                        match_score=match_score,
+                        matched_fields=matched_fields,
+                    )
+                )
+
+        return self._resolve_conflicts(matched, context)
+
+    async def log_decision(self, decision: GateDecision) -> str:
+        """Log a HITL gate decision to the audit index.
+
+        Constructs an audit entry from the decision and persists it
+        via the store.
+
+        Args:
+            decision: The gate decision to log.
+
+        Returns:
+            The audit entry ID.
+        """
+        entry: dict[str, Any] = {
+            "event_type": "gate_decision",
+            "guideline_id": decision.guideline_id,
+            "gate_type": decision.gate_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "decision": {
+                "result": decision.result,
+                "reason": decision.reason,
+                "user_response": decision.user_response,
+            },
+        }
+        if decision.context:
+            entry["context"] = {
+                "agent": decision.context.agent,
+                "domain": decision.context.domain,
+                "action": decision.context.action,
+                "session_id": decision.context.session_id,
+            }
+        return await self._store.log_audit_entry(entry)

@@ -38,3 +38,21 @@ Development standards:
 - Write Google-style docstrings for public functions
 
 On completion, publish a STATUS_UPDATE message summarizing work done.
+
+## Guardrails Integration
+
+When the guardrails MCP server is available, call `guardrails_get_context` at the start of each task to receive contextual instructions:
+
+```
+guardrails_get_context(
+  agent: "backend",
+  domain: "P01-P03,P06",
+  action: "implement"
+)
+```
+
+Apply the returned instructions:
+- Follow `combined_instruction` text as additional behavioral guidance
+- Respect `tools_allowed` and `tools_denied` lists for tool usage
+- If `hitl_gates` are returned, ensure HITL confirmation before proceeding
+- If the guardrails server is unavailable, proceed with default behavior

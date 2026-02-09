@@ -103,3 +103,21 @@ This helps:
 - Identify potentially affected code not in the diff
 
 You are READ-ONLY. You cannot modify files. If fixes are needed, explain what should be changed and the developer will implement them.
+
+## Guardrails Integration
+
+When the guardrails MCP server is available, call `guardrails_get_context` at the start of each task to receive contextual instructions:
+
+```
+guardrails_get_context(
+  agent: "reviewer",
+  domain: "review",
+  action: "review"
+)
+```
+
+Apply the returned instructions:
+- Follow `combined_instruction` text as additional behavioral guidance
+- Respect `tools_allowed` and `tools_denied` lists for tool usage
+- If `hitl_gates` are returned, ensure HITL confirmation before proceeding
+- If the guardrails server is unavailable, proceed with default behavior
