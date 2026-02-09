@@ -16,6 +16,7 @@ The PM CLI orchestrates work through 11 sequential steps. Each step has clear en
  1. Workplan         -> PM CLI drafts plan
  2. Planning         -> Planner creates work items
                         |-> diagram-builder (auto) for architecture
+                        |-> HITL Gate 0: Intent/Requirements Approval
  3. Diagrams         -> Explicit diagram requests if needed
  4. Design Review    -> Reviewer validates
                         |-> HITL if concerns found
@@ -61,7 +62,7 @@ PM CLI identifies:
 | Executor | Planner agent |
 | Inputs | Work plan from Step 1 |
 | Outputs | `.workitems/Pnn-Fnn-description/` with design.md, user_stories.md, tasks.md |
-| HITL Gates | None |
+| HITL Gates | **Intent Approval** (mandatory) |
 | Skill | feature-planning |
 
 The planner creates:
@@ -72,6 +73,8 @@ The planner creates:
 **Context gathering:** Use `ks_search` to find existing patterns before designing. This ensures consistency with the codebase.
 
 **Auto-trigger:** diagram-builder skill is invoked automatically to create architecture diagrams when design.md is created.
+
+**HITL Gate 0:** After planning artifacts are created, Gate 0 triggers. User must approve the plan, steer it (provide modification feedback), or reject it before proceeding to design review. This ensures human alignment on requirements before any implementation begins.
 
 ### Step 3: Diagrams
 
@@ -162,6 +165,11 @@ This prevents context drift and ensures focused agent execution.
 2. **GREEN**: Minimal code to pass
 3. **REFACTOR**: Clean up while green
 
+**3-Agent TDD Flow:** The TDD cycle uses specialized agents for cognitive separation:
+1. **test-writer** agent handles RED (writes failing tests from specs)
+2. **coder** agent (backend/frontend) handles GREEN and REFACTOR
+3. **debugger** agent is invoked via Gate 6 option D for failure analysis
+
 **Permission Forwarding:** If an agent is blocked by permissions, it returns a `PERMISSION_FORWARD` message. PM CLI presents the request to the user and re-invokes with approved permissions if granted.
 
 ### Step 7: Testing
@@ -183,7 +191,10 @@ Options:
  A) Continue debugging
  B) Skip test and proceed (mark as known issue)
  C) Abort task
+ D) Invoke debugger for analysis
 ```
+
+- Option D: Debugger agent analyzes failure and produces diagnostic report
 
 **Never proceed to Step 8 with failing tests.**
 
@@ -282,6 +293,7 @@ Gates are defined in `.claude/rules/hitl-gates.md`. Here is which gates apply to
 
 | Step | Gate | Type |
 |------|------|------|
+| 2 | Intent Approval | Mandatory |
 | 4 | Design Review Concerns | Advisory |
 | 5 | Complex Operation | Advisory |
 | 6 | Permission Forwarding | Per-request |
@@ -300,7 +312,7 @@ Skills provide reusable procedures for specific tasks. Here is which skills are 
 |------|-------|---------|
 | 2 | feature-planning | Create work item artifacts |
 | 3 | diagram-builder | Generate Mermaid diagrams |
-| 6 | tdd-execution | Red-Green-Refactor cycle |
+| 6 | tdd-execution | Red-Green-Refactor cycle (3-agent flow) |
 | 9 | feature-completion | Validate and complete feature |
 
 Skills are located in `.claude/skills/` and are invoked by agents as needed.

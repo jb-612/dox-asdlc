@@ -11,6 +11,45 @@ Create planning artifacts for feature $ARGUMENTS:
 mkdir -p .workitems/$ARGUMENTS
 ```
 
+## Step 1.5: Initialize YAML Front-Matter
+
+All spec files must include YAML front-matter for machine-readable metadata. Use this template:
+
+```yaml
+---
+id: Pnn-Fnn
+parent_id: Pnn
+type: [prd | design | user_stories | tasks]
+version: 1
+status: draft
+constraints_hash: null
+created_by: planner
+created_at: "[ISO-8601 timestamp]"
+updated_at: "[ISO-8601 timestamp]"
+dependencies: []
+tags: []
+---
+```
+
+Fields:
+- `id`: Match the work item ID (e.g., P12-F05)
+- `parent_id`: The parent epic (e.g., P12)
+- `type`: File type (must match the file)
+- `version`: Start at 1, increment on material changes
+- `status`: Start as `draft`, transitions to `reviewed` then `approved`
+- `dependencies`: List feature IDs this depends on
+- `tags`: Freeform tags for search
+
+## Step 1.75: Create prd.md (Recommended)
+
+Include these sections:
+- **Business Intent**: What business problem does this solve?
+- **Success Metrics**: How do we measure success?
+- **User Impact**: Who is affected and how?
+- **Scope**: In Scope and Out of Scope
+- **Constraints**: Business, regulatory, or technical constraints
+- **Acceptance Criteria**: High-level criteria for feature completion
+
 ## Step 2: Create design.md
 
 Include these sections:

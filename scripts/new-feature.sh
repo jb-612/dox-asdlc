@@ -38,9 +38,26 @@ fi
 echo "Creating work item: $FEATURE_ID"
 mkdir -p "$WORKITEM_DIR"
 
-# Create design.md template
-cat > "${WORKITEM_DIR}/design.md" << 'EOF'
-# Feature Design: ${FEATURE_ID} ${FEATURE_NAME}
+# Generate timestamp for front-matter
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Create design.md template with front-matter
+cat > "${WORKITEM_DIR}/design.md" << EOF
+---
+id: ${FEATURE_ID}
+parent_id: ${PHASE}
+type: design
+version: 1
+status: draft
+constraints_hash: null
+created_by: planner
+created_at: "${TIMESTAMP}"
+updated_at: "${TIMESTAMP}"
+dependencies: []
+tags: []
+---
+
+# Feature Design: ${FEATURE_ID} ${DESCRIPTION}
 
 ## Overview
 
@@ -67,14 +84,14 @@ cat > "${WORKITEM_DIR}/design.md" << 'EOF'
 
 ## File Structure
 
-```
+\`\`\`
 src/path/to/feature/
 ├── __init__.py
 ├── core.py
 ├── interfaces.py
 └── tests/
     └── test_core.py
-```
+\`\`\`
 
 ## Open Questions
 
@@ -85,18 +102,76 @@ src/path/to/feature/
 [Technical risks and mitigation strategies]
 EOF
 
-# Replace placeholders
-sed -i "s/\${FEATURE_ID}/${FEATURE_ID}/g" "${WORKITEM_DIR}/design.md"
-sed -i "s/\${FEATURE_NAME}/${DESCRIPTION}/g" "${WORKITEM_DIR}/design.md"
+# Create prd.md template with front-matter
+cat > "${WORKITEM_DIR}/prd.md" << EOF
+---
+id: ${FEATURE_ID}
+parent_id: ${PHASE}
+type: prd
+version: 1
+status: draft
+constraints_hash: null
+created_by: planner
+created_at: "${TIMESTAMP}"
+updated_at: "${TIMESTAMP}"
+dependencies: []
+tags: []
+---
 
-# Create user_stories.md template
-cat > "${WORKITEM_DIR}/user_stories.md" << 'EOF'
-# User Stories: ${FEATURE_ID} ${FEATURE_NAME}
+# PRD: ${FEATURE_ID} ${DESCRIPTION}
+
+## Business Intent
+
+[What business problem does this solve?]
+
+## Success Metrics
+
+[How do we measure success?]
+
+## User Impact
+
+[Who is affected and how?]
+
+## Scope
+
+### In Scope
+
+[What is included in this feature?]
+
+### Out of Scope
+
+[What is explicitly excluded?]
+
+## Constraints
+
+[Business, regulatory, or technical constraints]
+
+## Acceptance Criteria
+
+[High-level criteria for feature completion]
+EOF
+
+# Create user_stories.md template with front-matter
+cat > "${WORKITEM_DIR}/user_stories.md" << EOF
+---
+id: ${FEATURE_ID}
+parent_id: ${PHASE}
+type: user_stories
+version: 1
+status: draft
+created_by: planner
+created_at: "${TIMESTAMP}"
+updated_at: "${TIMESTAMP}"
+dependencies: []
+tags: []
+---
+
+# User Stories: ${FEATURE_ID} ${DESCRIPTION}
 
 ## US-01: [Story Title]
 
-**As a** [role]  
-**I want** [capability]  
+**As a** [role]
+**I want** [capability]
 **So that** [benefit]
 
 ### Acceptance Criteria
@@ -112,8 +187,8 @@ Given [precondition], when [action], then [expected result].
 
 ## US-02: [Next Story Title]
 
-**As a** [role]  
-**I want** [capability]  
+**As a** [role]
+**I want** [capability]
 **So that** [benefit]
 
 ### Acceptance Criteria
@@ -126,12 +201,22 @@ Given [precondition], when [action], then [expected result].
 Given [precondition], when [action], then [expected result].
 EOF
 
-sed -i "s/\${FEATURE_ID}/${FEATURE_ID}/g" "${WORKITEM_DIR}/user_stories.md"
-sed -i "s/\${FEATURE_NAME}/${DESCRIPTION}/g" "${WORKITEM_DIR}/user_stories.md"
+# Create tasks.md template with front-matter
+cat > "${WORKITEM_DIR}/tasks.md" << EOF
+---
+id: ${FEATURE_ID}
+parent_id: ${PHASE}
+type: tasks
+version: 1
+status: draft
+created_by: planner
+created_at: "${TIMESTAMP}"
+updated_at: "${TIMESTAMP}"
+dependencies: []
+tags: []
+---
 
-# Create tasks.md template
-cat > "${WORKITEM_DIR}/tasks.md" << 'EOF'
-# Tasks: ${FEATURE_ID} ${FEATURE_NAME}
+# Tasks: ${FEATURE_ID} ${DESCRIPTION}
 
 ## Progress
 
@@ -172,13 +257,11 @@ cat > "${WORKITEM_DIR}/tasks.md" << 'EOF'
 [Additional context or implementation notes]
 EOF
 
-sed -i "s/\${FEATURE_ID}/${FEATURE_ID}/g" "${WORKITEM_DIR}/tasks.md"
-sed -i "s/\${FEATURE_NAME}/${DESCRIPTION}/g" "${WORKITEM_DIR}/tasks.md"
-
 echo "Created work item at: $WORKITEM_DIR"
 echo ""
 echo "Next steps:"
-echo "1. Complete design.md with technical approach"
-echo "2. Complete user_stories.md with success criteria"
-echo "3. Complete tasks.md with atomic task breakdown"
-echo "4. Run: ./scripts/check-planning.sh $FEATURE_ID"
+echo "1. Complete prd.md with business intent and scope"
+echo "2. Complete design.md with technical approach"
+echo "3. Complete user_stories.md with success criteria"
+echo "4. Complete tasks.md with atomic task breakdown"
+echo "5. Run: ./scripts/check-planning.sh $FEATURE_ID"

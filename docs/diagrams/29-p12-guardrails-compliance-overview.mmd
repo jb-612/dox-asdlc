@@ -1,0 +1,139 @@
+%% File: docs/diagrams/29-p12-guardrails-compliance-overview.mmd
+%% Description: P12 Guardrails Constitution Compliance - Feature Overview & Dependencies
+%% Updated: 2026-02-09
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    %% ===== WAVE 1 =====
+    subgraph Wave1["Wave 1 - Foundation"]
+        direction TB
+
+        subgraph F01["P12-F01: TDD Separation"]
+            F01_TW["test-writer agent\n(Forward Synthesis)"]
+            F01_DBG["debugger agent\n(Backward Diagnosis)"]
+            F01_SKILL["Updated tdd-execution\nskill (3-agent flow)"]
+            F01_GL["4 new guardrails\nguidelines"]
+        end
+
+        subgraph F02["P12-F02: Token Budget\n& Circuit Breaker"]
+            F02_TRACK["Per-task token\nbudget tracking"]
+            F02_CB["Circuit breaker\n(loop detection)"]
+            F02_PROM["Prometheus metrics\nexposition"]
+            F02_HOOK["Budget enforcement\nhook integration"]
+        end
+
+        subgraph F05["P12-F05: SDD Enhancement"]
+            F05_YAML["YAML front-matter\non all spec files"]
+            F05_PRD["PRD layer\n(prd.md)"]
+            F05_VAL["Spec validation\nframework"]
+            F05_ALIGN["Alignment verification\nat workflow transitions"]
+        end
+    end
+
+    %% ===== WAVE 2 =====
+    subgraph Wave2["Wave 2 - Traceability"]
+        direction TB
+
+        subgraph F03["P12-F03: CoT Persistence\n& Artifact Lineage"]
+            F03_COT["Chain-of-Thought\ntrace capture"]
+            F03_LIN["Artifact lineage\nmetadata tagging"]
+            F03_SCOPE["File scope\nadherence checks"]
+            F03_PR["Git-forensic\nPR templates"]
+        end
+
+        subgraph F08["P12-F08: State Snapshots\n& Review Protocol"]
+            F08_SNAP["State-level Git\nsnapshots per phase"]
+            F08_ROLL["Rollback-to-snapshot\non rejection"]
+            F08_SPEC["Spec-based review\n(design.md aligned)"]
+            F08_TASK["Per-task lightweight\nreview script"]
+        end
+    end
+
+    %% ===== WAVE 3 =====
+    subgraph Wave3["Wave 3 - Orchestration"]
+        direction TB
+
+        subgraph F04["P12-F04: DAG Orchestration\n& Clusters"]
+            F04_CLUST["C1-C5 cluster\ndefinitions (YAML)"]
+            F04_DAG["DAG engine\n(topological sort)"]
+            F04_MGR["Cluster Manager\npattern"]
+            F04_HAND["Inter-cluster\nhandshake protocol"]
+        end
+
+        subgraph F06["P12-F06: Context Package\n& Repo Mapper"]
+            F06_PKG["Context Package\nBuilder"]
+            F06_RMAP["Repo Mapper\nagent definition"]
+            F06_IDX["Background indexing\nservice"]
+            F06_GL2["Context discipline\nguardrail"]
+        end
+
+        subgraph F07["P12-F07: HITL Enhancement"]
+            F07_CONF["Agent confidence\nself-assessment"]
+            F07_G0["Gate 0: Intent\nApproval (mandatory)"]
+            F07_STEER["Steer option on\nall HITL gates"]
+            F07_EXC["Constraint Exception\ngate (advisory)"]
+        end
+    end
+
+    %% ===== EXISTING SYSTEM =====
+    subgraph Existing["Existing System (Pre-P12)"]
+        direction LR
+        P11["P11 Guardrails\nConfiguration System"]
+        Redis["Redis Coordination\n& Streams"]
+        KS["KnowledgeStore\n(Elasticsearch)"]
+        HITLUI["HITL UI\n(React SPA)"]
+        WF["11-Step Workflow\n(.claude/rules/)"]
+        Hooks["Claude Code Hooks\n(.claude/hooks/)"]
+        Prom["VictoriaMetrics\n& Prometheus"]
+    end
+
+    %% ===== WAVE DEPENDENCIES (inter-feature) =====
+    F01 -->|"test-writer invokes\nbudget tracking"| F02
+    F02 -->|"budget limits feed\ncontext package size"| F06
+    F05 -->|"YAML metadata enables\nlineage tagging"| F03
+    F05 -->|"spec structure enables\nspec-based review"| F08
+    F03 -->|"CoT traces feed\nGit-forensic PRs"| F08
+    F01 -->|"3-agent flow becomes\nDAG nodes in C3"| F04
+    F02 -->|"circuit breaker status\nfeeds cluster health"| F04
+    F04 -->|"cluster transitions\ntrigger context assembly"| F06
+    F07 -->|"confidence scoring\nintegrates with debugger"| F01
+    F08 -->|"snapshots enable\nrollback in DAG steps"| F04
+    F07 -->|"Gate 0 added to\nDAG entry point"| F04
+
+    %% ===== INTEGRATION WITH EXISTING SYSTEM =====
+    F01 -.->|"new guidelines"| P11
+    F02 -.->|"metrics export"| Prom
+    F02 -.->|"hook integration"| Hooks
+    F03 -.->|"CoT + lineage indices"| KS
+    F04 -.->|"event-driven transitions"| Redis
+    F04 -.->|"replaces linear workflow"| WF
+    F05 -.->|"updated planning scripts"| WF
+    F06 -.->|"structural metadata"| KS
+    F06 -.->|"agent definition"| P11
+    F07 -.->|"new gate types + UI"| HITLUI
+    F07 -.->|"new gate guidelines"| P11
+    F08 -.->|"review dashboard"| HITLUI
+    F08 -.->|"review guidelines"| P11
+    F01 -.->|"HITL Gate 6 update"| HITLUI
+
+    %% ===== Styling =====
+    classDef wave1 fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef wave2 fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef wave3 fill:#E0E7FF,stroke:#6366f1,stroke-width:2px
+    classDef existing fill:#F1F5F9,stroke:#64748b,stroke-width:2px
+    classDef featureNode fill:#FFFFFF,stroke:#334155,stroke-width:1px
+
+    class Wave1 wave1
+    class Wave2 wave2
+    class Wave3 wave3
+    class Existing existing
+
+    class F01_TW,F01_DBG,F01_SKILL,F01_GL featureNode
+    class F02_TRACK,F02_CB,F02_PROM,F02_HOOK featureNode
+    class F05_YAML,F05_PRD,F05_VAL,F05_ALIGN featureNode
+    class F03_COT,F03_LIN,F03_SCOPE,F03_PR featureNode
+    class F08_SNAP,F08_ROLL,F08_SPEC,F08_TASK featureNode
+    class F04_CLUST,F04_DAG,F04_MGR,F04_HAND featureNode
+    class F06_PKG,F06_RMAP,F06_IDX,F06_GL2 featureNode
+    class F07_CONF,F07_G0,F07_STEER,F07_EXC featureNode

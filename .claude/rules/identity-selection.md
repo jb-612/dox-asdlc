@@ -54,6 +54,8 @@ See `.claude/rules/pm-cli.md` for full PM CLI specification.
 | `backend` | Workers, infra | P01-P03, P06 implementation |
 | `frontend` | HITL UI | P05 implementation |
 | `reviewer` | All (read-only) | Code review and validation |
+| `test-writer` | Test files | Writes failing tests from specs (RED phase) |
+| `debugger` | All (read-only) | Diagnostic reports for test failures |
 | `orchestrator` | Meta files | Docs, contracts, coordination, commits |
 | `devops` | Infrastructure | Docker, K8s, cloud, GitHub Actions |
 
@@ -64,6 +66,8 @@ See `.claude/rules/pm-cli.md` for full PM CLI specification.
 "Use the backend subagent to implement the worker pool"
 "Use the frontend subagent to add the approval dialog"
 "Use the reviewer subagent to review the implementation"
+"Use the test-writer subagent to write failing tests for the task"
+"Use the debugger subagent to analyze repeated test failures"
 "Use the orchestrator subagent to update the contract and commit"
 "Use the devops subagent to deploy to Kubernetes"
 ```

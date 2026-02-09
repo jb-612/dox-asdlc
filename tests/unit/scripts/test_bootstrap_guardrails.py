@@ -33,7 +33,7 @@ from scripts.bootstrap_guardrails import get_default_guidelines, upsert_guidelin
 # Helpers
 # ---------------------------------------------------------------------------
 
-AGENT_ROLES = ["backend", "frontend", "orchestrator", "devops"]
+AGENT_ROLES = ["backend", "frontend", "orchestrator", "devops", "test-writer", "debugger"]
 
 MANDATORY_HITL_GATES = [
     "devops_invocation",
@@ -226,11 +226,11 @@ class TestHITLGateGuidelines:
                 f"Guideline {g.id} action type is {g.action.type}"
             )
 
-    def test_priority_is_950(self) -> None:
-        """HITL gate guidelines have priority 950."""
+    def test_priority_is_at_least_940(self) -> None:
+        """HITL gate guidelines have priority >= 940 (mandatory=950, advisory=940)."""
         for g in self._get_hitl_guidelines():
-            assert g.priority == 950, (
-                f"Guideline {g.id} has priority={g.priority}, expected 950"
+            assert g.priority >= 940, (
+                f"Guideline {g.id} has priority={g.priority}, expected >= 940"
             )
 
     def test_each_has_gate_type(self) -> None:
@@ -269,11 +269,13 @@ class TestTDDProtocolGuideline:
         for g in self._get_tdd_guidelines():
             assert g.category == GuidelineCategory.TDD_PROTOCOL
 
-    def test_action_type_is_constraint(self) -> None:
-        """TDD guideline uses CONSTRAINT action type."""
+    def test_action_type_is_constraint_or_instruction(self) -> None:
+        """TDD guidelines use CONSTRAINT or INSTRUCTION action type."""
+        allowed = {ActionType.CONSTRAINT, ActionType.INSTRUCTION}
         for g in self._get_tdd_guidelines():
-            assert g.action.type == ActionType.CONSTRAINT, (
-                f"Guideline {g.id} action type is {g.action.type}"
+            assert g.action.type in allowed, (
+                f"Guideline {g.id} action type is {g.action.type}, "
+                f"expected one of {allowed}"
             )
 
     def test_require_tests_is_true(self) -> None:
@@ -283,11 +285,11 @@ class TestTDDProtocolGuideline:
                 f"Guideline {g.id} require_tests is not True"
             )
 
-    def test_priority_is_800(self) -> None:
-        """TDD guideline has priority 800."""
+    def test_priority_in_tdd_range(self) -> None:
+        """TDD guidelines have priority in 800-810 range."""
         for g in self._get_tdd_guidelines():
-            assert g.priority == 800, (
-                f"Guideline {g.id} has priority={g.priority}, expected 800"
+            assert 800 <= g.priority <= 810, (
+                f"Guideline {g.id} has priority={g.priority}, expected 800-810"
             )
 
     def test_condition_includes_implementation_actions(self) -> None:

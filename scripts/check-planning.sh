@@ -10,8 +10,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 usage() {
-    echo "Usage: $0 <feature_id>"
+    echo "Usage: $0 <feature_id> [--strict]"
     echo "Example: $0 P01-F02-bash-tools"
+    echo ""
+    echo "Options:"
+    echo "  --strict  Require YAML front-matter in all spec files"
     exit 1
 }
 
@@ -27,6 +30,11 @@ if [[ ! "$FEATURE_ID" =~ ^P[0-9]{2}-F[0-9]{2}-[a-zA-Z0-9_-]+$ ]]; then
     echo "ERROR: Invalid FEATURE_ID format: $FEATURE_ID"
     echo "Expected format: Pnn-Fnn-name (e.g., P01-F02-bash-tools)"
     exit 1
+fi
+
+STRICT=false
+if [[ "${2:-}" == "--strict" ]]; then
+    STRICT=true
 fi
 
 WORKITEM_DIR="${PROJECT_ROOT}/.workitems/${FEATURE_ID}"
@@ -45,6 +53,34 @@ check() {
     else
         echo "✗ $description"
         ((FAIL++))
+    fi
+}
+
+check_frontmatter() {
+    local file="$1"
+    local description="$2"
+
+    if $STRICT; then
+        # In strict mode, front-matter is required
+        check "$description" .venv/bin/python3 -c "
+import sys
+from src.core.spec_validation.parser import parse_frontmatter
+fm = parse_frontmatter(sys.argv[1])
+exit(0 if fm is not None else 1)
+" "$file"
+    else
+        # In lenient mode, front-matter is a warning
+        if .venv/bin/python3 -c "
+import sys
+from src.core.spec_validation.parser import parse_frontmatter
+fm = parse_frontmatter(sys.argv[1])
+exit(0 if fm is not None else 1)
+" "$file" 2>/dev/null; then
+            echo "  $description"
+            ((PASS++))
+        else
+            echo "  $description (optional, use --strict to require)"
+        fi
     fi
 }
 
@@ -76,6 +112,7 @@ if [[ -f "$DESIGN_FILE" ]]; then
     check "Interfaces section present" grep -q '## Interfaces' "$DESIGN_FILE"
     check "Technical Approach section present" grep -q '## Technical Approach' "$DESIGN_FILE"
     check "File Structure section present" grep -q '## File Structure' "$DESIGN_FILE"
+    check_frontmatter "$DESIGN_FILE" "YAML front-matter valid (design.md)"
 fi
 
 echo ""
@@ -97,6 +134,7 @@ if [[ -f "$STORIES_FILE" ]]; then
         echo "✗ No placeholder text in stories"
         ((FAIL++))
     fi
+    check_frontmatter "$STORIES_FILE" "YAML front-matter valid (user_stories.md)"
 fi
 
 echo ""
@@ -121,6 +159,25 @@ if [[ -f "$TASKS_FILE" ]]; then
     fi
     # Check estimates are provided
     check "Estimates provided for tasks" grep -q 'Estimate:.*\(30min\|1hr\|2hr\)' "$TASKS_FILE"
+    check_frontmatter "$TASKS_FILE" "YAML front-matter valid (tasks.md)"
+fi
+
+echo ""
+echo "Checking prd.md..."
+echo "-------------------"
+
+PRD_FILE="${WORKITEM_DIR}/prd.md"
+if [[ -f "$PRD_FILE" ]]; then
+    check "prd.md exists" test -f "$PRD_FILE"
+    check "Business Intent section present" grep -q '## Business Intent' "$PRD_FILE"
+    check "Success Metrics section present" grep -q '## Success Metrics' "$PRD_FILE"
+    check "User Impact section present" grep -q '## User Impact' "$PRD_FILE"
+    check "Scope section present" grep -q '## Scope' "$PRD_FILE"
+    check "Constraints section present" grep -q '## Constraints' "$PRD_FILE"
+    check "Acceptance Criteria section present" grep -q '## Acceptance Criteria' "$PRD_FILE"
+    check_frontmatter "$PRD_FILE" "YAML front-matter valid (prd.md)"
+else
+    echo "(prd.md not found - optional)"
 fi
 
 echo ""

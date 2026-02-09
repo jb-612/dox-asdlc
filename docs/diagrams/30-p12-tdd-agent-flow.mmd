@@ -1,0 +1,131 @@
+%% File: docs/diagrams/30-p12-tdd-agent-flow.mmd
+%% Description: P12-F01 TDD Agent Separation - Three-Agent Sequence Flow
+%% Updated: 2026-02-09
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b', 'actorBkg': '#D0E8FF', 'actorBorder': '#0b1559', 'activationBorderColor': '#2563eb', 'noteBkgColor': '#FEF3C7', 'noteBorderColor': '#d97706'}}}%%
+
+sequenceDiagram
+    participant PM as PM CLI
+    participant TW as TestWriter<br/>(Forward Synthesis)
+    participant BE as Backend<br/>(Forward Synthesis)
+    participant DBG as Debugger<br/>(Backward Diagnosis)
+    participant HITL as HITL Gate 6
+
+    Note over PM,HITL: Phase 1: RED - Test Writer creates failing tests
+
+    PM->>PM: Read tasks.md, select atomic task T01
+    PM->>TW: Delegate: "Write tests for T01"<br/>Input: design.md, user_stories.md, tasks.md
+
+    activate TW
+    TW->>TW: Read task specification
+    TW->>TW: Read existing interfaces and types
+    TW->>TW: Write test files<br/>(tests/unit/module/test_feature.py)
+    TW->>TW: Run pytest -- confirm FAIL (RED)
+    TW-->>PM: Complete: 8 tests written, all fail<br/>red_confirmed: true
+    deactivate TW
+
+    Note over PM,HITL: Phase 2: GREEN - Backend writes minimal code
+
+    PM->>BE: Delegate: "Make tests pass"<br/>Input: test file paths + task spec
+
+    activate BE
+    BE->>BE: Read test files
+    BE->>BE: Write minimal implementation code
+    BE->>BE: Run pytest
+
+    alt Tests PASS (attempt 1-3)
+        BE-->>PM: Complete: all tests green
+    else Tests FAIL (attempt 1)
+        BE->>BE: Analyze failure, retry (fail_count=1)
+        BE->>BE: Adjust code, run pytest
+    else Tests FAIL (attempt 2)
+        BE->>BE: Analyze failure, retry (fail_count=2)
+        BE->>BE: Adjust code, run pytest
+    else Tests FAIL (attempt 3)
+        BE->>BE: Analyze failure, retry (fail_count=3)
+        BE->>BE: Adjust code, run pytest
+    end
+    deactivate BE
+
+    alt Tests GREEN after retries
+        BE-->>PM: Complete: all tests green
+        Note over PM,HITL: Phase 4: REFACTOR (skip to bottom)
+    else Tests still FAIL (fail_count > 3)
+        BE-->>PM: BLOCKED: tests failing after 3 retries
+
+        Note over PM,HITL: Phase 3: HITL Gate 6 - Escalation Decision
+
+        PM->>HITL: Tests failing repeatedly (4 times)
+
+        activate HITL
+        HITL->>HITL: Present options to user:<br/>A) Invoke debugger agent<br/>B) Continue manual debugging<br/>C) Skip test (create issue)<br/>D) Abort task
+        deactivate HITL
+
+        alt Option A: Invoke Debugger
+            HITL-->>PM: User selected: A (debugger)
+
+            Note over PM,HITL: Phase 3a: DIAGNOSE - Debugger performs root-cause analysis
+
+            PM->>DBG: Delegate: "Diagnose failure"<br/>Input: test output, source code, error logs
+
+            activate DBG
+            DBG->>DBG: Read failing test output + traceback
+            DBG->>DBG: Read relevant source files
+            DBG->>DBG: Trace from assertion backward<br/>through call chain
+            DBG->>DBG: Identify root cause
+            DBG-->>PM: Diagnostic Report:<br/>- Root cause: [description]<br/>- File: src/module/file.py:42<br/>- Recommended fix: [specific changes]<br/>- Confidence: high
+            deactivate DBG
+
+            Note over PM,HITL: Phase 3b: FIX - Backend applies diagnosis
+
+            PM->>BE: Delegate: "Apply fix"<br/>Input: diagnostic report + fix instructions
+
+            activate BE
+            BE->>BE: Apply recommended fix
+            BE->>BE: Run pytest
+
+            alt Tests PASS
+                BE-->>PM: Complete: tests green after fix
+            else Tests still FAIL
+                BE-->>PM: BLOCKED: fix did not resolve
+
+                PM->>HITL: Tests still failing after debugger fix
+
+                activate HITL
+                HITL->>HITL: Present HITL Gate 6 again:<br/>A) Re-invoke debugger<br/>B) Skip test (create issue)<br/>C) Abort task
+                HITL-->>PM: User decision
+                deactivate HITL
+            end
+            deactivate BE
+
+        else Option B: Continue manually
+            HITL-->>PM: User selected: B (manual)
+            PM->>BE: Delegate: "Continue debugging"
+            activate BE
+            BE->>BE: Further manual debugging attempts
+            BE-->>PM: Result (pass or re-escalate)
+            deactivate BE
+
+        else Option C: Skip test
+            HITL-->>PM: User selected: C (skip)
+            PM->>PM: Create GitHub issue:<br/>"DEFERRED: Failing test [name]"
+            PM->>PM: Mark test as known issue, proceed
+
+        else Option D: Abort
+            HITL-->>PM: User selected: D (abort)
+            PM->>PM: Abort task T01
+        end
+    end
+
+    Note over PM,HITL: Phase 4: REFACTOR - Clean up while green
+
+    PM->>BE: Delegate: "Refactor T01 code"<br/>Instruction: keep tests green
+
+    activate BE
+    BE->>BE: Clean up implementation
+    BE->>BE: Run pytest -- confirm still GREEN
+    BE-->>PM: Complete: refactored, tests green
+    deactivate BE
+
+    PM->>PM: Mark T01 complete in tasks.md
+    PM->>PM: Proceed to next task T02<br/>(session renewal)

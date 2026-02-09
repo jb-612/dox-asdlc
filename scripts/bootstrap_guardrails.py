@@ -33,7 +33,7 @@ def _now() -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# Cognitive Isolation Guidelines (4 -- one per agent role)
+# Cognitive Isolation Guidelines (6 -- one per agent role)
 # ---------------------------------------------------------------------------
 
 
@@ -170,8 +170,77 @@ def _cognitive_isolation_devops() -> Guideline:
     )
 
 
+def _cognitive_isolation_test_writer() -> Guideline:
+    """Create cognitive isolation guideline for the test-writer agent."""
+    now = _now()
+    return Guideline(
+        id="cognitive-isolation-test-writer",
+        name="Cognitive Isolation: Test-Writer",
+        description=(
+            "Restricts the test-writer agent to test file paths only. "
+            "Read access to specs and source code for interface discovery. "
+            "Write access limited to tests/unit/, tests/integration/."
+        ),
+        enabled=True,
+        category=GuidelineCategory.COGNITIVE_ISOLATION,
+        priority=900,
+        condition=GuidelineCondition(agents=["test-writer"]),
+        action=GuidelineAction(
+            type=ActionType.TOOL_RESTRICTION,
+            instruction=(
+                "Test-writer agent may only create and modify files under: "
+                "tests/unit/, tests/integration/, tests/conftest.py, tests/helpers/. "
+                "Read access to src/, .workitems/, contracts/, docs/ is allowed "
+                "for understanding interfaces and requirements. "
+                "MUST NOT modify any file under src/."
+            ),
+            tools_allowed=["Read", "Grep", "Glob", "Bash", "Write", "Edit"],
+            tools_denied=[],
+        ),
+        metadata={"source": "parallel-coordination.md", "p12_deliverable": "D1"},
+        version=1,
+        created_at=now,
+        updated_at=now,
+        created_by="bootstrap",
+    )
+
+
+def _cognitive_isolation_debugger() -> Guideline:
+    """Create cognitive isolation guideline for the debugger agent."""
+    now = _now()
+    return Guideline(
+        id="cognitive-isolation-debugger",
+        name="Cognitive Isolation: Debugger",
+        description=(
+            "Restricts the debugger agent to read-only access. "
+            "Cannot use Write or Edit tools. Produces diagnostic reports only."
+        ),
+        enabled=True,
+        category=GuidelineCategory.COGNITIVE_ISOLATION,
+        priority=900,
+        condition=GuidelineCondition(agents=["debugger"]),
+        action=GuidelineAction(
+            type=ActionType.TOOL_RESTRICTION,
+            instruction=(
+                "Debugger agent is strictly read-only. "
+                "It may read all files for diagnostic analysis but MUST NOT "
+                "modify any file. Use Read, Grep, Glob for investigation. "
+                "Bash is allowed only for read-only commands (pytest, git log, git blame). "
+                "Output diagnostic reports as text, not file modifications."
+            ),
+            tools_allowed=["Read", "Grep", "Glob", "Bash"],
+            tools_denied=["Write", "Edit"],
+        ),
+        metadata={"source": "parallel-coordination.md", "p12_deliverable": "D1"},
+        version=1,
+        created_at=now,
+        updated_at=now,
+        created_by="bootstrap",
+    )
+
+
 # ---------------------------------------------------------------------------
-# HITL Gate Guidelines (4+ mandatory gates)
+# HITL Gate Guidelines (6 mandatory/advisory gates)
 # ---------------------------------------------------------------------------
 
 
@@ -317,8 +386,83 @@ def _hitl_gate_destructive_workstation_op() -> Guideline:
     )
 
 
+def _hitl_gate_intent_approval() -> Guideline:
+    """Create HITL gate guideline for intent/requirements approval."""
+    now = _now()
+    return Guideline(
+        id="hitl-gate-intent-approval",
+        name="HITL Gate: Intent and Requirements Approval",
+        description=(
+            "Mandatory HITL gate after planning artifacts are created. "
+            "User must approve, steer, or reject the plan before implementation begins."
+        ),
+        enabled=True,
+        category=GuidelineCategory.HITL_GATE,
+        priority=950,
+        condition=GuidelineCondition(
+            events=["planning_complete"],
+            gate_types=["intent_approval"],
+        ),
+        action=GuidelineAction(
+            type=ActionType.HITL_GATE,
+            gate_type="intent_approval",
+            gate_threshold="mandatory",
+            instruction=(
+                "After planning artifacts (design.md, user_stories.md, tasks.md) are created, "
+                "present the plan summary to the user with options: "
+                "A) Approve and proceed to implementation, "
+                "B) Steer: modify scope or approach (user provides feedback), "
+                "C) Reject and return to workplan. "
+                "Option B allows iterative refinement without full rejection."
+            ),
+        ),
+        metadata={"source": "hitl-gates.md", "gate_number": 0, "p12_deliverable": "D3"},
+        version=1,
+        created_at=now,
+        updated_at=now,
+        created_by="bootstrap",
+    )
+
+
+def _hitl_gate_debugger_escalation() -> Guideline:
+    """Create HITL gate guideline for debugger escalation on repeated failures."""
+    now = _now()
+    return Guideline(
+        id="hitl-gate-debugger-escalation",
+        name="HITL Gate: Debugger Escalation",
+        description=(
+            "Advisory HITL gate extending Gate 6 with debugger option. "
+            "When tests fail 3+ times, offers debugger analysis as option D."
+        ),
+        enabled=True,
+        category=GuidelineCategory.HITL_GATE,
+        priority=940,
+        condition=GuidelineCondition(
+            events=["test_failure_repeated"],
+            gate_types=["test_failure_escalation"],
+        ),
+        action=GuidelineAction(
+            type=ActionType.HITL_GATE,
+            gate_type="test_failure_escalation",
+            gate_threshold="advisory",
+            instruction=(
+                "When tests fail 3+ consecutive times, present extended Gate 6 options: "
+                "A) Continue debugging, B) Skip test (create issue), "
+                "C) Abort task, D) Invoke debugger agent for analysis. "
+                "Option D invokes the read-only debugger agent to produce a diagnostic report. "
+                "After the report, re-present options A-C with diagnostic context."
+            ),
+        ),
+        metadata={"source": "hitl-gates.md", "gate_number": 6, "p12_deliverable": "D3"},
+        version=1,
+        created_at=now,
+        updated_at=now,
+        created_by="bootstrap",
+    )
+
+
 # ---------------------------------------------------------------------------
-# TDD Protocol Guideline
+# TDD Protocol Guidelines
 # ---------------------------------------------------------------------------
 
 
@@ -351,6 +495,43 @@ def _tdd_protocol() -> Guideline:
             require_tests=True,
         ),
         metadata={"source": "workflow.md"},
+        version=1,
+        created_at=now,
+        updated_at=now,
+        created_by="bootstrap",
+    )
+
+
+def _tdd_three_agent_flow() -> Guideline:
+    """Create TDD guideline for the 3-agent flow."""
+    now = _now()
+    return Guideline(
+        id="tdd-three-agent-flow",
+        name="TDD Protocol: 3-Agent Flow",
+        description=(
+            "Enforces cognitive separation in TDD by using three specialized agents: "
+            "test-writer (RED), coder (GREEN/REFACTOR), debugger (failure analysis)."
+        ),
+        enabled=True,
+        category=GuidelineCategory.TDD_PROTOCOL,
+        priority=810,
+        condition=GuidelineCondition(
+            actions=["implement", "code", "tdd"],
+        ),
+        action=GuidelineAction(
+            type=ActionType.INSTRUCTION,
+            instruction=(
+                "TDD uses a 3-agent flow for cognitive separation: "
+                "1) test-writer agent writes failing tests from specs (RED phase). "
+                "2) coder agent (backend/frontend) writes minimal code to pass (GREEN) "
+                "and refactors while green (REFACTOR). "
+                "3) debugger agent is invoked via Gate 6 option D when tests fail 3+ times. "
+                "The test-writer MUST NOT write implementation code. "
+                "The debugger MUST NOT write any code or tests."
+            ),
+            require_tests=True,
+        ),
+        metadata={"source": "workflow.md", "p12_deliverable": "D1"},
         version=1,
         created_at=now,
         updated_at=now,
@@ -443,18 +624,23 @@ def get_default_guidelines() -> list[Guideline]:
         HITL gates, TDD protocol, and context constraints.
     """
     return [
-        # Cognitive isolation (4)
+        # Cognitive isolation (6)
         _cognitive_isolation_backend(),
         _cognitive_isolation_frontend(),
         _cognitive_isolation_orchestrator(),
         _cognitive_isolation_devops(),
-        # HITL gates (4 mandatory)
+        _cognitive_isolation_test_writer(),
+        _cognitive_isolation_debugger(),
+        # HITL gates (6)
         _hitl_gate_devops_invocation(),
         _hitl_gate_protected_path_commit(),
         _hitl_gate_contract_change(),
         _hitl_gate_destructive_workstation_op(),
-        # TDD protocol (1)
+        _hitl_gate_intent_approval(),
+        _hitl_gate_debugger_escalation(),
+        # TDD protocol (2)
         _tdd_protocol(),
+        _tdd_three_agent_flow(),
         # Context constraints (2)
         _context_constraint_commit_size(),
         _context_constraint_review_required(),

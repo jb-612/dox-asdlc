@@ -49,6 +49,8 @@ See `.claude/rules/task-visibility.md` for the task tracking pattern.
 | backend | Backend implementation | P01-P03, P06 |
 | frontend | SPA/HITL UI, mock-first | P05 |
 | reviewer | Read-only code review | All (read) |
+| test-writer | Writes failing tests from specs (RED phase) | Test files |
+| debugger | Read-only test failure diagnostics | All (read) |
 | orchestrator | Coordination, docs, meta, commits | Meta files |
 | devops | Docker, K8s, cloud, GitHub Actions | Infrastructure |
 

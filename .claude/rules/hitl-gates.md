@@ -15,9 +15,43 @@ Human-In-The-Loop (HITL) gates are checkpoints where the PM CLI must pause and a
 | **Mandatory** | Cannot proceed without valid response | Must respond to continue |
 | **Advisory** | Can skip with acknowledgment | May choose to proceed anyway |
 
+### Response Options
+
+All gates support the standard response options (Approve/Reject or Y/N). Additionally, some gates support a **Steer** option:
+
+| Option | Description |
+|--------|-------------|
+| **Approve** | Proceed as planned |
+| **Reject** | Abort the operation |
+| **Steer** | Redirect: provide feedback to modify the approach without full rejection |
+
+The Steer option is available at gates where iterative refinement is appropriate (Gate 0, Gate 5).
+
 ## Mandatory Gates
 
 Mandatory gates block all progress until the user provides a valid response. These protect against irreversible or high-impact operations.
+
+### Gate 0: Intent and Requirements Approval
+
+**Trigger:** After planning artifacts (design.md, user_stories.md, tasks.md) are created in Step 2
+
+**Question Format:**
+```
+Planning complete for [feature name]:
+ - Design: [summary]
+ - Stories: [count] user stories
+ - Tasks: [count] atomic tasks
+
+Options:
+ A) Approve and proceed to implementation
+ B) Steer: modify scope or approach (provide feedback)
+ C) Reject and return to workplan
+```
+
+**Behavior:**
+- Option A: Proceed to design review (Step 4)
+- Option B: User provides feedback; planner revises artifacts. This is the "steer" mechanism -- the user can redirect without full rejection.
+- Option C: Abort planning; return to Step 1 for re-scoping
 
 ### Gate 1: DevOps Invocation
 
@@ -128,12 +162,14 @@ Options:
  A) Continue debugging
  B) Skip test and proceed (mark as known issue)
  C) Abort task
+ D) Invoke debugger for analysis
 ```
 
 **Behavior:**
 - Option A: Continue TDD debugging loop
 - Option B: Skip test, create GitHub issue for follow-up
 - Option C: Abort current task
+- Option D: Invoke the debugger agent (read-only) to produce a diagnostic report. After report, PM CLI re-presents options A-C with diagnostic context.
 
 ### Gate 7: Complex Operation
 
@@ -213,6 +249,7 @@ In isolated environments (containers, Kubernetes pods), destructive operations a
 
 | Gate | Trigger | Type | Question Summary |
 |------|---------|------|------------------|
+| Intent Approval | Planning complete | Mandatory | Approve / Steer / Reject |
 | DevOps Invocation | Any devops operation | Mandatory | Run here / Send to CLI / Instructions |
 | Protected Path Commit | `contracts/`, `.claude/` | Mandatory | Confirm Y/N |
 | Contract Change | API contract modification | Mandatory | Consumers notified Y/N |
