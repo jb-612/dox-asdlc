@@ -21,7 +21,7 @@ scrape_configs:
 
   - job_name: 'review-swarm'
     static_configs:
-      - targets: ['review-swarm:8082']
+      - targets: ['review-swarm:8083']
         labels:
           service: 'review-swarm'
     metrics_path: /metrics
