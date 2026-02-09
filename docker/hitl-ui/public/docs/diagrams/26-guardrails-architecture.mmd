@@ -1,0 +1,124 @@
+%% File: docs/diagrams/26-guardrails-architecture.mmd
+%% Description: P11-F01 Guardrails Configuration System - Component Architecture
+%% Updated: 2026-02-05
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph CLI["Claude Code CLI"]
+        direction TB
+        User["User Prompt"]
+        StaticRules[".claude/rules/\n(Minimal Core Rules)"]
+        CLAUDE["CLAUDE.md\n(Project Config)"]
+
+        subgraph Hooks[".claude/hooks/"]
+            direction LR
+            UPS["guardrails-inject.py\n(UserPromptSubmit)"]
+            PTU["guardrails-enforce.py\n(PreToolUse)"]
+            SAS["guardrails-subagent.py\n(SubagentStart)"]
+        end
+
+        subgraph Agents["Agent Execution"]
+            PM["PM CLI"]
+            BE["Backend Agent"]
+            FE["Frontend Agent"]
+            RV["Reviewer Agent"]
+        end
+
+        Context["additionalContext\n(Filtered Guidelines)"]
+    end
+
+    subgraph MCPLayer["MCP Servers"]
+        direction TB
+        subgraph GuardrailsMCP["Guardrails MCP\n(guardrails_mcp.py)"]
+            GetCtx["guardrails_get_context()"]
+            LogDec["guardrails_log_decision()"]
+        end
+
+        subgraph Evaluator["GuardrailsEvaluator"]
+            CondMatch["Condition Matching\n(AND/OR logic)"]
+            PathSan["Path Sanitization"]
+            Conflict["Priority Resolution"]
+            CtxDetect["ContextDetector\n(Keyword + LLM)"]
+        end
+
+        KSMCP["KnowledgeStore MCP\n(Existing, Separate)"]
+        CoordMCP["Coordination MCP\n(Existing, Separate)"]
+    end
+
+    subgraph Storage["Elasticsearch"]
+        ConfigIdx[("guardrails-config\n(Guidelines)")]
+        AuditIdx[("guardrails-audit\n(Decisions)")]
+        KSIdx[("knowledge-store\n(Existing)")]
+    end
+
+    subgraph AdminLayer["Admin Interface"]
+        subgraph RESTAPI["REST API\n(src/orchestrator/routes/)"]
+            CRUD["CRUD Endpoints\n/guardrails/*"]
+            AuditAPI["Audit Endpoint\n/guardrails/audit"]
+            EvalAPI["Evaluate Endpoint\n/guardrails/evaluate"]
+            ImpExp["Import/Export\n/guardrails/import|export"]
+        end
+
+        subgraph HITLUI["HITL UI\n(docker/hitl-ui/)"]
+            GPage["GuardrailsPage"]
+            GList["GuidelinesList"]
+            GEdit["GuidelineEditor"]
+            CBuild["ConditionBuilder"]
+            ABuild["ActionBuilder"]
+            AuditView["AuditLogViewer"]
+        end
+    end
+
+    %% User flow
+    User -->|"types prompt"| UPS
+    UPS -->|"detect context"| CtxDetect
+    UPS -->|"call MCP"| GetCtx
+    GetCtx --> CondMatch
+    CondMatch --> PathSan
+    PathSan --> Conflict
+    Conflict -->|"matched guidelines"| UPS
+    UPS -->|"inject"| Context
+    Context --> Agents
+
+    %% Enforcement flow
+    Agents -->|"tool call"| PTU
+    PTU -->|"check restrictions"| GetCtx
+    PTU -->|"BLOCK exit 2"| Agents
+    PTU -->|"WARN exit 0"| Context
+
+    %% Subagent flow
+    PM -->|"spawn agent"| SAS
+    SAS -->|"get agent rules"| GetCtx
+    SAS -->|"inject"| Context
+
+    %% Evaluator to ES
+    GetCtx --> ConfigIdx
+    LogDec --> AuditIdx
+
+    %% Admin flow
+    HITLUI -->|"REST calls"| RESTAPI
+    RESTAPI --> ConfigIdx
+    AuditAPI --> AuditIdx
+
+    %% Separate MCP servers
+    KSMCP --> KSIdx
+
+    %% Styling
+    classDef hook fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef agent fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef mcp fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef storage fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef ui fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef api fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef core fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef context fill:#F0FDF4,stroke:#22c55e,stroke-width:2px,stroke-dasharray: 5 5
+
+    class UPS,PTU,SAS hook
+    class PM,BE,FE,RV agent
+    class GetCtx,LogDec,KSMCP,CoordMCP mcp
+    class ConfigIdx,AuditIdx,KSIdx storage
+    class GPage,GList,GEdit,CBuild,ABuild,AuditView ui
+    class CRUD,AuditAPI,EvalAPI,ImpExp api
+    class CondMatch,PathSan,Conflict,CtxDetect core
+    class Context context

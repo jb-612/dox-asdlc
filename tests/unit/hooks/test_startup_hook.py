@@ -119,8 +119,8 @@ class TestIdentityValidation:
 
         assert result.returncode == 0, f"Hook failed with stderr: {result.stderr}"
 
-    def test_invalid_role_rejected(self, clean_env):
-        """Test that invalid roles are rejected with exit code 1."""
+    def test_any_nonempty_identity_accepted(self, clean_env):
+        """Test that any non-empty, non-'unknown' identity is accepted (bounded context model)."""
         clean_env["CLAUDE_INSTANCE_ID"] = "invalid_role"
 
         result = subprocess.run(
@@ -131,9 +131,9 @@ class TestIdentityValidation:
             timeout=10,
         )
 
-        assert result.returncode == 1, "Invalid role should be rejected"
-        # Should contain remediation info
-        assert "backend" in result.stdout or "backend" in result.stderr
+        # In the bounded context model, ANY non-empty non-"unknown" string is valid
+        assert result.returncode == 0, f"Any non-empty identity should be accepted: {result.stderr}"
+        assert "invalid_role" in result.stdout.lower()
 
     def test_empty_instance_id_rejected(self, clean_env):
         """Test that empty CLAUDE_INSTANCE_ID is rejected."""
@@ -151,11 +151,11 @@ class TestIdentityValidation:
         # The result depends on whether git email is configured
         # For this test, we just verify the script handles empty string
 
-    def test_unknown_instance_id_rejected(self, clean_env):
-        """Test that 'unknown' CLAUDE_INSTANCE_ID is rejected when no valid git email."""
+    def test_unknown_instance_id_defaults_to_pm_in_non_worktree(self, clean_env):
+        """Test that 'unknown' CLAUDE_INSTANCE_ID in a non-worktree defaults to 'pm'."""
         clean_env["CLAUDE_INSTANCE_ID"] = "unknown"
 
-        # Create a temp git repo with unrecognized email so fallback also fails
+        # Create a temp git repo (has .git directory, not file -- so not a worktree)
         with tempfile.TemporaryDirectory() as tmpdir:
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
             subprocess.run(
@@ -178,11 +178,59 @@ class TestIdentityValidation:
                 cwd=tmpdir,
             )
 
-            assert result.returncode == 1, "'unknown' identity should be rejected when no valid git email"
+            # "unknown" is skipped, temp dir has .git directory (not a worktree),
+            # so it defaults to "pm"
+            assert result.returncode == 0, f"Should default to pm: {result.stderr}"
+            assert "pm" in result.stdout.lower()
+
+    def test_unknown_instance_id_rejected_in_worktree(self, clean_env):
+        """Test that 'unknown' CLAUDE_INSTANCE_ID fails in a worktree (no fallback)."""
+        clean_env["CLAUDE_INSTANCE_ID"] = "unknown"
+
+        # Simulate a worktree by creating a .git FILE (not directory) pointing elsewhere
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a fake main repo to point to
+            main_repo = os.path.join(tmpdir, "main_repo")
+            os.makedirs(main_repo)
+            subprocess.run(["git", "init"], cwd=main_repo, capture_output=True)
+
+            # Create worktree directory with a .git file
+            worktree_dir = os.path.join(tmpdir, "worktree")
+            os.makedirs(worktree_dir)
+            git_file = os.path.join(worktree_dir, ".git")
+            with open(git_file, "w") as f:
+                f.write(f"gitdir: {main_repo}/.git/worktrees/fake\n")
+
+            # Create the worktrees directory so git recognizes it
+            wt_info = os.path.join(main_repo, ".git", "worktrees", "fake")
+            os.makedirs(wt_info)
+            with open(os.path.join(wt_info, "gitdir"), "w") as f:
+                f.write(f"{worktree_dir}/.git\n")
+            with open(os.path.join(wt_info, "HEAD"), "w") as f:
+                f.write("ref: refs/heads/main\n")
+            with open(os.path.join(wt_info, "commondir"), "w") as f:
+                f.write("../..\n")
+
+            result = subprocess.run(
+                [str(HOOK_SCRIPT)],
+                env=clean_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=worktree_dir,
+            )
+
+            # In a worktree with "unknown" identity, should fail with exit 1
+            assert result.returncode == 1, f"Should reject unknown identity in worktree: {result.stdout}"
 
 
-class TestGitEmailFallback:
-    """Test git email fallback for identity validation."""
+class TestNonWorktreeDefaultToPm:
+    """Test that non-worktree repos without CLAUDE_INSTANCE_ID default to 'pm'.
+
+    The startup hook uses the bounded context model: CLAUDE_INSTANCE_ID is the
+    primary identity source. Without it, non-worktree repos default to 'pm'.
+    Git email is not used for identity resolution.
+    """
 
     @pytest.fixture
     def temp_git_repo(self):
@@ -192,9 +240,9 @@ class TestGitEmailFallback:
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
             yield tmpdir
 
-    def test_git_email_fallback_backend(self, temp_git_repo):
-        """Test that git email claude-backend@asdlc.local is recognized."""
-        # Configure git email
+    def test_no_identity_in_non_worktree_defaults_to_pm(self, temp_git_repo):
+        """Test that no CLAUDE_INSTANCE_ID in a non-worktree defaults to 'pm'."""
+        # Configure a git email (irrelevant -- script does not use email fallback)
         subprocess.run(
             ["git", "config", "user.email", "claude-backend@asdlc.local"],
             cwd=temp_git_repo,
@@ -218,11 +266,12 @@ class TestGitEmailFallback:
             cwd=temp_git_repo,
         )
 
-        assert result.returncode == 0, f"Git email fallback failed: {result.stderr}"
-        assert "backend" in result.stdout.lower()
+        # No CLAUDE_INSTANCE_ID + non-worktree = defaults to "pm"
+        assert result.returncode == 0, f"Should default to pm: {result.stderr}"
+        assert "pm" in result.stdout.lower()
 
-    def test_git_email_fallback_frontend(self, temp_git_repo):
-        """Test that git email claude-frontend@asdlc.local is recognized."""
+    def test_no_identity_any_email_defaults_to_pm(self, temp_git_repo):
+        """Test that any git email without CLAUDE_INSTANCE_ID defaults to 'pm'."""
         subprocess.run(
             ["git", "config", "user.email", "claude-frontend@asdlc.local"],
             cwd=temp_git_repo,
@@ -246,10 +295,11 @@ class TestGitEmailFallback:
             cwd=temp_git_repo,
         )
 
-        assert result.returncode == 0, f"Git email fallback failed: {result.stderr}"
+        assert result.returncode == 0, f"Should default to pm: {result.stderr}"
+        assert "pm" in result.stdout.lower()
 
-    def test_unrecognized_git_email_rejected(self, temp_git_repo):
-        """Test that unrecognized git email is rejected."""
+    def test_unrecognized_email_no_identity_defaults_to_pm(self, temp_git_repo):
+        """Test that unrecognized git email without CLAUDE_INSTANCE_ID defaults to 'pm'."""
         subprocess.run(
             ["git", "config", "user.email", "user@example.com"],
             cwd=temp_git_repo,
@@ -273,7 +323,9 @@ class TestGitEmailFallback:
             cwd=temp_git_repo,
         )
 
-        assert result.returncode == 1, "Unrecognized git email should be rejected"
+        # No CLAUDE_INSTANCE_ID + non-worktree = defaults to "pm"
+        assert result.returncode == 0, f"Should default to pm: {result.stderr}"
+        assert "pm" in result.stdout.lower()
 
 
 class TestPresenceRegistration:
@@ -371,8 +423,8 @@ class TestExitCodes:
 
         assert result.returncode == 0
 
-    def test_exit_code_1_on_invalid_identity(self, clean_env):
-        """Test that exit code 1 is returned for invalid identity."""
+    def test_exit_code_0_on_any_valid_identity(self, clean_env):
+        """Test that exit code 0 is returned for any non-empty non-'unknown' identity."""
         clean_env["CLAUDE_INSTANCE_ID"] = "invalid_role_xyz"
 
         result = subprocess.run(
@@ -383,7 +435,43 @@ class TestExitCodes:
             timeout=10,
         )
 
-        assert result.returncode == 1
+        # Bounded context model: any non-empty, non-"unknown" string is valid
+        assert result.returncode == 0, f"Any identity should be accepted: {result.stderr}"
+        assert "invalid_role_xyz" in result.stdout.lower()
+
+    def test_exit_code_1_in_worktree_without_identity(self, clean_env):
+        """Test that exit code 1 is returned when in a worktree without identity."""
+        # Simulate a worktree by creating a .git FILE (not directory)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_repo = os.path.join(tmpdir, "main_repo")
+            os.makedirs(main_repo)
+            subprocess.run(["git", "init"], cwd=main_repo, capture_output=True)
+
+            worktree_dir = os.path.join(tmpdir, "worktree")
+            os.makedirs(worktree_dir)
+            git_file = os.path.join(worktree_dir, ".git")
+            with open(git_file, "w") as f:
+                f.write(f"gitdir: {main_repo}/.git/worktrees/fake\n")
+
+            wt_info = os.path.join(main_repo, ".git", "worktrees", "fake")
+            os.makedirs(wt_info)
+            with open(os.path.join(wt_info, "gitdir"), "w") as f:
+                f.write(f"{worktree_dir}/.git\n")
+            with open(os.path.join(wt_info, "HEAD"), "w") as f:
+                f.write("ref: refs/heads/main\n")
+            with open(os.path.join(wt_info, "commondir"), "w") as f:
+                f.write("../..\n")
+
+            result = subprocess.run(
+                [str(HOOK_SCRIPT)],
+                env=clean_env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=worktree_dir,
+            )
+
+            assert result.returncode == 1, f"Should fail in worktree without identity: {result.stdout}"
 
 
 class TestOutputMessages:
@@ -411,21 +499,44 @@ class TestOutputMessages:
         assert "backend" in result.stdout.lower()
 
     def test_error_message_includes_remediation(self):
-        """Test that error messages include remediation information."""
+        """Test that error messages include remediation information when in a worktree without identity."""
         env = os.environ.copy()
-        env["CLAUDE_INSTANCE_ID"] = "invalid_role"
+        env.pop("CLAUDE_INSTANCE_ID", None)
 
-        result = subprocess.run(
-            [str(HOOK_SCRIPT)],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        # Simulate a worktree (has .git file, not directory) without identity
+        with tempfile.TemporaryDirectory() as tmpdir:
+            main_repo = os.path.join(tmpdir, "main_repo")
+            os.makedirs(main_repo)
+            subprocess.run(["git", "init"], cwd=main_repo, capture_output=True)
 
-        output = result.stdout + result.stderr
-        # Should include valid roles or instructions
-        assert any(role in output.lower() for role in ["backend", "frontend", "orchestrator", "devops", "pm"])
+            worktree_dir = os.path.join(tmpdir, "worktree")
+            os.makedirs(worktree_dir)
+            git_file = os.path.join(worktree_dir, ".git")
+            with open(git_file, "w") as f:
+                f.write(f"gitdir: {main_repo}/.git/worktrees/fake\n")
+
+            wt_info = os.path.join(main_repo, ".git", "worktrees", "fake")
+            os.makedirs(wt_info)
+            with open(os.path.join(wt_info, "gitdir"), "w") as f:
+                f.write(f"{worktree_dir}/.git\n")
+            with open(os.path.join(wt_info, "HEAD"), "w") as f:
+                f.write("ref: refs/heads/main\n")
+            with open(os.path.join(wt_info, "commondir"), "w") as f:
+                f.write("../..\n")
+
+            result = subprocess.run(
+                [str(HOOK_SCRIPT)],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=worktree_dir,
+            )
+
+            assert result.returncode == 1, f"Should fail in worktree without identity: {result.stdout}"
+            output = result.stdout + result.stderr
+            # Should include remediation instructions mentioning CLAUDE_INSTANCE_ID
+            assert "claude_instance_id" in output.lower(), f"Should mention CLAUDE_INSTANCE_ID: {output}"
 
 
 class TestWorktreeVerification:

@@ -207,3 +207,13 @@ export {
   getMockSwarmState,
   simulateSwarmDelay,
 } from './swarm';
+
+// Guardrails Configuration mocks (P11-F01)
+export {
+  mockGuidelines,
+  mockAuditEntries as mockGuardrailsAuditEntries,
+  mockEvaluatedContext,
+  simulateGuardrailsDelay,
+  getMockGuidelinesListResponse,
+  getMockAuditLogResponse,
+} from './guardrailsData';

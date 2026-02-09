@@ -1,0 +1,80 @@
+%% File: docs/diagrams/28-guardrails-data-flow.mmd
+%% Description: P11-F01 Guardrails - Guideline Lifecycle Data Flow (Create → Store → Evaluate → Enforce → Audit)
+%% Updated: 2026-02-05
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart LR
+    subgraph Create["1. Create / Configure"]
+        Admin["Admin User"]
+        HITL["HITL UI\nGuidelineEditor"]
+        Import["Import JSON"]
+        Bootstrap["Bootstrap Script\n(Default Guidelines)"]
+    end
+
+    subgraph Store["2. Store"]
+        REST["REST API\n/guardrails/*"]
+        ESConfig[("ES: guardrails-config\n• id, name, category\n• condition (agents, domains, paths)\n• action (instruction, tools)\n• priority, enabled, version")]
+    end
+
+    subgraph Evaluate["3. Evaluate"]
+        MCP["Guardrails MCP"]
+        Eval["GuardrailsEvaluator"]
+        Cache["In-Memory Cache\n(TTL: 5min)"]
+        Detect["ContextDetector\n(Keywords + LLM)"]
+    end
+
+    subgraph Enforce["4. Enforce"]
+        Inject["UserPromptSubmit\n→ additionalContext"]
+        Block["PreToolUse\n→ exit 2 BLOCK"]
+        Warn["PreToolUse\n→ WARN"]
+        AgentCtx["SubagentStart\n→ agent rules"]
+    end
+
+    subgraph Audit["5. Audit"]
+        ESAudit[("ES: guardrails-audit\n• event_type\n• guideline_id\n• context (agent, domain)\n• decision (result, reason)\n• timestamp, actor")]
+        AuditUI["AuditLogViewer\n(HITL UI)"]
+        Export["Export CSV"]
+    end
+
+    %% Create → Store
+    Admin --> HITL
+    HITL --> REST
+    Import --> REST
+    Bootstrap --> REST
+    REST --> ESConfig
+
+    %% Store → Evaluate
+    ESConfig -->|"fetch enabled"| MCP
+    MCP --> Eval
+    Eval <--> Cache
+    Detect -->|"context"| Eval
+
+    %% Evaluate → Enforce
+    Eval -->|"matched guidelines"| Inject
+    Eval -->|"tool restrictions"| Block
+    Eval -->|"advisory rules"| Warn
+    Eval -->|"agent guidelines"| AgentCtx
+
+    %% Enforce → Audit
+    Inject -->|"context_injected"| ESAudit
+    Block -->|"tool_blocked"| ESAudit
+    Warn -->|"advisory_warned"| ESAudit
+    AgentCtx -->|"agent_configured"| ESAudit
+
+    %% Audit → View
+    ESAudit --> AuditUI
+    ESAudit --> Export
+
+    %% Styling
+    classDef create fill:#DCFCE7,stroke:#16a34a,stroke-width:2px
+    classDef store fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef evaluate fill:#D0E8FF,stroke:#0b1559,stroke-width:2px
+    classDef enforce fill:#FEF3C7,stroke:#d97706,stroke-width:2px
+    classDef audit fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+
+    class Admin,HITL,Import,Bootstrap create
+    class REST,ESConfig store
+    class MCP,Eval,Cache,Detect evaluate
+    class Inject,Block,Warn,AgentCtx enforce
+    class ESAudit,AuditUI,Export audit

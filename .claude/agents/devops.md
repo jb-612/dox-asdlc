@@ -306,3 +306,21 @@ Use progress publishing for operations that:
 - Benefit from audit trail visibility
 
 Short operations (single kubectl command, quick docker build) may skip progress publishing and simply publish a final `STATUS_UPDATE` on completion.
+
+## Guardrails Integration
+
+When the guardrails MCP server is available, call `guardrails_get_context` at the start of each task to receive contextual instructions:
+
+```
+guardrails_get_context(
+  agent: "devops",
+  domain: "infrastructure",
+  action: "deploy"
+)
+```
+
+Apply the returned instructions:
+- Follow `combined_instruction` text as additional behavioral guidance
+- Respect `tools_allowed` and `tools_denied` lists for tool usage
+- If `hitl_gates` are returned, ensure HITL confirmation before proceeding
+- If the guardrails server is unavailable, proceed with default behavior

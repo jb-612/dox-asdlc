@@ -198,3 +198,21 @@ After creating GitHub issues from review:
 - Other agents may be waiting for specific operations
 - Creates audit trail of coordination decisions
 - Enables async workflow where agents don't need to wait in real-time
+
+## Guardrails Integration
+
+When the guardrails MCP server is available, call `guardrails_get_context` at the start of each task to receive contextual instructions:
+
+```
+guardrails_get_context(
+  agent: "orchestrator",
+  domain: "meta",
+  action: "coordinate"
+)
+```
+
+Apply the returned instructions:
+- Follow `combined_instruction` text as additional behavioral guidance
+- Respect `tools_allowed` and `tools_denied` lists for tool usage
+- If `hitl_gates` are returned, ensure HITL confirmation before proceeding
+- If the guardrails server is unavailable, proceed with default behavior

@@ -45,6 +45,7 @@ from src.orchestrator.routes.classification_api import (
 )
 from src.orchestrator.routes.architect_api import router as architect_api_router
 from src.orchestrator.routes.swarm import router as swarm_api_router
+from src.orchestrator.routes.guardrails_api import router as guardrails_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -136,6 +137,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("PostgreSQL database disconnected")
     except Exception as e:
         logger.warning(f"Database disconnect failed: {e}")
+
+    # Close guardrails ES client
+    try:
+        from src.orchestrator.routes.guardrails_api import shutdown_guardrails_store
+        await shutdown_guardrails_store()
+    except Exception as e:
+        logger.warning(f"Guardrails store shutdown failed: {e}")
 
 
 def create_app() -> FastAPI:
@@ -244,6 +252,9 @@ def create_app() -> FastAPI:
     # Swarm Review API endpoints (for parallel code review)
     app.include_router(swarm_api_router)
 
+    # Guardrails Configuration API endpoints (for guardrails management)
+    app.include_router(guardrails_api_router)
+
     return app
 
 
@@ -275,6 +286,7 @@ def main() -> None:
     logger.info(f"Taxonomy Admin API: http://localhost:{port}/api/admin/labels/taxonomy")
     logger.info(f"Architect API: http://localhost:{port}/api/architect/translate")
     logger.info(f"Swarm API: http://localhost:{port}/api/swarm/review")
+    logger.info(f"Guardrails API: http://localhost:{port}/api/guardrails")
 
     # Handle shutdown signals
     def signal_handler(signum: int, frame: object) -> None:

@@ -64,6 +64,16 @@ export const QueryKeys = {
     list: () => ['docs', 'list'] as const,
     detail: (path: string) => ['docs', 'detail', path] as const,
   },
+
+  // Guardrails
+  guardrails: {
+    all: ['guardrails'] as const,
+    list: (params?: Record<string, unknown>) =>
+      params ? ['guardrails', 'list', params] as const : ['guardrails', 'list'] as const,
+    detail: (id: string) => ['guardrails', 'detail', id] as const,
+    audit: (params?: Record<string, unknown>) =>
+      params ? ['guardrails', 'audit', params] as const : ['guardrails', 'audit'] as const,
+  },
 };
 
 /**

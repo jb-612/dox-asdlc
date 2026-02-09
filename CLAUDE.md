@@ -100,6 +100,7 @@ gh issue close <num>             # Close resolved issue
 | feature-completion | Validate and complete feature |
 | contract-update | API contract changes |
 | diagram-builder | Mermaid diagrams |
+| multi-review | Parallel AI code review (Gemini + Codex via mprocs) |
 
 ## Environment Tiers
 
@@ -311,8 +312,40 @@ git rebase origin/main
 git push origin feature/p11-guardrails --force
 ```
 
+## Guardrails Configuration System
+
+The project includes a dynamic guardrails system (P11-F01) that provides contextually-conditional rules for agent behavior. Guidelines are stored in Elasticsearch, evaluated at runtime against the current task context, and injected into agent sessions via Claude Code hooks. This replaces static rule loading with targeted, per-context enforcement.
+
+See `@docs/guardrails/README.md` for full documentation.
+
+### Key Commands
+
+```bash
+# Bootstrap default guidelines into Elasticsearch
+python scripts/bootstrap_guardrails.py --es-url http://localhost:9200
+
+# Preview bootstrap without writing
+python scripts/bootstrap_guardrails.py --dry-run
+```
+
+### Key Interfaces
+
+- **HITL UI:** Navigate to `/guardrails` in the HITL UI to manage guidelines
+- **MCP Tool:** `guardrails_get_context(agent="backend", action="implement")` evaluates matching guidelines
+- **REST API:** `GET/POST/PUT/DELETE /api/guardrails` for CRUD operations
+
+### Configuration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDRAILS_ENABLED` | `true` | Master enable/disable |
+| `ELASTICSEARCH_URL` | `http://localhost:9200` | ES connection |
+| `GUARDRAILS_CACHE_TTL` | `60.0` | Evaluator cache TTL in seconds |
+| `GUARDRAILS_FALLBACK_MODE` | `permissive` | Behavior when ES unavailable |
+
 ## Related Docs
 
 - @docs/environments/README.md - Environment tiers
 - @docs/Main_Features.md - Feature specs
 - @docs/K8s_Service_Access.md - K8s networking
+- @docs/guardrails/README.md - Guardrails configuration system

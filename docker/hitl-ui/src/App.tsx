@@ -31,6 +31,7 @@ import { LoadingSpinner } from "./components/common/LoadingStates";
 
 // Lazy-loaded pages for code splitting
 const ArchitectBoardPage = lazy(() => import("./pages/ArchitectBoardPage"));
+const GuardrailsPage = lazy(() => import("./pages/GuardrailsPage"));
 import { DevOpsNotificationBanner } from "./components/devops";
 import { useDevOpsActivity } from "./api/devops";
 import { useDevOpsStore } from "./stores/devopsStore";
@@ -123,6 +124,20 @@ function App() {
           <Route path="admin/llm" element={<LLMConfigPage />} />
           <Route path="admin/labels" element={<AdminLabelsPage />} />
           <Route path="brainflare" element={<BrainflareHubPage />} />
+          <Route
+            path="guardrails"
+            element={
+              <Suspense
+                fallback={
+                  <div className="flex items-center justify-center h-full">
+                    <LoadingSpinner size="lg" />
+                  </div>
+                }
+              >
+                <GuardrailsPage />
+              </Suspense>
+            }
+          />
           <Route
             path="architect"
             element={
