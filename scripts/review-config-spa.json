@@ -1,0 +1,78 @@
+{
+  "gemini_1": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Security & XSS / Injection Vectors",
+    "slug": "gemini-security",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "XSS vectors in dangerouslySetInnerHTML, raw HTML rendering, or unsanitized user input",
+      "API client authentication and token handling (credentials, headers, CORS)",
+      "Sensitive data exposure in localStorage, sessionStorage, or URL parameters",
+      "Unsafe eval(), innerHTML, or dynamic script injection patterns",
+      "CSRF protection on mutation API calls (POST, PUT, DELETE)",
+      "Input validation on forms and search fields before API submission",
+      "Mock data leaking into production builds (conditional imports, environment checks)",
+      "Error messages exposing internal details (stack traces, file paths, API keys)",
+      "Third-party dependency risks in package.json (outdated, known CVEs)",
+      "Content Security Policy compatibility and unsafe-inline usage"
+    ]
+  },
+  "gemini_2": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Architecture & React Patterns",
+    "slug": "gemini-architecture",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "Component hierarchy and prop drilling vs context/state management patterns",
+      "API layer organization (client.ts, hooks, mocks, types separation)",
+      "Route organization and lazy loading strategy in App.tsx",
+      "State management patterns (React Query, stores, local state) consistency",
+      "Mock-first architecture correctness (mock/real backend switching)",
+      "Component reusability and DRY across 22+ feature domains",
+      "Error boundary placement and fallback UI patterns",
+      "TypeScript type safety (any usage, type assertions, missing generics)",
+      "Bundle size concerns (large dependencies, tree-shaking, code splitting)",
+      "Accessibility patterns (ARIA, keyboard navigation, screen reader support)"
+    ]
+  },
+  "codex_1": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Code Quality & React Best Practices",
+    "slug": "codex-quality",
+    "flags": "--full-auto",
+    "checklist": [
+      "React hooks rules violations (conditional hooks, missing dependencies in useEffect)",
+      "Memory leaks from uncleanup subscriptions, timers, or event listeners",
+      "Unnecessary re-renders (missing React.memo, useMemo, useCallback where needed)",
+      "Consistent error handling across API calls and component rendering",
+      "Dead code, unused imports, unreachable branches across 542 files",
+      "Naming conventions consistency (camelCase vs PascalCase, file naming patterns)",
+      "CSS/styling approach consistency (inline, modules, Tailwind, styled-components)",
+      "Console.log statements left in production code",
+      "Proper key usage in list rendering (index as key anti-pattern)",
+      "Event handler patterns (inline functions in JSX, proper binding)"
+    ]
+  },
+  "codex_2": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Test Coverage & Testing Patterns",
+    "slug": "codex-testing",
+    "flags": "--full-auto",
+    "checklist": [
+      "Pages/components missing test files entirely (coverage gaps)",
+      "Test isolation (shared mutable state, missing cleanup in afterEach)",
+      "Mock correctness (are API mocks reflecting real API contracts?)",
+      "User interaction testing (click handlers, form submission, navigation)",
+      "Async testing patterns (proper waitFor, act() wrapping, query timing)",
+      "Edge case testing (empty states, error states, loading states, boundary values)",
+      "Integration test coverage for critical user flows",
+      "Snapshot testing overuse vs behavioral testing",
+      "Test file naming and organization consistency",
+      "Missing accessibility tests (screen reader, keyboard navigation)"
+    ]
+  }
+}

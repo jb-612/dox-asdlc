@@ -14,6 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/review-config.json"
 DRY_RUN=false
 FEATURE_NAME="guardrails"
+FILES_FROM=""
 
 # ---------- argument parsing ----------
 while [[ $# -gt 0 ]]; do
@@ -21,12 +22,14 @@ while [[ $# -gt 0 ]]; do
     --config)  CONFIG_FILE="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     --feature) FEATURE_NAME="$2"; shift 2 ;;
+    --files-from) FILES_FROM="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: $0 [--config path] [--dry-run] [--feature name]"
+      echo "Usage: $0 [--config path] [--dry-run] [--feature name] [--files-from path]"
       echo ""
-      echo "  --config   Path to reviewer config JSON (default: scripts/review-config.json)"
-      echo "  --dry-run  Generate files but don't launch mprocs"
-      echo "  --feature  Feature slug for output dir (default: guardrails)"
+      echo "  --config      Path to reviewer config JSON (default: scripts/review-config.json)"
+      echo "  --dry-run     Generate files but don't launch mprocs"
+      echo "  --feature     Feature slug for output dir (default: guardrails)"
+      echo "  --files-from  Path to file containing list of files to review (one per line)"
       exit 0
       ;;
     *) echo "Unknown option: $1"; exit 1 ;;
@@ -59,26 +62,36 @@ echo "Feature: $FEATURE_NAME"
 echo ""
 
 # ---------- collect files to review ----------
-# All guardrails-related source and test files
-FILES_TO_REVIEW=$(cd "$PROJECT_ROOT" && find \
-  src/core/guardrails \
-  src/infrastructure/guardrails \
-  src/orchestrator/routes/guardrails_api.py \
-  src/orchestrator/api/models/guardrails.py \
-  .claude/hooks/guardrails-inject.py \
-  .claude/hooks/guardrails-enforce.py \
-  .claude/hooks/guardrails-subagent.py \
-  scripts/bootstrap_guardrails.py \
-  tests/unit/core \
-  tests/unit/infrastructure/guardrails \
-  tests/unit/hooks \
-  tests/unit/orchestrator/routes/test_guardrails_api.py \
-  tests/unit/orchestrator/routes/test_guardrails_crud.py \
-  tests/unit/orchestrator/routes/test_guardrails_audit_evaluate.py \
-  tests/unit/orchestrator/api/models/test_guardrails_models.py \
-  tests/unit/scripts/test_bootstrap_guardrails.py \
-  tests/integration/guardrails \
-  -type f -name '*.py' 2>/dev/null | sort)
+if [[ -n "$FILES_FROM" && -f "$FILES_FROM" ]]; then
+  # Use externally provided file list
+  FILES_TO_REVIEW=$(cat "$FILES_FROM")
+elif [[ "$FEATURE_NAME" == "guardrails" ]]; then
+  # Default: guardrails-related source and test files
+  FILES_TO_REVIEW=$(cd "$PROJECT_ROOT" && find \
+    src/core/guardrails \
+    src/infrastructure/guardrails \
+    src/orchestrator/routes/guardrails_api.py \
+    src/orchestrator/api/models/guardrails.py \
+    .claude/hooks/guardrails-inject.py \
+    .claude/hooks/guardrails-enforce.py \
+    .claude/hooks/guardrails-subagent.py \
+    scripts/bootstrap_guardrails.py \
+    tests/unit/core \
+    tests/unit/infrastructure/guardrails \
+    tests/unit/hooks \
+    tests/unit/orchestrator/routes/test_guardrails_api.py \
+    tests/unit/orchestrator/routes/test_guardrails_crud.py \
+    tests/unit/orchestrator/routes/test_guardrails_audit_evaluate.py \
+    tests/unit/orchestrator/api/models/test_guardrails_models.py \
+    tests/unit/scripts/test_bootstrap_guardrails.py \
+    tests/integration/guardrails \
+    -type f -name '*.py' 2>/dev/null | sort)
+else
+  # Generic: find all source files for the feature under docker/hitl-ui/src
+  FILES_TO_REVIEW=$(cd "$PROJECT_ROOT" && find \
+    docker/hitl-ui/src \
+    -type f \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null | sort)
+fi
 
 FILE_COUNT=$(echo "$FILES_TO_REVIEW" | wc -l | tr -d ' ')
 echo "Files to review: $FILE_COUNT"
@@ -98,13 +111,10 @@ for i, item in enumerate(items, 1):
     print(f'{i}. {item}')
 ")
 
-  cat > "$PROMPT_DIR/${slug}.txt" << PROMPT_EOF
-# Code Review: P11-F01 Guardrails Configuration System
-## Focus Area: ${focus}
-
-## Project Context
-
-The Guardrails Configuration System (P11-F01) provides contextually-conditional rules
+  # Select project context based on feature
+  local project_context
+  if [[ "$FEATURE_NAME" == "guardrails" ]]; then
+    project_context="The Guardrails Configuration System (P11-F01) provides contextually-conditional rules
 for agent behavior in an agentic software development lifecycle (aSDLC). Guidelines are
 stored in Elasticsearch, evaluated at runtime against task context, and injected into
 agent sessions via Claude Code hooks.
@@ -116,7 +126,29 @@ Key components:
 - MCP Server: guardrails_get_context and guardrails_log_decision tools
 - REST API: FastAPI CRUD, evaluate, audit, import/export endpoints
 - Hooks: UserPromptSubmit (inject), PreToolUse (enforce), SubagentStart (propagate)
-- Bootstrap: 11 default guidelines from project rules
+- Bootstrap: 11 default guidelines from project rules"
+  else
+    project_context="The HITL (Human-In-The-Loop) UI is a React SPA built with Vite and TypeScript that serves
+as the primary user interface for an agentic software development lifecycle (aSDLC) platform.
+It has 542 source files across 22+ feature domains.
+
+Key architecture:
+- React with TypeScript, Vite build system
+- API layer with mock-first design (mock and real backends switchable at runtime)
+- React Query for server state management
+- 22+ feature domains: agents, architect, artifacts, brainflare, cockpit, devops, docs, gates, guardrails, ideas, k8s, llm, metrics, review, search, services, sessions, studio, workers, admin, common, layout
+- API client with hooks, REST services, and typed mock data
+- Component library with shared UI components in common/
+- Test files co-located with source files"
+  fi
+
+  cat > "$PROMPT_DIR/${slug}.txt" << PROMPT_EOF
+# Code Review: ${FEATURE_NAME} SPA
+## Focus Area: ${focus}
+
+## Project Context
+
+${project_context}
 
 ## Files to Review
 
