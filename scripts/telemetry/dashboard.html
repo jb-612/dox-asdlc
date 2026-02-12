@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>aSDLC Telemetry Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface2: #2f3349;
+    --border: #3b4261;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --accent: #7aa2f7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --orange: #ff9e64;
+    --purple: #bb9af7;
+    --cyan: #7dcfff;
+    --yellow: #e0af68;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+  header .status { display: flex; align-items: center; gap: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.live { background: var(--green); animation: pulse 2s infinite; }
+  .dot.off  { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto 1fr;
+    gap: 12px;
+    padding: 12px 20px;
+    height: calc(100vh - 52px);
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-dim); margin-bottom: 8px; flex-shrink: 0;
+  }
+
+  /* Stats row */
+  .stats-row { grid-column: 1 / -1; }
+  .stats-grid {
+    display: flex; gap: 12px; flex-wrap: wrap;
+  }
+  .stat-card {
+    flex: 1; min-width: 120px;
+    background: var(--surface2); border-radius: 6px; padding: 10px 14px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--text-dim); }
+  .stat-card .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.accent { color: var(--accent); }
+  .stat-card .value.orange { color: var(--orange); }
+
+  /* Filter bar */
+  .filter-row { grid-column: 1 / -1; }
+  .filters {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+  .filters select, .filters input {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 8px; border-radius: 4px;
+    font-family: inherit; font-size: 12px;
+  }
+  .filters label { font-size: 11px; color: var(--text-dim); }
+  .filters button {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 4px 12px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 12px; font-weight: 600;
+  }
+  .filters button:hover { opacity: 0.85; }
+
+  /* Timeline chart */
+  .chart-container { grid-column: 1 / -1; min-height: 200px; position: relative; }
+  .chart-container canvas { width: 100% !important; }
+
+  /* Event feed */
+  .event-feed { overflow-y: auto; flex: 1; }
+  .event-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .event-item:last-child { border-bottom: none; }
+  .event-time { color: var(--text-dim); white-space: nowrap; flex-shrink: 0; width: 70px; }
+  .event-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+  }
+  .badge-PreToolUse     { background: rgba(122,162,247,0.2); color: var(--accent); }
+  .badge-UserPromptSubmit { background: rgba(158,206,106,0.2); color: var(--green); }
+  .badge-SessionStart   { background: rgba(187,154,247,0.2); color: var(--purple); }
+  .badge-SubagentStart  { background: rgba(125,207,255,0.2); color: var(--cyan); }
+  .badge-PostToolUse    { background: rgba(224,175,104,0.2); color: var(--yellow); }
+  .badge-Stop           { background: rgba(247,118,142,0.2); color: var(--red); }
+  .badge-unknown        { background: rgba(86,95,137,0.2); color: var(--text-dim); }
+  .event-tool { color: var(--orange); flex-shrink: 0; }
+  .event-detail { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .event-blocked { color: var(--red); font-weight: 600; }
+
+  /* Sessions panel */
+  .session-list { overflow-y: auto; flex: 1; }
+  .session-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .session-item .sid { color: var(--purple); font-weight: 600; }
+  .session-item .agent { color: var(--cyan); }
+  .session-item .count { color: var(--text-dim); }
+  .session-active { color: var(--green); }
+  .session-ended  { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>aSDLC Telemetry</h1>
+  <div class="status">
+    <span id="sse-status"><span class="dot off"></span> Connecting...</span>
+    <span id="event-count" style="color:var(--text-dim)">0 events</span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- Stats row -->
+  <div class="panel stats-row">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="label">Total Events</div><div class="value accent" id="st-total">--</div></div>
+      <div class="stat-card"><div class="label">Errors</div><div class="value red" id="st-errors">--</div></div>
+      <div class="stat-card"><div class="label">Blocked</div><div class="value orange" id="st-blocked">--</div></div>
+      <div class="stat-card"><div class="label">Error Rate</div><div class="value red" id="st-rate">--</div></div>
+      <div class="stat-card"><div class="label">Avg Duration</div><div class="value green" id="st-dur">--</div></div>
+      <div class="stat-card"><div class="label">Events/min</div><div class="value accent" id="st-epm">--</div></div>
+      <div class="stat-card"><div class="label">Active Sessions</div><div class="value green" id="st-sessions">--</div></div>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="panel filter-row">
+    <div class="filters">
+      <label>Session:</label>
+      <select id="f-session"><option value="">All</option></select>
+      <label>Type:</label>
+      <select id="f-type">
+        <option value="">All</option>
+        <option value="PreToolUse">PreToolUse</option>
+        <option value="UserPromptSubmit">UserPromptSubmit</option>
+        <option value="SessionStart">SessionStart</option>
+        <option value="SubagentStart">SubagentStart</option>
+        <option value="PostToolUse">PostToolUse</option>
+        <option value="Stop">Stop</option>
+      </select>
+      <label>Tool:</label>
+      <input id="f-tool" type="text" placeholder="e.g. Bash, Write..." style="width:120px">
+      <label><input type="checkbox" id="f-blocked"> Blocked only</label>
+      <button onclick="applyFilters()">Filter</button>
+      <button onclick="resetFilters()" style="background:var(--surface2);color:var(--text)">Reset</button>
+    </div>
+  </div>
+
+  <!-- Timeline chart -->
+  <div class="panel chart-container">
+    <h2>Event Timeline (Last 5 Minutes)</h2>
+    <canvas id="timeline-chart"></canvas>
+  </div>
+
+  <!-- Event feed -->
+  <div class="panel" style="min-height:0">
+    <h2>Event Feed</h2>
+    <div class="event-feed" id="event-feed"></div>
+  </div>
+
+  <!-- Sessions -->
+  <div class="panel" style="min-height:0">
+    <h2>Sessions</h2>
+    <div class="session-list" id="session-list"></div>
+  </div>
+
+</div>
+
+<script>
+// -- State -------------------------------------------------------------------
+let allEvents = [];
+let filteredEvents = [];
+let sessions = [];
+let sseSource = null;
+const MAX_EVENTS = 500;
+
+// -- Chart setup -------------------------------------------------------------
+const ctx = document.getElementById('timeline-chart').getContext('2d');
+const typeColors = {
+  PreToolUse: 'rgba(122,162,247,0.8)',
+  UserPromptSubmit: 'rgba(158,206,106,0.8)',
+  SessionStart: 'rgba(187,154,247,0.8)',
+  SubagentStart: 'rgba(125,207,255,0.8)',
+  PostToolUse: 'rgba(224,175,104,0.8)',
+  Stop: 'rgba(247,118,142,0.8)',
+  unknown: 'rgba(86,95,137,0.5)',
+};
+const chart = new Chart(ctx, {
+  type: 'scatter',
+  data: { datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    scales: {
+      x: {
+        type: 'linear',
+        title: { display: true, text: 'Seconds ago', color: '#565f89' },
+        ticks: { color: '#565f89' },
+        grid: { color: 'rgba(59,66,97,0.5)' },
+        reverse: true,
+      },
+      y: {
+        title: { display: true, text: 'Duration (s)', color: '#565f89' },
+        ticks: { color: '#565f89' },
+        grid: { color: 'rgba(59,66,97,0.5)' },
+        beginAtZero: true,
+      }
+    },
+    plugins: {
+      legend: { position: 'top', labels: { color: '#c0caf5', boxWidth: 12, padding: 8, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            const e = ctx.raw._event;
+            const parts = [e.hook_event_type || 'unknown'];
+            if (e.tool_name) parts.push('tool=' + e.tool_name);
+            parts.push(e.duration_seconds.toFixed(3) + 's');
+            if (e.blocked) parts.push('BLOCKED');
+            return parts.join(' | ');
+          }
+        }
+      }
+    }
+  }
+});
+
+// -- Data fetching -----------------------------------------------------------
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const data = await res.json();
+    document.getElementById('st-total').textContent = data.total_events;
+    document.getElementById('st-errors').textContent = data.total_errors;
+    document.getElementById('st-blocked').textContent = data.total_blocked;
+    document.getElementById('st-rate').textContent = (data.error_rate * 100).toFixed(1) + '%';
+    document.getElementById('st-dur').textContent = data.avg_duration_seconds.toFixed(3) + 's';
+    document.getElementById('st-epm').textContent = data.events_per_minute;
+    document.getElementById('st-sessions').textContent = data.active_sessions;
+  } catch(e) { /* silent */ }
+}
+
+async function fetchSessions() {
+  try {
+    const res = await fetch('/api/sessions');
+    const data = await res.json();
+    sessions = data.sessions || [];
+    renderSessions();
+    populateSessionFilter();
+  } catch(e) { /* silent */ }
+}
+
+async function fetchInitialEvents() {
+  try {
+    const res = await fetch('/api/events?limit=200');
+    const data = await res.json();
+    allEvents = (data.events || []).reverse(); // oldest first
+    applyFilters();
+  } catch(e) { /* silent */ }
+}
+
+// -- SSE connection ----------------------------------------------------------
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource('/stream');
+
+  sseSource.onopen = function() {
+    document.getElementById('sse-status').innerHTML = '<span class="dot live"></span> Live';
+  };
+
+  sseSource.onmessage = function(ev) {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.events && data.events.length > 0) {
+        // Events arrive newest-first from API; reverse for chronological append
+        const newEvents = data.events.slice().reverse();
+        allEvents.push(...newEvents);
+        // Trim to MAX_EVENTS
+        if (allEvents.length > MAX_EVENTS) {
+          allEvents = allEvents.slice(allEvents.length - MAX_EVENTS);
+        }
+        applyFilters();
+        fetchStats();
+        fetchSessions();
+      }
+    } catch(e) { /* silent */ }
+  };
+
+  sseSource.onerror = function() {
+    document.getElementById('sse-status').innerHTML = '<span class="dot off"></span> Reconnecting...';
+    setTimeout(connectSSE, 5000);
+  };
+}
+
+// -- Filtering ---------------------------------------------------------------
+function applyFilters() {
+  const sessionFilter = document.getElementById('f-session').value;
+  const typeFilter = document.getElementById('f-type').value;
+  const toolFilter = document.getElementById('f-tool').value.toLowerCase();
+  const blockedOnly = document.getElementById('f-blocked').checked;
+
+  filteredEvents = allEvents.filter(e => {
+    if (sessionFilter && e.session_id !== sessionFilter) return false;
+    if (typeFilter && e.hook_event_type !== typeFilter) return false;
+    if (toolFilter && (!e.tool_name || !e.tool_name.toLowerCase().includes(toolFilter))) return false;
+    if (blockedOnly && !e.blocked) return false;
+    return true;
+  });
+
+  renderEventFeed();
+  renderChart();
+  document.getElementById('event-count').textContent = filteredEvents.length + ' events';
+}
+
+function resetFilters() {
+  document.getElementById('f-session').value = '';
+  document.getElementById('f-type').value = '';
+  document.getElementById('f-tool').value = '';
+  document.getElementById('f-blocked').checked = false;
+  applyFilters();
+}
+
+function populateSessionFilter() {
+  const select = document.getElementById('f-session');
+  const current = select.value;
+  const ids = new Set();
+  allEvents.forEach(e => { if (e.session_id) ids.add(e.session_id); });
+  sessions.forEach(s => { if (s.session_id) ids.add(s.session_id); });
+
+  // Keep the "All" option, rebuild the rest
+  while (select.options.length > 1) select.remove(1);
+  Array.from(ids).sort().forEach(id => {
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = id;
+    select.appendChild(opt);
+  });
+  select.value = current;
+}
+
+// -- Rendering ---------------------------------------------------------------
+function formatTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function renderEventFeed() {
+  const feed = document.getElementById('event-feed');
+  // Show newest first in the feed
+  const display = filteredEvents.slice().reverse().slice(0, 200);
+  feed.innerHTML = display.map(e => {
+    const badge = `badge-${e.hook_event_type || 'unknown'}`;
+    const blockedTag = e.blocked ? ' <span class="event-blocked">[BLOCKED]</span>' : '';
+    const toolTag = e.tool_name ? `<span class="event-tool">${esc(e.tool_name)}</span>` : '';
+    const detail = e.error ? `<span class="event-detail" style="color:var(--red)">${esc(e.error)}</span>` :
+                   e.hook_name ? `<span class="event-detail">${esc(e.hook_name)} (${(e.duration_seconds||0).toFixed(3)}s)</span>` : '';
+    return `<div class="event-item">
+      <span class="event-time">${formatTime(e.timestamp)}</span>
+      <span class="event-badge ${badge}">${e.hook_event_type || 'unknown'}</span>
+      ${toolTag}${blockedTag}
+      ${detail}
+    </div>`;
+  }).join('');
+}
+
+function renderSessions() {
+  const list = document.getElementById('session-list');
+  if (!sessions.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);padding:12px">No sessions recorded yet.</div>';
+    return;
+  }
+  list.innerHTML = sessions.map(s => {
+    const status = s.ended_at ? 'session-ended' : 'session-active';
+    const statusText = s.ended_at ? 'ended' : 'active';
+    const eventCount = allEvents.filter(e => e.session_id === s.session_id).length;
+    return `<div class="session-item">
+      <div>
+        <span class="sid">${esc(s.session_id)}</span>
+        <span class="agent">${s.agent_type || ''}</span>
+        ${s.instance_id ? '<span style="color:var(--text-dim)">(' + esc(s.instance_id) + ')</span>' : ''}
+      </div>
+      <div>
+        <span class="count">${eventCount} events</span>
+        <span class="${status}"> ${statusText}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderChart() {
+  const now = Date.now() / 1000;
+  const fiveMinAgo = now - 300;
+
+  // Group events by type for the scatter chart
+  const byType = {};
+  filteredEvents.forEach(e => {
+    if (e.timestamp < fiveMinAgo) return;
+    const t = e.hook_event_type || 'unknown';
+    if (!byType[t]) byType[t] = [];
+    byType[t].push({
+      x: Math.round(now - e.timestamp),
+      y: e.duration_seconds || 0,
+      _event: e,
+    });
+  });
+
+  chart.data.datasets = Object.entries(byType).map(([type, points]) => ({
+    label: type,
+    data: points,
+    backgroundColor: typeColors[type] || typeColors.unknown,
+    pointRadius: points.map(p => p._event.blocked ? 7 : 4),
+    pointStyle: points.map(p => p._event.blocked ? 'crossRot' : 'circle'),
+  }));
+  chart.options.scales.x.max = 300;
+  chart.options.scales.x.min = 0;
+  chart.update();
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// -- Init --------------------------------------------------------------------
+(async function init() {
+  await fetchStats();
+  await fetchSessions();
+  await fetchInitialEvents();
+  connectSSE();
+
+  // Periodically refresh stats even if SSE is quiet
+  setInterval(fetchStats, 10000);
+  setInterval(fetchSessions, 15000);
+})();
+</script>
+</body>
+</html>

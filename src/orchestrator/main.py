@@ -46,6 +46,7 @@ from src.orchestrator.routes.classification_api import (
 from src.orchestrator.routes.architect_api import router as architect_api_router
 from src.orchestrator.routes.swarm import router as swarm_api_router
 from src.orchestrator.routes.guardrails_api import router as guardrails_api_router
+from src.orchestrator.routes.cost_api import router as cost_api_router
 
 # Configure logging
 logging.basicConfig(
@@ -254,6 +255,9 @@ def create_app() -> FastAPI:
 
     # Guardrails Configuration API endpoints (for guardrails management)
     app.include_router(guardrails_api_router)
+
+    # Agent Cost Tracking API endpoints (P13-F01)
+    app.include_router(cost_api_router)
 
     return app
 
