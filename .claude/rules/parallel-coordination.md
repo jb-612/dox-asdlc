@@ -102,6 +102,18 @@ echo $CLAUDE_INSTANCE_ID
 | `RuntimeError: Cannot determine instance identity` | CLAUDE_INSTANCE_ID not set | Set CLAUDE_INSTANCE_ID |
 | `Invalid sender identity. Cannot publish messages with unknown sender.` | Identity is empty or "unknown" | Set valid CLAUDE_INSTANCE_ID |
 
+### Native Teams Identity
+
+When using native Agent Teams, the `team_name` parameter maps to the bounded context:
+
+| Redis Coordination | Native Teams |
+|-------------------|-------------|
+| `CLAUDE_INSTANCE_ID` | `team_name` parameter in TeamCreate/Task |
+| Session context | Team name (e.g., `native-teams-adoption`) |
+| `coord_register_presence` | Automatic when teammate joins team |
+
+`CLAUDE_INSTANCE_ID` remains valid and required for worktree-based sessions. Native teams use `team_name` as the equivalent bounded context identifier.
+
 ## Path Restrictions
 
 **Backend** can modify:
@@ -156,6 +168,27 @@ PM CLI (main session)
    d. DevOps CLI executes operation
    e. DevOps CLI publishes `DEVOPS_COMPLETE` or `DEVOPS_FAILED`
    f. PM CLI receives acknowledgment and continues
+
+### Native Teams In-Session Pattern
+
+```
+PM CLI (main session)
+    |
+    |-> TeamCreate("feature-context")
+    |
+    |-> Task(backend, name="backend-dev", team_name="feature-context")
+    |-> Task(frontend, name="frontend-dev", team_name="feature-context")
+    |
+    |   [Teammates work in parallel]
+    |   [Messages delivered automatically]
+    |   [Tasks tracked via TaskList]
+    |
+    |-> SendMessage(type="shutdown_request", recipient="backend-dev")
+    |-> SendMessage(type="shutdown_request", recipient="frontend-dev")
+    |-> TeamDelete
+```
+
+This pattern replaces the Redis MCP message flow for in-session coordination while keeping the separate CLI pattern available for cross-session work.
 
 ## Enforcement
 

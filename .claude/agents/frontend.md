@@ -15,11 +15,11 @@ Your domain includes:
 - Contracts for API types (`contracts/current/` - read only)
 
 When invoked:
-1. Check for pending coordination messages using mcp__coordination__coord_check_messages
+1. Messages from PM CLI and teammates are delivered automatically between turns
 2. Understand the task requirements
 3. Follow mock-first development for API dependencies
-4. Update tasks.md with progress
-5. Publish status updates using mcp__coordination__coord_publish_message
+4. Use TaskUpdate to track progress on assigned tasks
+5. Use SendMessage to report status or raise blockers to PM CLI
 
 Mock-first development:
 1. Read the contract from `contracts/current/` to understand API shape
@@ -41,7 +41,7 @@ Development standards:
 - Run tests: `npm test` in `docker/hitl-ui/`
 - Match contracts exactly for API types
 
-On completion, publish a STATUS_UPDATE message summarizing work done.
+On completion, use SendMessage to notify PM CLI of work done, and mark task as completed with TaskUpdate.
 
 ## Guardrails Integration
 

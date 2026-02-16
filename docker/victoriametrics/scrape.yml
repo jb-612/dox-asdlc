@@ -32,3 +32,11 @@ scrape_configs:
         labels:
           service: 'victoriametrics'
     metrics_path: /metrics
+
+  - job_name: 'hook-telemetry'
+    static_configs:
+      - targets: ['host.docker.internal:9191']
+        labels:
+          service: 'hook-telemetry'
+    metrics_path: /metrics
+    scrape_interval: 30s

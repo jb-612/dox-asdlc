@@ -1,17 +1,19 @@
 #!/bin/bash
 # Unified session launcher for bounded context worktrees.
 #
-# Usage: ./scripts/start-session.sh <context>
+# Usage: ./scripts/start-session.sh [--tmux] <context>
 #
 # This script:
 # - Calls setup-worktree.sh to create/verify worktree
 # - Sets CLAUDE_INSTANCE_ID for the context
 # - Outputs next steps instructions for user
+# - Optionally adds the context to a tmux "asdlc" session (--tmux)
 #
 # The script is idempotent (safe to run multiple times).
 #
 # Examples:
 #   ./scripts/start-session.sh p11-guardrails
+#   ./scripts/start-session.sh --tmux p11-guardrails
 #   ./scripts/start-session.sh p04-review-swarm
 #   ./scripts/start-session.sh sp01-smart-saver
 
@@ -43,6 +45,7 @@ usage() {
     echo "             Use work item format: p11-guardrails, p04-review-swarm"
     echo ""
     echo "Options:"
+    echo "  --tmux       Add context window to tmux session 'asdlc'"
     echo "  -h, --help   Show this help message"
     echo ""
     echo "Examples:"
@@ -99,6 +102,7 @@ validate_context() {
 
 main() {
     local context=""
+    local use_tmux=false
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -106,6 +110,10 @@ main() {
             -h|--help)
                 usage
                 exit 0
+                ;;
+            --tmux)
+                use_tmux=true
+                shift
                 ;;
             -*)
                 log_error "Unknown option: $1"
@@ -188,20 +196,58 @@ main() {
     echo "Branch: $branch_name"
     echo "Instance ID: $context"
     echo ""
-    echo -e "${YELLOW}Next Steps:${NC}"
-    echo ""
-    echo "  1. Change to worktree directory:"
-    echo "     cd $worktree_dir"
-    echo ""
-    echo "  2. Set environment variable in your shell:"
-    echo "     export CLAUDE_INSTANCE_ID=$context"
-    echo ""
-    echo "  3. Start Claude CLI:"
-    echo "     claude"
-    echo ""
-    echo -e "${BLUE}Quick command (copy/paste):${NC}"
-    echo "  cd $worktree_dir && export CLAUDE_INSTANCE_ID=$context && claude"
-    echo ""
+
+    # tmux integration
+    if [[ "$use_tmux" == true ]]; then
+        log_step "Step 4: Adding to tmux session..."
+
+        if ! command -v tmux &>/dev/null; then
+            log_error "tmux is not installed. Install with: brew install tmux"
+            log_warn "Falling back to manual instructions."
+            use_tmux=false
+        fi
+    fi
+
+    if [[ "$use_tmux" == true ]]; then
+        local tmux_session="asdlc"
+
+        if tmux has-session -t "$tmux_session" 2>/dev/null; then
+            # Session exists - check if window already present
+            if tmux list-windows -t "$tmux_session" -F '#{window_name}' 2>/dev/null | grep -qx "$context"; then
+                log_info "Window '$context' already exists in tmux session '$tmux_session'."
+            else
+                log_info "Adding window '$context' to tmux session '$tmux_session'..."
+                tmux new-window -t "$tmux_session" -n "$context"
+                tmux send-keys -t "$tmux_session:$context" "cd '$worktree_dir' && export CLAUDE_INSTANCE_ID='$context' && claude" Enter
+            fi
+        else
+            # Session does not exist - create it with this context as the first window
+            log_info "Creating tmux session '$tmux_session' with window '$context'..."
+            tmux new-session -d -s "$tmux_session" -n "$context" -c "$worktree_dir"
+            tmux send-keys -t "$tmux_session:$context" "export CLAUDE_INSTANCE_ID='$context' && claude" Enter
+        fi
+
+        echo -e "${YELLOW}tmux session:${NC} $tmux_session"
+        echo ""
+        echo -e "${BLUE}Attach with:${NC}"
+        echo "  tmux attach-session -t $tmux_session"
+        echo ""
+    else
+        echo -e "${YELLOW}Next Steps:${NC}"
+        echo ""
+        echo "  1. Change to worktree directory:"
+        echo "     cd $worktree_dir"
+        echo ""
+        echo "  2. Set environment variable in your shell:"
+        echo "     export CLAUDE_INSTANCE_ID=$context"
+        echo ""
+        echo "  3. Start Claude CLI:"
+        echo "     claude"
+        echo ""
+        echo -e "${BLUE}Quick command (copy/paste):${NC}"
+        echo "  cd $worktree_dir && export CLAUDE_INSTANCE_ID=$context && claude"
+        echo ""
+    fi
 }
 
 main "$@"

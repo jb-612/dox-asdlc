@@ -105,12 +105,12 @@ Options:
 
 ## Multi-CLI Mode
 
-When running in a separate DevOps CLI window:
+When running as a teammate in a native Agent Team:
 
-1. Receives `DEVOPS_REQUEST` via Redis MCP
-2. Publishes `DEVOPS_STARTED` when beginning
+1. Receives task assignment via automatic message delivery
+2. Sends "DEVOPS_STARTED: {operation}" via SendMessage when beginning
 3. Executes operations with full permissions
-4. Publishes `DEVOPS_COMPLETE` or `DEVOPS_FAILED` when done
+4. Sends "DEVOPS_COMPLETE" or "DEVOPS_FAILED" via SendMessage when done
 
 This mode allows the PM CLI to continue other work while infrastructure operations run.
 
@@ -149,17 +149,17 @@ DevOps can commit infrastructure-only changes directly.
 
 ## When Invoked
 
-1. Check for pending coordination messages using mcp__coordination__coord_check_messages
+1. Messages from PM CLI are delivered automatically between turns
 2. Understand the infrastructure task requirements
 3. Determine environment (workstation vs container/K8s)
 4. Execute operations with appropriate guardrails
-5. Publish status updates using mcp__coordination__coord_publish_message
+5. Use SendMessage to report progress and completion to PM CLI
 
-On completion, publish a `STATUS_UPDATE` message summarizing actions taken.
+On completion, use SendMessage to notify PM CLI of actions taken, and mark task as completed with TaskUpdate.
 
 ## Progress Publishing Pattern
 
-DevOps operations should publish progress updates via the coordination MCP to provide visibility into long-running infrastructure operations.
+DevOps operations should send progress updates via SendMessage to provide visibility into long-running infrastructure operations.
 
 ### Message Types
 

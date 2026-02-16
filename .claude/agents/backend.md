@@ -17,11 +17,11 @@ Your domain includes:
 - Work items for P01, P02, P03, P06 features
 
 When invoked:
-1. Check for pending coordination messages using mcp__coordination__coord_check_messages
+1. Messages from PM CLI and teammates are delivered automatically between turns
 2. Understand the task requirements
 3. Follow TDD: write tests first, then implementation
-4. Update tasks.md with progress
-5. Publish status updates using mcp__coordination__coord_publish_message
+4. Use TaskUpdate to track progress on assigned tasks
+5. Use SendMessage to report status or raise blockers to PM CLI
 
 Path restrictions - you CANNOT modify:
 - Frontend files: `src/hitl_ui/`, `docker/hitl-ui/`
@@ -37,7 +37,7 @@ Development standards:
 - Use type hints for all function signatures
 - Write Google-style docstrings for public functions
 
-On completion, publish a STATUS_UPDATE message summarizing work done.
+On completion, use SendMessage to notify PM CLI of work done, and mark task as completed with TaskUpdate.
 
 ## Guardrails Integration
 

@@ -6,12 +6,21 @@ This project uses a tiered environment strategy optimized for different stages o
 
 | Tier | Platform | Use Case | Speed | Cost |
 |------|----------|----------|-------|------|
+| **Workstation** | Bare metal (tmux + worktrees) | Agent dev, multi-session | Instant | Free |
 | **Local Dev** | Docker Compose | Rapid iteration, debugging | Fast | Free |
 | **Local Staging** | K8s (minikube) | K8s testing, Helm validation | Slow | Free |
 | **Remote Lab** | GCP Cloud Run | Demos, quick deploys | Fast | Low |
 | **Remote Staging** | GCP GKE | Pre-production, full K8s | Slow | Medium |
 
 ## When to Use Each Environment
+
+### Workstation (Bare Metal)
+- Multi-session agent development with tmux
+- Hook telemetry and observability via SQLite + dashboard
+- No container overhead, native file access
+- Session management via `tmux-launcher.sh` and `list-sessions.sh`
+- Observability via `start-dashboard.sh` (SQLite at `~/.asdlc/telemetry.db`)
+- **Startup time:** instant
 
 ### Local Dev (Docker Compose)
 - Day-to-day development
@@ -44,6 +53,10 @@ This project uses a tiered environment strategy optimized for different stages o
 ## Quick Reference
 
 ```bash
+# Workstation
+./scripts/sessions/tmux-launcher.sh p11-guardrails  # tmux multi-session
+./scripts/telemetry/start-dashboard.sh               # observability dashboard
+
 # Local Dev
 cd docker && docker compose up -d
 
@@ -61,6 +74,7 @@ helm upgrade --install dox-asdlc ./helm/dox-asdlc
 
 ## Detailed Guides
 
+- [Workstation Observability](../observability/workstation.md)
 - [Local Dev (Docker Compose)](./local-dev.md)
 - [Local Staging (Minikube)](./local-staging.md)
 - [Remote Lab (Cloud Run)](./remote-lab.md)

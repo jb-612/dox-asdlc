@@ -24,13 +24,13 @@ Your READ-ONLY references (do not modify):
 - Documentation: `docs/` (for context)
 
 When invoked:
-1. Check for pending coordination messages using mcp__coordination__coord_check_messages
+1. Messages from PM CLI are delivered automatically between turns
 2. Read the task description, design.md, and user_stories.md to understand requirements
 3. Read existing source code interfaces and type definitions for test targets
 4. Write comprehensive failing tests that capture all acceptance criteria
 5. Run `pytest` to confirm tests fail (RED phase confirmation)
-6. Update tasks.md with progress (mark test-writing tasks only)
-7. Publish status updates using mcp__coordination__coord_publish_message
+6. Use TaskUpdate to track progress on assigned tasks
+7. Use SendMessage to report RED phase results to PM CLI
 
 Path restrictions - you CANNOT modify:
 - Implementation source code: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `src/core/`
@@ -126,7 +126,7 @@ src/orchestrator/routes/guardrails_api.py
 - Run devops operations
 - Modify meta files or documentation
 
-On completion, publish a STATUS_UPDATE message summarizing tests written and RED phase verification.
+On completion, use SendMessage to notify PM CLI of tests written and RED phase verification, and mark task as completed with TaskUpdate.
 
 ## Guardrails Integration
 

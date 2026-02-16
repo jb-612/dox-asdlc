@@ -110,6 +110,7 @@ The project uses a tiered environment strategy:
 
 | Tier | Platform | Use Case |
 |------|----------|----------|
+| **Workstation** | Bare metal (tmux + worktrees) | Agent development, multi-session work |
 | **Local Dev** | Docker Compose | Rapid iteration (recommended for daily dev) |
 | **Local Staging** | K8s (minikube) | Helm chart testing |
 | **Remote Lab** | GCP Cloud Run | Demos |
@@ -343,7 +344,44 @@ python scripts/bootstrap_guardrails.py --dry-run
 | `GUARDRAILS_ENABLED` | `true` | Master enable/disable |
 | `ELASTICSEARCH_URL` | `http://localhost:9200` | ES connection |
 | `GUARDRAILS_CACHE_TTL` | `60.0` | Evaluator cache TTL in seconds |
-| `GUARDRAILS_FALLBACK_MODE` | `permissive` | Behavior when ES unavailable |
+| `GUARDRAILS_FALLBACK_MODE` | `static` | Behavior when ES unavailable: `static` (use local JSON), `permissive` (allow all), `restrictive` (block) |
+| `GUARDRAILS_STATIC_FILE` | `.claude/guardrails-static.json` | Path to static guidelines file (used when fallback_mode=static) |
+
+## Workstation Observability
+
+Hook execution telemetry is captured to a local SQLite database and viewable via a built-in dashboard.
+
+- **Telemetry store**: `~/.asdlc/telemetry.db` (SQLite, WAL mode)
+- **Dashboard**: `http://localhost:9191` (zero-dependency Python server)
+- **JSONL log**: `/tmp/hook-telemetry.jsonl` (backward compat with Prometheus exporter)
+
+```bash
+# Start the dashboard (opens browser on macOS)
+./scripts/telemetry/start-dashboard.sh
+
+# Stop the dashboard
+./scripts/telemetry/start-dashboard.sh --stop
+```
+
+See `docs/observability/workstation.md` for full guide.
+
+## tmux Multi-Session Management
+
+Use tmux to run multiple Claude CLI sessions in parallel, each in its own worktree context:
+
+```bash
+# Launch tmux session with PM + feature contexts + dashboard
+./scripts/sessions/tmux-launcher.sh p11-guardrails p04-review-swarm
+
+# Start a single feature context (with optional --tmux flag to add to tmux session)
+./scripts/start-session.sh p11-guardrails
+./scripts/start-session.sh --tmux p11-guardrails
+
+# List sessions across all sources (tmux, SQLite, worktrees)
+./scripts/sessions/list-sessions.sh
+```
+
+tmux shortcuts: `Ctrl-b n` (next window), `Ctrl-b p` (previous window), `Ctrl-b w` (window list).
 
 ## Related Docs
 
@@ -351,3 +389,6 @@ python scripts/bootstrap_guardrails.py --dry-run
 - @docs/Main_Features.md - Feature specs
 - @docs/K8s_Service_Access.md - K8s networking
 - @docs/guardrails/README.md - Guardrails configuration system
+- @docs/observability/workstation.md - Workstation observability guide
+- @docs/decisions/e2b-evaluation.md - E2B sandbox evaluation (deferred)
+- @docs/decisions/hook-consolidation.md - Hook consolidation ADR

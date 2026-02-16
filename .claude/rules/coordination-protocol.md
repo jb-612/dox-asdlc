@@ -351,6 +351,60 @@ Send a heartbeat to update presence. Called automatically by the MCP server.
 }
 ```
 
+## Native Teams Mode
+
+When using native Claude Agent Teams instead of Redis coordination messaging, the following mappings apply.
+
+### Coordination Model Mapping
+
+| Redis Coordination | Native Teams Equivalent |
+|-------------------|------------------------|
+| `SESSION_START` message | Implicit when teammate joins team via Task tool |
+| `SESSION_END` message | Teammate receives `shutdown_request` and approves |
+| `coord_check_messages` | Messages delivered automatically between turns |
+| `coord_publish_message` | `SendMessage(type: "message", recipient: "...", content: "...")` |
+| `coord_ack_message` | Not needed - messages are processed inline |
+| `coord_get_presence` | Read `~/.claude/teams/{name}/config.json` for team members |
+| `coord_heartbeat` | Automatic - system manages teammate lifecycle |
+| `BLOCKING_ISSUE` | `SendMessage(content: "BLOCKED: {description}")` |
+| `STATUS_UPDATE` | `SendMessage(content: "{status details}")` |
+| `DEVOPS_STARTED` | `SendMessage(content: "DEVOPS_STARTED: {operation}")` |
+| `DEVOPS_COMPLETE` | `SendMessage(content: "DEVOPS_COMPLETE: {summary}")` |
+| `DEVOPS_FAILED` | `SendMessage(content: "DEVOPS_FAILED: {error}")` |
+| `CONTRACT_CHANGE_PROPOSED` | `SendMessage(content: "CONTRACT_CHANGE: {details}")` |
+
+### Team Lifecycle
+
+```
+1. Create   -> TeamCreate(team_name: "<bounded-context>")
+2. Spawn    -> Task(subagent_type: "backend", name: "backend-dev", team_name: "...")
+3. Assign   -> TaskCreate + TaskUpdate(owner: "backend-dev")
+4. Work     -> Teammates execute, send messages, update tasks
+5. Monitor  -> PM CLI processes delivered messages and task updates
+6. Shutdown -> SendMessage(type: "shutdown_request", recipient: "backend-dev")
+7. Cleanup  -> TeamDelete
+```
+
+### What Native Teams Does NOT Replace
+
+Native Agent Teams replaces only the **coordination messaging** layer. The following Redis-backed systems remain unchanged:
+
+| System | Redis Component | Why It Stays |
+|--------|----------------|--------------|
+| Event Bus | Redis Streams (6 consumer groups) | Event-driven task routing, durable delivery |
+| Session persistence | `src/orchestrator/repositories/redis/` | Long-lived session state |
+| Swarm state | `src/workers/swarm/redis_store.py` | Multi-agent review coordination |
+| Graph store | `src/infrastructure/graph_store/redis_store.py` | Dependency graph persistence |
+| Gate locking | Redis locks | Concurrent gate decision safety |
+
+### When to Use Each Mode
+
+| Scenario | Use |
+|----------|-----|
+| Teammates within same PM CLI session | Native Agent Teams |
+| Cross-session worktree coordination | Redis coordination |
+| Both (worktree sessions + in-session teammates) | Dual mode |
+
 ## Error Handling
 
 ### Redis Connection Lost

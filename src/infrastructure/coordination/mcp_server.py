@@ -178,7 +178,7 @@ class CoordinationMCPServer:
                 requires_ack=requires_ack,
             )
 
-            return {
+            result = {
                 "success": True,
                 "message_id": message.id,
                 "type": message.type.value,
@@ -187,6 +187,12 @@ class CoordinationMCPServer:
                 "timestamp": message.timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "requires_ack": message.requires_ack,
             }
+            if os.environ.get("COORDINATION_BACKEND") == "native_teams":
+                result["deprecated_notice"] = (
+                    "Redis coordination messaging is deprecated when COORDINATION_BACKEND=native_teams. "
+                    "Use SendMessage for in-session coordination. See .claude/rules/native-teams.md"
+                )
+            return result
 
         except Exception as e:
             logger.error(f"Failed to publish message: {e}")
@@ -255,11 +261,17 @@ class CoordinationMCPServer:
             client = await self._get_client()
             messages = await client.get_messages(query)
 
-            return {
+            result = {
                 "success": True,
                 "count": len(messages),
                 "messages": [msg.to_dict() for msg in messages],
             }
+            if os.environ.get("COORDINATION_BACKEND") == "native_teams":
+                result["deprecated_notice"] = (
+                    "Redis coordination messaging is deprecated when COORDINATION_BACKEND=native_teams. "
+                    "Messages are delivered automatically in native teams mode. See .claude/rules/native-teams.md"
+                )
+            return result
 
         except Exception as e:
             logger.error(f"Failed to check messages: {e}")
@@ -298,11 +310,17 @@ class CoordinationMCPServer:
             )
 
             if result:
-                return {
+                ack_result: dict[str, Any] = {
                     "success": True,
                     "message_id": message_id,
                     "acknowledged_by": self._instance_id,
                 }
+                if os.environ.get("COORDINATION_BACKEND") == "native_teams":
+                    ack_result["deprecated_notice"] = (
+                        "Redis coordination messaging is deprecated when COORDINATION_BACKEND=native_teams. "
+                        "Message acknowledgment is not needed in native teams mode. See .claude/rules/native-teams.md"
+                    )
+                return ack_result
             else:
                 return {
                     "success": False,
@@ -371,10 +389,16 @@ class CoordinationMCPServer:
 
                 instances[instance_id] = instance_data
 
-            return {
+            result = {
                 "success": True,
                 "instances": instances,
             }
+            if os.environ.get("COORDINATION_BACKEND") == "native_teams":
+                result["deprecated_notice"] = (
+                    "Redis presence tracking is deprecated when COORDINATION_BACKEND=native_teams. "
+                    "Check team config at ~/.claude/teams/{name}/config.json instead. See .claude/rules/native-teams.md"
+                )
+            return result
 
         except Exception as e:
             logger.error(f"Failed to get presence: {e}")

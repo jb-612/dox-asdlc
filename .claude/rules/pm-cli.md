@@ -17,96 +17,61 @@ PM CLI is the coordination layer between the user and specialized agents. It:
 - Tracks progress and handles blockers
 - Makes scope and priority decisions
 
-## Message Check at Every Turn (Mandatory)
+## Message Handling (Mandatory)
 
-PM CLI MUST check for pending coordination messages at the start of every response. This is non-negotiable.
+PM CLI receives messages from teammates and the coordination system automatically.
 
-**Required call at start of every turn:**
-```
-coord_check_messages
-```
+### Native Agent Teams Mode
 
-**Handling pending messages:**
+When running with a native Agent Team (created via TeamCreate):
+- Messages from teammates are **delivered automatically** between turns
+- No manual polling required - the system queues and delivers messages
+- Process delivered messages by priority before other work:
+  1. `BLOCKING_ISSUE` content - Highest, someone is stuck
+  2. `CONTRACT_CHANGE_PROPOSED` content - Needs coordination
+  3. Task completion notifications - Outcomes to track
+  4. Status updates - Informational
 
-1. **Check messages FIRST** - Before any other action, call `coord_check_messages`
-2. **Process by priority** - Handle messages in priority order:
-   - `BLOCKING_ISSUE` - Highest, someone is stuck
-   - `CONTRACT_CHANGE_PROPOSED` - Needs coordination
-   - `DEVOPS_COMPLETE` / `DEVOPS_FAILED` - Task outcomes
-   - `STATUS_UPDATE` - Informational
-3. **Acknowledge processed messages** - Call `coord_ack_message` for each
-4. **Report to user** - Summarize any relevant messages
+### Redis Coordination Mode (Legacy)
 
-**Example interaction pattern:**
+When coordinating with separate CLI sessions via worktrees:
+- Check for pending messages: `coord_check_messages`
+- Process by priority (same as above)
+- Acknowledge processed messages: `coord_ack_message`
+- Report relevant messages to user
 
-```
-User: Continue with the backend implementation
+### Dual Mode
 
-PM CLI response:
-1. [Call coord_check_messages]
-2. Found: BLOCKING_ISSUE from frontend - "API endpoint missing"
-3. Report to user: "Frontend agent is blocked waiting for API endpoint.
-   Should I prioritize that first?"
-4. [Wait for user decision before proceeding]
-```
+Both modes can operate simultaneously. Native teams handle in-session teammates while Redis coordinates cross-session worktree communication.
 
-**Why this matters:**
-- Agents may be blocked waiting for responses
-- Build status may have changed
-- Contract proposals may need review
-- DevOps operations may have completed or failed
+**If no pending messages in either mode:** Continue with requested work.
 
-**If no pending messages:** Continue with requested work.
+## Teammate Availability Check Before Delegation (Mandatory)
 
-## Presence Check Before Delegation (Mandatory)
+Before delegating any task, PM CLI MUST verify the target is available.
 
-Before delegating any task to an agent, PM CLI MUST verify the agent's presence status.
+### Native Agent Teams Mode
 
-**Required call before delegation:**
-```
-coord_get_presence
-```
+When running with a native Agent Team:
+- Check team roster in `~/.claude/teams/{team-name}/config.json`
+- Idle teammates can still receive messages - idle is the normal resting state
+- Sending a message to an idle teammate wakes them up automatically
+- No heartbeat checking needed - the system manages teammate lifecycle
 
-**Handling presence status:**
+### Redis Coordination Mode (Legacy)
 
-1. **Check presence** - Call `coord_get_presence` to see active agents
-2. **Verify target agent** - Check if the agent you want to delegate to is present
-3. **Handle stale agents** - If agent is stale (last heartbeat > 5 minutes ago):
-   - Warn the user about potential delay
-   - Offer to wait or proceed anyway
-4. **Handle absent agents** - If agent has no presence record:
-   - Inform user the agent CLI may not be running
-   - Offer alternatives (run locally, send message anyway, manual instructions)
+When delegating to separate CLI sessions:
+- Call `coord_get_presence` to check active agents
+- Handle stale agents (last heartbeat > 5 minutes): warn user, offer alternatives
+- Handle absent agents (no presence record): inform user, offer alternatives
 
-**Example interaction pattern:**
-
-```
-PM CLI: Preparing to delegate backend implementation task...
-
-1. [Call coord_get_presence]
-2. Result: backend agent last seen 8 minutes ago (stale)
-3. Report to user: "Backend agent appears to be offline or stale
-   (last heartbeat 8 minutes ago).
-
-   Options:
-   A) Send task anyway (agent may pick it up when active)
-   B) Wait for agent to come online
-   C) Run backend work in this session instead"
-4. [Wait for user choice]
-```
-
-**Presence states:**
+**Presence states (Redis mode only):**
 
 | State | Last Heartbeat | Action |
 |-------|----------------|--------|
 | Active | < 5 minutes | Proceed with delegation |
 | Stale | 5-15 minutes | Warn user, offer options |
 | Offline | > 15 minutes or none | Treat as unavailable |
-
-**Why this matters:**
-- Prevents delegating to agents that cannot respond
-- Ensures user knows when agents may be unavailable
-- Allows user to choose alternative approaches
 
 ## Responsibilities
 
@@ -227,6 +192,28 @@ Options:
 - PM CLI outputs context and task description
 - User handles execution manually
 
+**Option D: Create Native Agent Team (Recommended for in-session parallel work)**
+- PM CLI creates a team: `TeamCreate(team_name: "<context>")`
+- Creates tasks from tasks.md using TaskCreate
+- Spawns teammates using Task tool with `team_name` and `name` parameters:
+  ```
+  Task(subagent_type: "backend", name: "backend-dev", team_name: "<context>", prompt: "...")
+  Task(subagent_type: "frontend", name: "frontend-dev", team_name: "<context>", prompt: "...")
+  ```
+- Teammates work in parallel with automatic message delivery
+- PM CLI monitors progress via task list and delivered messages
+- On completion, shut down teammates via SendMessage(type: "shutdown_request")
+- Clean up with TeamDelete
+
+**When to recommend each option:**
+
+| Scenario | Recommended Option |
+|----------|--------------------|
+| Quick, focused single task | A (same session subagent) |
+| Long-running parallel feature work (same session) | D (native Agent Team) |
+| Work requiring separate git branch isolation | B (worktree) |
+| User wants full manual control | C (instructions) |
+
 ### Worktree Delegation Flow
 
 ```
@@ -305,6 +292,12 @@ PM CLI should recommend Option A (same session) when:
 - Quick, single-file changes
 - User wants to watch progress
 - Simple task that won't block long
+
+PM CLI should recommend Option D (native Agent Team) when:
+- Multiple agents need to work in parallel within the same session
+- Tasks can be tracked via TaskCreate/TaskUpdate
+- No git branch isolation needed
+- User wants real-time progress visibility via task list
 
 ### DevOps Operations
 

@@ -16,11 +16,11 @@ Your exclusive domain includes:
 - API contracts: `contracts/`
 
 When invoked:
-1. Check ALL pending coordination messages using mcp__coordination__coord_check_messages
+1. Messages from PM CLI and teammates are delivered automatically between turns
 2. Process messages by priority (see below)
 3. Take appropriate action for each message
-4. Acknowledge processed messages using mcp__coordination__coord_ack_message
-5. Publish resolution messages
+4. Use SendMessage to communicate resolutions to affected teammates
+5. Use TaskUpdate to track task progress
 
 Message priority order:
 1. BLOCKING_ISSUE - Highest priority, someone is blocked
@@ -71,7 +71,7 @@ gh issue create --title "<title>" --body "<body>" --label "<labels>"
 gh issue close <number> --comment "Fixed in <commit-sha>"
 ```
 
-On completion, publish a STATUS_UPDATE summarizing actions taken.
+On completion, use SendMessage to notify PM CLI of actions taken, and mark task as completed with TaskUpdate.
 
 ## Atomic Task Delegation
 
@@ -135,7 +135,7 @@ See `.claude/rules/hitl-gates.md` for full specification.
 
 ## Status Update After Operations (Mandatory)
 
-After completing any significant operation, orchestrator MUST publish a `STATUS_UPDATE` message. This ensures all agents stay informed of progress.
+After completing any significant operation, orchestrator MUST send a status message via SendMessage to PM CLI. This ensures the team stays informed of progress.
 
 **What counts as an "operation":**
 
@@ -150,48 +150,25 @@ After completing any significant operation, orchestrator MUST publish a `STATUS_
 | Reading files (information gathering) | No |
 | Checking messages | No |
 
-**STATUS_UPDATE message format:**
+**Status message format:**
 
-```json
-{
-  "type": "STATUS_UPDATE",
-  "to": ["pm-cli", "backend", "frontend"],
-  "subject": "Brief description of what was done",
-  "body": "Detailed summary including:\n- What operation was performed\n- Relevant file paths or commit SHAs\n- Any follow-up actions needed"
-}
+Use SendMessage to notify PM CLI with a plain-text summary:
+```
+SendMessage(
+  type: "message",
+  recipient: "team-lead",
+  content: "Committed P08-F03 to main. Files: 5 changed, Tests: 12 unit, 3 integration. Feature complete.",
+  summary: "Committed P08-F03 to main"
+)
 ```
 
-**Example STATUS_UPDATE messages:**
+**Example status messages:**
 
-After committing a feature:
-```json
-{
-  "type": "STATUS_UPDATE",
-  "to": ["pm-cli"],
-  "subject": "Committed P08-F03 to main",
-  "body": "Commit: abc1234\nFiles: 5 changed\nTests: 12 unit, 3 integration\n\nFeature complete. Ready for deployment."
-}
-```
+After committing: `"Committed P08-F03 to main. 5 files, 12 unit + 3 integration tests. Ready for deployment."`
 
-After processing a blocking issue:
-```json
-{
-  "type": "STATUS_UPDATE",
-  "to": ["pm-cli", "frontend"],
-  "subject": "Resolved BLOCKING_ISSUE: Missing API endpoint",
-  "body": "Added endpoint POST /api/tasks to contracts/current/orchestrator-api.yaml\n\nFrontend can proceed with integration."
-}
-```
+After resolving a blocker: `"Resolved BLOCKING_ISSUE: Added POST /api/tasks endpoint. Frontend can proceed."`
 
-After creating GitHub issues from review:
-```json
-{
-  "type": "STATUS_UPDATE",
-  "to": ["pm-cli"],
-  "subject": "Created 3 issues from code review",
-  "body": "Issues created:\n- #42: SEC: Input validation missing\n- #43: CODE: Duplicate error handling\n- #44: DEFERRED: Add caching layer\n\nSecurity issue #42 should be prioritized."
-}
-```
+After creating issues: `"Created 3 issues from code review: #42 (SEC: input validation), #43 (CODE: duplicate handling), #44 (DEFERRED: caching)."`
 
 **Why this matters:**
 - PM CLI needs visibility into orchestrator actions
