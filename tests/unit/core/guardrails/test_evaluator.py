@@ -27,7 +27,7 @@ from src.core.guardrails.models import (
     GuidelineCondition,
     TaskContext,
 )
-from src.core.guardrails.evaluator import GuardrailsEvaluator
+from src.core.guardrails.evaluator import GuardrailsEvaluator, StaticGuardrailsStore
 
 
 # ---------------------------------------------------------------------------
@@ -489,3 +489,113 @@ class TestGuardrailsEvaluatorLogDecision:
 
         entry = store.log_audit_entry.call_args[0][0]
         assert "context" not in entry
+
+
+# ===========================================================================
+# StaticGuardrailsStore tests
+# ===========================================================================
+
+class TestStaticGuardrailsStore:
+    """Tests for the StaticGuardrailsStore local-file-backed store."""
+
+    def _write_guidelines_file(self, tmp_path, guidelines: list[Guideline]) -> str:
+        """Write guidelines to a JSON file and return the path."""
+        import json
+        filepath = tmp_path / "guidelines.json"
+        data = [g.to_dict() for g in guidelines]
+        filepath.write_text(json.dumps(data))
+        return str(filepath)
+
+    @pytest.mark.asyncio
+    async def test_list_guidelines_returns_all(self, tmp_path) -> None:
+        """list_guidelines returns all guidelines from the static file."""
+        g1 = _make_guideline(id="g1", enabled=True)
+        g2 = _make_guideline(id="g2", enabled=True)
+        filepath = self._write_guidelines_file(tmp_path, [g1, g2])
+
+        store = StaticGuardrailsStore(filepath)
+        result, count = await store.list_guidelines()
+
+        assert count == 2
+        assert len(result) == 2
+        assert result[0].id == "g1"
+        assert result[1].id == "g2"
+
+    @pytest.mark.asyncio
+    async def test_list_guidelines_filters_enabled(self, tmp_path) -> None:
+        """list_guidelines with enabled=True filters out disabled guidelines."""
+        g1 = _make_guideline(id="g1", enabled=True)
+        g2 = _make_guideline(id="g2", enabled=False)
+        filepath = self._write_guidelines_file(tmp_path, [g1, g2])
+
+        store = StaticGuardrailsStore(filepath)
+        result, count = await store.list_guidelines(enabled=True)
+
+        assert count == 1
+        assert result[0].id == "g1"
+
+    @pytest.mark.asyncio
+    async def test_list_guidelines_missing_file(self, tmp_path) -> None:
+        """list_guidelines returns empty list when file does not exist."""
+        store = StaticGuardrailsStore(tmp_path / "missing.json")
+        result, count = await store.list_guidelines()
+
+        assert count == 0
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_list_guidelines_invalid_json(self, tmp_path) -> None:
+        """list_guidelines returns empty list on invalid JSON."""
+        filepath = tmp_path / "bad.json"
+        filepath.write_text("not valid json{{{")
+
+        store = StaticGuardrailsStore(filepath)
+        result, count = await store.list_guidelines()
+
+        assert count == 0
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_log_audit_entry_returns_uuid(self, tmp_path) -> None:
+        """log_audit_entry is a no-op that returns a UUID string."""
+        store = StaticGuardrailsStore(tmp_path / "any.json")
+        result = await store.log_audit_entry({"event": "test"})
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    @pytest.mark.asyncio
+    async def test_evaluator_works_with_static_store(self, tmp_path) -> None:
+        """GuardrailsEvaluator works with StaticGuardrailsStore."""
+        g = _make_guideline(
+            id="cog-backend",
+            condition=GuidelineCondition(agents=["backend"]),
+            action=_make_action(instruction="Stay in your domain."),
+            priority=900,
+        )
+        filepath = self._write_guidelines_file(tmp_path, [g])
+
+        store = StaticGuardrailsStore(filepath)
+        evaluator = GuardrailsEvaluator(store=store, cache_ttl=0)
+        ctx = _make_context(agent="backend")
+
+        result = await evaluator.get_context(ctx)
+
+        assert len(result.matched_guidelines) == 1
+        assert result.combined_instruction == "Stay in your domain."
+
+    @pytest.mark.asyncio
+    async def test_list_guidelines_caches_after_first_load(self, tmp_path) -> None:
+        """Static store caches guidelines after first load."""
+        g = _make_guideline(id="g1")
+        filepath = self._write_guidelines_file(tmp_path, [g])
+
+        store = StaticGuardrailsStore(filepath)
+        result1, _ = await store.list_guidelines()
+        assert len(result1) == 1
+
+        # File is now cached; even if we delete it, store still returns data
+        import os
+        os.unlink(filepath)
+        result2, _ = await store.list_guidelines()
+        assert len(result2) == 1

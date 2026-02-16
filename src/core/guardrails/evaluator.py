@@ -5,6 +5,9 @@ Provides :class:`GuardrailsEvaluator` which accepts a
 and evaluates which guidelines apply to a given
 :class:`~src.core.guardrails.models.TaskContext`.
 
+Also provides :class:`StaticGuardrailsStore` which reads guidelines from
+a local JSON file, enabling offline/workstation usage without Elasticsearch.
+
 This module is the core of the guardrails evaluation pipeline.  Condition
 matching (T06), conflict resolution (T07), and full evaluation flow (T08)
 will be added incrementally.
@@ -13,8 +16,11 @@ will be added incrementally.
 from __future__ import annotations
 
 import fnmatch
+import json
 import logging
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from src.core.guardrails.models import (
@@ -22,12 +28,77 @@ from src.core.guardrails.models import (
     EvaluatedGuideline,
     GateDecision,
     Guideline,
+    GuidelineCategory,
     GuidelineCondition,
     TaskContext,
 )
 from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
 
 logger = logging.getLogger(__name__)
+
+
+class StaticGuardrailsStore:
+    """A read-only guidelines store backed by a local JSON file.
+
+    Provides enough of the GuardrailsStore interface to work with
+    GuardrailsEvaluator when Elasticsearch is unavailable.
+
+    Args:
+        file_path: Path to the static guidelines JSON file.
+    """
+
+    def __init__(self, file_path: str | Path) -> None:
+        self._file_path = Path(file_path)
+        self._guidelines: list[Guideline] | None = None
+
+    def _load(self) -> list[Guideline]:
+        """Load and cache guidelines from the JSON file."""
+        if self._guidelines is not None:
+            return self._guidelines
+        try:
+            data = json.loads(self._file_path.read_text(encoding="utf-8"))
+            self._guidelines = [Guideline.from_dict(g) for g in data]
+        except Exception as exc:
+            logger.warning("Failed to load static guidelines from %s: %s", self._file_path, exc)
+            self._guidelines = []
+        return self._guidelines
+
+    async def list_guidelines(
+        self,
+        category: GuidelineCategory | None = None,
+        enabled: bool | None = None,
+        page: int = 1,
+        page_size: int = 1000,
+    ) -> tuple[list[Guideline], int]:
+        """Return guidelines from the static file, filtered by enabled status.
+
+        Args:
+            category: Optional category filter.
+            enabled: Optional enabled-state filter.
+            page: Ignored (all results returned).
+            page_size: Ignored (all results returned).
+
+        Returns:
+            A tuple of (guidelines, total_count).
+        """
+        all_guidelines = self._load()
+        filtered = all_guidelines
+        if enabled is not None:
+            filtered = [g for g in filtered if g.enabled == enabled]
+        if category is not None:
+            filtered = [g for g in filtered if g.category == category]
+        return filtered, len(filtered)
+
+    async def log_audit_entry(self, entry: dict[str, Any]) -> str:
+        """No-op audit logging for static store.
+
+        Args:
+            entry: The audit entry (ignored).
+
+        Returns:
+            A generated UUID string.
+        """
+        return str(uuid.uuid4())
 
 
 class GuardrailsEvaluator:
@@ -48,7 +119,7 @@ class GuardrailsEvaluator:
         ```
     """
 
-    def __init__(self, store: GuardrailsStore, cache_ttl: float = 60.0) -> None:
+    def __init__(self, store: GuardrailsStore | StaticGuardrailsStore, cache_ttl: float = 60.0) -> None:
         self._store = store
         self._cache_ttl = cache_ttl
         self._cached_guidelines: list[Guideline] | None = None

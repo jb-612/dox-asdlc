@@ -1,0 +1,248 @@
+[
+  {
+    "id": "cognitive-isolation-backend",
+    "name": "Cognitive Isolation: Backend",
+    "description": "Restricts the backend agent to its domain paths: src/workers/, src/orchestrator/, src/infrastructure/, src/core/, docker/workers/, docker/orchestrator/, and work items P01-P03, P06.",
+    "enabled": true,
+    "category": "cognitive_isolation",
+    "priority": 900,
+    "condition": {
+      "agents": ["backend"]
+    },
+    "action": {
+      "type": "tool_restriction",
+      "instruction": "Backend agent may only modify files under: src/workers/, src/orchestrator/, src/infrastructure/, src/core/, docker/workers/, docker/orchestrator/, .workitems/P01-*, .workitems/P02-*, .workitems/P03-*, .workitems/P06-*. Read access to other paths is allowed for context.",
+      "tools_allowed": ["Read", "Grep", "Glob", "Bash", "Write", "Edit"],
+      "tools_denied": []
+    },
+    "metadata": {"source": "parallel-coordination.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "cognitive-isolation-frontend",
+    "name": "Cognitive Isolation: Frontend",
+    "description": "Restricts the frontend agent to its domain paths: src/hitl_ui/, docker/hitl-ui/, and work items P05.",
+    "enabled": true,
+    "category": "cognitive_isolation",
+    "priority": 900,
+    "condition": {
+      "agents": ["frontend"]
+    },
+    "action": {
+      "type": "tool_restriction",
+      "instruction": "Frontend agent may only modify files under: src/hitl_ui/, docker/hitl-ui/, .workitems/P05-*. Read access to other paths is allowed for context.",
+      "tools_allowed": ["Read", "Grep", "Glob", "Bash", "Write", "Edit"],
+      "tools_denied": []
+    },
+    "metadata": {"source": "parallel-coordination.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "cognitive-isolation-orchestrator",
+    "name": "Cognitive Isolation: Orchestrator",
+    "description": "Restricts the orchestrator agent to meta file paths: CLAUDE.md, README.md, docs/, contracts/, .claude/rules/, .claude/skills/.",
+    "enabled": true,
+    "category": "cognitive_isolation",
+    "priority": 900,
+    "condition": {
+      "agents": ["orchestrator"]
+    },
+    "action": {
+      "type": "tool_restriction",
+      "instruction": "Orchestrator agent owns exclusively: CLAUDE.md, README.md, docs/**, contracts/**, .claude/rules/**, .claude/skills/**. It may read all paths but only write to its owned paths.",
+      "tools_allowed": ["Read", "Grep", "Glob", "Bash", "Write", "Edit"],
+      "tools_denied": []
+    },
+    "metadata": {"source": "parallel-coordination.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "cognitive-isolation-devops",
+    "name": "Cognitive Isolation: DevOps",
+    "description": "Restricts the devops agent to infrastructure paths: docker/, helm/, .github/workflows/, scripts/k8s/, scripts/deploy/.",
+    "enabled": true,
+    "category": "cognitive_isolation",
+    "priority": 900,
+    "condition": {
+      "agents": ["devops"]
+    },
+    "action": {
+      "type": "tool_restriction",
+      "instruction": "DevOps agent may only modify files under: docker/, helm/, .github/workflows/, scripts/k8s/, scripts/deploy/, and infrastructure configuration files. Read access to other paths is allowed for context.",
+      "tools_allowed": ["Read", "Grep", "Glob", "Bash", "Write", "Edit"],
+      "tools_denied": []
+    },
+    "metadata": {"source": "parallel-coordination.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "hitl-gate-devops-invocation",
+    "name": "HITL Gate: DevOps Invocation",
+    "description": "Mandatory HITL gate before any devops operation including docker deploy, kubernetes, cloud infrastructure, or GitHub Actions.",
+    "enabled": true,
+    "category": "hitl_gate",
+    "priority": 950,
+    "condition": {
+      "events": ["devops_invocation"],
+      "gate_types": ["devops_invocation"]
+    },
+    "action": {
+      "type": "hitl_gate",
+      "gate_type": "devops_invocation",
+      "gate_threshold": "mandatory",
+      "instruction": "Before any devops operation, present options: A) Run devops agent here, B) Send to separate DevOps CLI, C) Show instructions for manual execution."
+    },
+    "metadata": {"source": "hitl-gates.md", "gate_number": 1},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "hitl-gate-protected-path-commit",
+    "name": "HITL Gate: Protected Path Commit",
+    "description": "Mandatory HITL gate when committing files in contracts/ or .claude/. These paths affect project configuration and require explicit confirmation.",
+    "enabled": true,
+    "category": "hitl_gate",
+    "priority": 950,
+    "condition": {
+      "events": ["commit"],
+      "paths": ["contracts/*", ".claude/*"],
+      "gate_types": ["protected_path_commit"]
+    },
+    "action": {
+      "type": "hitl_gate",
+      "gate_type": "protected_path_commit",
+      "gate_threshold": "mandatory",
+      "instruction": "Committing to protected path requires explicit Y/N confirmation. N aborts the commit operation."
+    },
+    "metadata": {"source": "hitl-gates.md", "gate_number": 2},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "hitl-gate-contract-change",
+    "name": "HITL Gate: Contract Change",
+    "description": "Mandatory HITL gate when modifying contracts/current/ or contracts/versions/. All consumers must be notified before proceeding.",
+    "enabled": true,
+    "category": "hitl_gate",
+    "priority": 950,
+    "condition": {
+      "events": ["contract_change"],
+      "paths": ["contracts/current/*", "contracts/versions/*"],
+      "gate_types": ["contract_change"]
+    },
+    "action": {
+      "type": "hitl_gate",
+      "gate_type": "contract_change",
+      "gate_threshold": "mandatory",
+      "instruction": "Contract changes affect all consumers. User must confirm that all consumers have been notified (Y/N)."
+    },
+    "metadata": {"source": "hitl-gates.md", "gate_number": 3},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "hitl-gate-destructive-workstation-op",
+    "name": "HITL Gate: Destructive Workstation Operation",
+    "description": "Mandatory HITL gate for destructive operations on workstation: rm -rf, kubectl delete, helm uninstall, docker system prune. Gate is skipped in container/K8s environments.",
+    "enabled": true,
+    "category": "hitl_gate",
+    "priority": 950,
+    "condition": {
+      "events": ["destructive_op"],
+      "gate_types": ["destructive_workstation_op"]
+    },
+    "action": {
+      "type": "hitl_gate",
+      "gate_type": "destructive_workstation_op",
+      "gate_threshold": "mandatory",
+      "instruction": "Destructive operation on workstation detected. Requires explicit Y/N confirmation. Gate is conditional on environment -- skipped in containers and K8s."
+    },
+    "metadata": {"source": "hitl-gates.md", "gate_number": 4},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "tdd-protocol",
+    "name": "TDD Protocol: Red-Green-Refactor",
+    "description": "Enforces the TDD protocol for all implementation tasks. Tests must be written first (RED), then minimal code to pass (GREEN), then refactored while tests remain green (REFACTOR).",
+    "enabled": true,
+    "category": "tdd_protocol",
+    "priority": 800,
+    "condition": {
+      "actions": ["implement", "code", "fix", "refactor"]
+    },
+    "action": {
+      "type": "constraint",
+      "instruction": "Follow Red-Green-Refactor: 1) RED: Write a failing test first. 2) GREEN: Write minimal code to make the test pass. 3) REFACTOR: Clean up while keeping tests green. Never proceed to the next task with failing tests.",
+      "require_tests": true
+    },
+    "metadata": {"source": "workflow.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "context-constraint-commit-size",
+    "name": "Context Constraint: Commit Size",
+    "description": "Limits the number of files that can be included in a single commit to encourage small, focused changes following trunk-based development.",
+    "enabled": true,
+    "category": "context_constraint",
+    "priority": 700,
+    "condition": {
+      "actions": ["commit"]
+    },
+    "action": {
+      "type": "constraint",
+      "instruction": "Commits should be small and focused on one feature. If a commit spans more than 10 files, consider splitting it. All tests must pass before committing.",
+      "max_files": 10,
+      "require_tests": true
+    },
+    "metadata": {"source": "trunk-based-development.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  },
+  {
+    "id": "context-constraint-review-required",
+    "name": "Context Constraint: Review Required",
+    "description": "Requires independent code review before features are committed. The reviewer must never be the creator.",
+    "enabled": true,
+    "category": "context_constraint",
+    "priority": 700,
+    "condition": {
+      "actions": ["complete_feature", "merge"]
+    },
+    "action": {
+      "type": "constraint",
+      "instruction": "Independent code review is required before feature completion. Reviewer must not be the creator. All review findings must become GitHub issues.",
+      "require_review": true
+    },
+    "metadata": {"source": "workflow.md"},
+    "version": 1,
+    "created_at": "2026-02-05T00:00:00+00:00",
+    "updated_at": "2026-02-05T00:00:00+00:00",
+    "created_by": "static"
+  }
+]

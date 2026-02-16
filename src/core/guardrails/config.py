@@ -21,14 +21,19 @@ class GuardrailsConfig:
         index_prefix: Tenant prefix for Elasticsearch indices.
         cache_ttl: Seconds to cache enabled guidelines.
         fallback_mode: Behavior when Elasticsearch is unavailable:
-            "permissive" or "restrictive".
+            "permissive", "restrictive", or "static".
+            When "static", the evaluator falls back to reading
+            guidelines from a local JSON file.
+        static_file_path: Path to static guidelines JSON file,
+            used when fallback_mode is "static".
     """
 
     enabled: bool = True
     elasticsearch_url: str = "http://localhost:9200"
     index_prefix: str = ""
     cache_ttl: float = 60.0
-    fallback_mode: str = "permissive"
+    fallback_mode: str = "static"
+    static_file_path: str = ".claude/guardrails-static.json"
 
     @classmethod
     def from_env(cls) -> GuardrailsConfig:
@@ -42,7 +47,10 @@ class GuardrailsConfig:
             GUARDRAILS_INDEX_PREFIX: Tenant prefix for indices (default: "").
             GUARDRAILS_CACHE_TTL: Cache TTL in seconds (default: 60.0).
             GUARDRAILS_FALLBACK_MODE: Fallback mode when ES unavailable
-                (default: permissive).
+                (default: static). Accepts "permissive", "restrictive",
+                or "static".
+            GUARDRAILS_STATIC_FILE: Path to static guidelines JSON file
+                (default: .claude/guardrails-static.json).
 
         Returns:
             GuardrailsConfig instance with values from environment.
@@ -58,7 +66,10 @@ class GuardrailsConfig:
             ),
             index_prefix=os.getenv("GUARDRAILS_INDEX_PREFIX", ""),
             cache_ttl=float(os.getenv("GUARDRAILS_CACHE_TTL", "60.0")),
-            fallback_mode=os.getenv("GUARDRAILS_FALLBACK_MODE", "permissive"),
+            fallback_mode=os.getenv("GUARDRAILS_FALLBACK_MODE", "static"),
+            static_file_path=os.getenv(
+                "GUARDRAILS_STATIC_FILE", ".claude/guardrails-static.json"
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,4 +84,5 @@ class GuardrailsConfig:
             "index_prefix": self.index_prefix,
             "cache_ttl": self.cache_ttl,
             "fallback_mode": self.fallback_mode,
+            "static_file_path": self.static_file_path,
         }

@@ -27,6 +27,7 @@ def test_from_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
         "GUARDRAILS_INDEX_PREFIX",
         "GUARDRAILS_CACHE_TTL",
         "GUARDRAILS_FALLBACK_MODE",
+        "GUARDRAILS_STATIC_FILE",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -36,7 +37,8 @@ def test_from_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.elasticsearch_url == "http://localhost:9200"
     assert config.index_prefix == ""
     assert config.cache_ttl == 60.0
-    assert config.fallback_mode == "permissive"
+    assert config.fallback_mode == "static"
+    assert config.static_file_path == ".claude/guardrails-static.json"
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +76,7 @@ def test_from_env_partial_custom(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.elasticsearch_url == "http://localhost:9200"  # default
     assert config.index_prefix == "dev"
     assert config.cache_ttl == 60.0  # default
-    assert config.fallback_mode == "permissive"  # default
+    assert config.fallback_mode == "static"  # default
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +128,7 @@ def test_to_dict_includes_all_fields() -> None:
         index_prefix="test_prefix",
         cache_ttl=30.0,
         fallback_mode="restrictive",
+        static_file_path="custom/path.json",
     )
 
     result = config.to_dict()
@@ -136,6 +139,7 @@ def test_to_dict_includes_all_fields() -> None:
         "index_prefix": "test_prefix",
         "cache_ttl": 30.0,
         "fallback_mode": "restrictive",
+        "static_file_path": "custom/path.json",
     }
 
 
@@ -147,6 +151,7 @@ def test_to_dict_round_trip() -> None:
         index_prefix="tenant",
         cache_ttl=45.0,
         fallback_mode="permissive",
+        static_file_path=".claude/guardrails-static.json",
     )
 
     # Serialize
@@ -189,4 +194,37 @@ def test_enabled_false() -> None:
     assert config.elasticsearch_url == "http://localhost:9200"
     assert config.index_prefix == ""
     assert config.cache_ttl == 60.0
-    assert config.fallback_mode == "permissive"
+    assert config.fallback_mode == "static"
+    assert config.static_file_path == ".claude/guardrails-static.json"
+
+
+# ---------------------------------------------------------------------------
+# Test static fallback configuration
+# ---------------------------------------------------------------------------
+
+
+def test_from_env_static_file_custom(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that GUARDRAILS_STATIC_FILE env var is read correctly."""
+    monkeypatch.setenv("GUARDRAILS_STATIC_FILE", "/custom/path/guidelines.json")
+
+    config = GuardrailsConfig.from_env()
+
+    assert config.static_file_path == "/custom/path/guidelines.json"
+
+
+def test_from_env_static_fallback_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that fallback_mode=static is the default."""
+    monkeypatch.delenv("GUARDRAILS_FALLBACK_MODE", raising=False)
+
+    config = GuardrailsConfig.from_env()
+
+    assert config.fallback_mode == "static"
+
+
+def test_to_dict_includes_static_file_path() -> None:
+    """Test that to_dict() includes static_file_path."""
+    config = GuardrailsConfig(static_file_path="my/file.json")
+
+    result = config.to_dict()
+
+    assert result["static_file_path"] == "my/file.json"

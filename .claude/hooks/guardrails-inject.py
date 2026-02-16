@@ -43,29 +43,64 @@ def ensure_project_on_path():
 async def evaluate_guardrails(context_dict: dict) -> dict | None:
     """Call the evaluator to get matching guidelines.
 
+    Tries Elasticsearch first. If ES is unavailable and fallback_mode is
+    "static", falls back to StaticGuardrailsStore reading from a local
+    JSON file.
+
     Returns the EvaluatedContext as a dict, or None on error.
     """
     try:
         from src.core.guardrails.config import GuardrailsConfig
         from src.core.guardrails.evaluator import GuardrailsEvaluator
         from src.core.guardrails.models import TaskContext
-        from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
 
         config = GuardrailsConfig.from_env()
         if not config.enabled:
             return None
 
-        from elasticsearch import AsyncElasticsearch
-        es_client = AsyncElasticsearch(hosts=[config.elasticsearch_url])
-        try:
-            store = GuardrailsStore(es_client=es_client, index_prefix=config.index_prefix)
-            evaluator = GuardrailsEvaluator(store=store, cache_ttl=config.cache_ttl)
+        store = None
+        es_client = None
 
+        # Try Elasticsearch first
+        try:
+            from elasticsearch import AsyncElasticsearch
+            from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+            es_client = AsyncElasticsearch(
+                hosts=[config.elasticsearch_url],
+                request_timeout=5,
+            )
+            # Quick connectivity check
+            await es_client.ping()
+            store = GuardrailsStore(es_client=es_client, index_prefix=config.index_prefix)
+        except Exception:
+            # ES unavailable -- close client if opened
+            if es_client is not None:
+                try:
+                    await es_client.close()
+                except Exception:
+                    pass
+                es_client = None
+
+            # Fall back to static store if configured
+            if config.fallback_mode == "static":
+                from src.core.guardrails.evaluator import StaticGuardrailsStore
+                root = get_project_root()
+                static_path = root / config.static_file_path
+                if static_path.exists():
+                    store = StaticGuardrailsStore(static_path)
+
+        if store is None:
+            return None
+
+        try:
+            evaluator = GuardrailsEvaluator(store=store, cache_ttl=config.cache_ttl)
             task_context = TaskContext(**context_dict)
             result = await evaluator.get_context(task_context)
             return result.to_dict()
         finally:
-            await es_client.close()
+            if es_client is not None:
+                await es_client.close()
     except Exception:
         return None
 
