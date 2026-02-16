@@ -89,6 +89,12 @@ main() {
         esac
     done
 
+    # Deprecation warning for native teams mode
+    if [[ "${COORDINATION_BACKEND:-}" == "native_teams" ]]; then
+        echo "WARNING: Redis coordination messaging is deprecated when COORDINATION_BACKEND=native_teams." >&2
+        echo "         Use SendMessage for in-session coordination. See .claude/rules/native-teams.md" >&2
+    fi
+
     # Validate required arguments
     if [[ -z "$type" || -z "$subject" || -z "$description" ]]; then
         echo "Error: Missing required arguments"; usage; exit 1

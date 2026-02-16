@@ -22,17 +22,12 @@ else
 fi
 
 # =============================================================================
-# Instance Identity (read from identity file, not env vars)
+# Instance Identity (from CLAUDE_INSTANCE_ID env var)
 # =============================================================================
 
-# Get instance ID from the identity file (canonical source of truth)
+# Get instance ID from the CLAUDE_INSTANCE_ID environment variable
 get_instance_id() {
-    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
-    if [[ -f "$identity_file" ]]; then
-        $PYTHON_CMD -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo ""
-    else
-        echo ""
-    fi
+    echo "${CLAUDE_INSTANCE_ID:-pm}"
 }
 
 # Cache the instance ID for the session

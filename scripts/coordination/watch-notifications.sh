@@ -115,6 +115,12 @@ main() {
             ;;
     esac
 
+    # Deprecation warning for native teams mode
+    if [[ "${COORDINATION_BACKEND:-}" == "native_teams" ]]; then
+        echo "WARNING: Redis notification watching is deprecated when COORDINATION_BACKEND=native_teams." >&2
+        echo "         Notifications are delivered automatically in native teams mode. See .claude/rules/native-teams.md" >&2
+    fi
+
     # Get instance ID from identity file
     local instance_id
     instance_id=$(get_instance_id)
