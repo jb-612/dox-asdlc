@@ -12,6 +12,7 @@ import type { GraphData, GraphNode, GraphEdge, CorrelationType } from '../types/
 import { getWorkItemGraphData } from './mocks/workItemCorrelations';
 
 const API_BASE = '/api/brainflare';
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Original user-submitted mock nodes
 const userMockNodes: GraphNode[] = [
@@ -100,7 +101,7 @@ const mockGraphData: GraphData = {
  * Fetch graph data (nodes and edges)
  * @param useMock - If true, return mock data; otherwise fetch from API
  */
-export async function fetchGraph(useMock: boolean = true): Promise<GraphData> {
+export async function fetchGraph(useMock: boolean = USE_MOCKS): Promise<GraphData> {
   if (useMock) {
     await new Promise((r) => setTimeout(r, 300));
     // Return a deep copy to prevent mutation issues
@@ -144,7 +145,7 @@ export interface CreateCorrelationRequest {
  */
 export async function createCorrelation(
   request: CreateCorrelationRequest,
-  useMock: boolean = true
+  useMock: boolean = USE_MOCKS
 ): Promise<void> {
   if (useMock) {
     const newEdge: GraphEdge = {
@@ -173,7 +174,7 @@ export async function deleteCorrelation(
   sourceIdeaId: string,
   targetIdeaId: string,
   correlationType: CorrelationType,
-  useMock: boolean = true
+  useMock: boolean = USE_MOCKS
 ): Promise<void> {
   if (useMock) {
     const idx = mockGraphData.edges.findIndex((e) => e.id === correlationId);

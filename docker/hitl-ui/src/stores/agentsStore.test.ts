@@ -38,11 +38,6 @@ describe('agentsStore', () => {
       expect(state.timeRange).toBe('1h');
     });
 
-    it('has wsConnected as false by default', () => {
-      const state = useAgentsStore.getState();
-      expect(state.wsConnected).toBe(false);
-    });
-
     it('has auto-refresh enabled by default', () => {
       const state = useAgentsStore.getState();
       expect(state.autoRefresh).toBe(true);
@@ -214,21 +209,6 @@ describe('agentsStore', () => {
     });
   });
 
-  describe('setWsConnected', () => {
-    it('sets wsConnected to true', () => {
-      useAgentsStore.getState().setWsConnected(true);
-
-      expect(useAgentsStore.getState().wsConnected).toBe(true);
-    });
-
-    it('sets wsConnected to false', () => {
-      useAgentsStore.getState().setWsConnected(true);
-      useAgentsStore.getState().setWsConnected(false);
-
-      expect(useAgentsStore.getState().wsConnected).toBe(false);
-    });
-  });
-
   describe('updateAgentStatus', () => {
     it('updates status of existing agent', () => {
       const mockAgents: AgentStatus[] = [
@@ -360,7 +340,6 @@ describe('agentsStore', () => {
         },
       ]);
       useAgentsStore.getState().setTimeRange('24h');
-      useAgentsStore.getState().setWsConnected(true);
       useAgentsStore.getState().setAutoRefresh(false);
       useAgentsStore.getState().setLogLevelFilter('error');
       useAgentsStore.getState().setLogSearchTerm('test');
@@ -374,7 +353,6 @@ describe('agentsStore', () => {
       expect(state.selectedAgentId).toBeNull();
       expect(state.logs).toEqual([]);
       expect(state.timeRange).toBe(DEFAULT_TIME_RANGE);
-      expect(state.wsConnected).toBe(false);
       expect(state.autoRefresh).toBe(true);
       expect(state.refreshInterval).toBe(DEFAULT_REFRESH_INTERVAL);
       expect(state.logLevelFilter).toBeNull();

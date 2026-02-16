@@ -59,9 +59,8 @@ export async function getDevOpsActivity(): Promise<DevOpsActivityResponse> {
     const response = await apiClient.get<DevOpsActivityResponse>('/devops/activity');
     return response.data;
   } catch (error) {
-    // Fallback to mock data if API is unavailable
-    console.warn('DevOps API unavailable, using mock data:', error);
-    return getMockDevOpsActivity();
+    console.error('DevOps API unavailable:', error);
+    throw error;
   }
 }
 

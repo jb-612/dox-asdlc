@@ -966,12 +966,7 @@ export async function fetchSecretsHealth(): Promise<SecretsHealthResponse> {
     return response.data;
   } catch (error) {
     console.error('Failed to fetch secrets health:', error);
-    // Return a degraded status on error rather than throwing
-    return {
-      status: 'unhealthy',
-      backend: 'env',
-      error: createErrorMessage(error, 'Failed to check secrets backend health'),
-    };
+    throw error;
   }
 }
 

@@ -32,6 +32,7 @@ import {
   agentsQueryKeys,
 } from '../api/agents';
 import { useAgentsStore } from '../stores/agentsStore';
+import { useEventStore } from '../stores/eventStore';
 import type { MetricsTimeRange, LogLevel } from '../types/agents';
 
 export interface AgentsDashboardPageProps {
@@ -48,7 +49,6 @@ export default function AgentsDashboardPage({ className }: AgentsDashboardPagePr
     selectAgent,
     timeRange,
     setTimeRange,
-    wsConnected,
     autoRefresh,
     toggleAutoRefresh,
     logLevelFilter,
@@ -57,6 +57,9 @@ export default function AgentsDashboardPage({ className }: AgentsDashboardPagePr
     setLogSearchTerm,
     getEffectiveRefreshInterval,
   } = useAgentsStore();
+
+  // WebSocket connection state from event store (wired to actual WebSocket lifecycle)
+  const wsConnected = useEventStore((state) => state.connected);
 
   // Get effective refresh interval
   const refreshInterval = getEffectiveRefreshInterval();

@@ -62,7 +62,7 @@ export async function fetchAgents(): Promise<AgentStatus[]> {
     return response.data.agents;
   } catch (error) {
     console.error('Failed to fetch agents:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -85,7 +85,7 @@ export async function fetchAgentLogs(
     return response.data.logs;
   } catch (error) {
     console.error('Failed to fetch agent logs:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -109,7 +109,7 @@ export async function fetchAgentMetrics(
     return response.data;
   } catch (error) {
     console.error('Failed to fetch agent metrics:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -131,7 +131,7 @@ export async function fetchAgentTimeline(
     return response.data.timeline;
   } catch (error) {
     console.error('Failed to fetch agent timeline:', error);
-    return null;
+    throw error;
   }
 }
 

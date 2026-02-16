@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AgentsDashboardPage from './AgentsDashboardPage';
 import * as agentsApi from '../api/agents';
+import { useEventStore } from '../stores/eventStore';
 import type { AgentStatus, AgentMetricsResponse, TimelineData } from '../types/agents';
 
 // Mock ResizeObserver
@@ -96,6 +97,9 @@ describe('AgentsDashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // Reset event store to disconnected state
+    useEventStore.setState({ connected: false });
+
     // Default mock implementations
     vi.mocked(agentsApi.useAgents).mockReturnValue({
       data: mockAgents,
@@ -158,9 +162,18 @@ describe('AgentsDashboardPage', () => {
   });
 
   describe('WebSocket Status', () => {
-    it('shows disconnected status indicator', () => {
+    it('shows disconnected status indicator by default', () => {
       renderPage();
-      expect(screen.getByTestId('ws-status')).toBeInTheDocument();
+      const wsStatus = screen.getByTestId('ws-status');
+      expect(wsStatus).toBeInTheDocument();
+      expect(wsStatus).toHaveTextContent('Disconnected');
+    });
+
+    it('shows connected status when event store reports connected', () => {
+      useEventStore.setState({ connected: true });
+      renderPage();
+      const wsStatus = screen.getByTestId('ws-status');
+      expect(wsStatus).toHaveTextContent('Connected');
     });
   });
 

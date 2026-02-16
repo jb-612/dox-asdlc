@@ -2,7 +2,11 @@
  * Agents Dashboard Zustand Store (P05-F12)
  *
  * Manages UI state for the agents dashboard including
- * agent selection, logs, filters, and WebSocket connection state.
+ * agent selection, logs, filters, and auto-refresh settings.
+ *
+ * Note: WebSocket connection state lives in eventStore, not here.
+ * The eventStore.connected field is wired to actual WebSocket lifecycle
+ * events in the WebSocketClient utility (see utils/websocket.ts).
  */
 
 import { create } from 'zustand';
@@ -29,10 +33,6 @@ export interface AgentsState {
   /** Log search term */
   logSearchTerm: string;
 
-  // Connection state
-  /** WebSocket connection status */
-  wsConnected: boolean;
-
   // UI state
   /** Whether auto-refresh is enabled */
   autoRefresh: boolean;
@@ -45,7 +45,6 @@ export interface AgentsState {
   setLogs: (logs: AgentLog[]) => void;
   addLog: (log: AgentLog) => void;
   setTimeRange: (range: MetricsTimeRange) => void;
-  setWsConnected: (connected: boolean) => void;
   updateAgentStatus: (agentId: string, update: Partial<AgentStatus>) => void;
   toggleAutoRefresh: () => void;
   setAutoRefresh: (enabled: boolean) => void;
@@ -79,7 +78,6 @@ const initialState = {
   timeRange: DEFAULT_TIME_RANGE,
   logLevelFilter: null as LogLevel | null,
   logSearchTerm: '',
-  wsConnected: false,
   autoRefresh: true,
   refreshInterval: DEFAULT_REFRESH_INTERVAL,
 };
@@ -111,8 +109,6 @@ export const useAgentsStore = create<AgentsState>((set, get) => ({
     })),
 
   setTimeRange: (range) => set({ timeRange: range }),
-
-  setWsConnected: (connected) => set({ wsConnected: connected }),
 
   updateAgentStatus: (agentId, update) =>
     set((state) => ({
@@ -153,7 +149,6 @@ export const selectAgents = (state: AgentsState) => state.agents;
 export const selectSelectedAgentId = (state: AgentsState) => state.selectedAgentId;
 export const selectLogs = (state: AgentsState) => state.logs;
 export const selectTimeRange = (state: AgentsState) => state.timeRange;
-export const selectWsConnected = (state: AgentsState) => state.wsConnected;
 export const selectAutoRefresh = (state: AgentsState) => state.autoRefresh;
 export const selectLogLevelFilter = (state: AgentsState) => state.logLevelFilter;
 export const selectLogSearchTerm = (state: AgentsState) => state.logSearchTerm;

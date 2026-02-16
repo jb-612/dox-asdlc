@@ -127,9 +127,8 @@ export async function getClusterHealth(): Promise<ClusterHealth> {
     const response = await apiClient.get<{ health: ClusterHealth; mock_mode: boolean }>('/k8s/health');
     return response.data.health;
   } catch (error) {
-    // Fall back to mock data if API is unavailable
-    console.warn('K8s health API unavailable, using mock data:', error);
-    return { ...mockClusterHealth, lastUpdated: new Date().toISOString() };
+    console.error('K8s health API unavailable:', error);
+    throw error;
   }
 }
 
@@ -148,8 +147,8 @@ export async function getNamespaces(): Promise<string[]> {
     const response = await apiClient.get<K8sNamespacesResponse>('/k8s/namespaces');
     return response.data.namespaces;
   } catch (error) {
-    console.warn('K8s namespaces API unavailable, using mock data:', error);
-    return mockNamespaces;
+    console.error('K8s namespaces API unavailable:', error);
+    throw error;
   }
 }
 
@@ -170,8 +169,8 @@ export async function getNodes(): Promise<K8sNode[]> {
     const response = await apiClient.get<K8sNodesResponse>('/k8s/nodes');
     return response.data.nodes;
   } catch (error) {
-    console.warn('K8s nodes API unavailable, using mock data:', error);
-    return mockNodes;
+    console.error('K8s nodes API unavailable:', error);
+    throw error;
   }
 }
 
@@ -190,8 +189,8 @@ export async function getNode(name: string): Promise<K8sNode | null> {
     const response = await apiClient.get<K8sNode>(`/k8s/nodes/${name}`);
     return response.data;
   } catch (error) {
-    console.warn(`K8s node ${name} API unavailable, using mock data:`, error);
-    return getNodeByName(name) || null;
+    console.error(`K8s node ${name} API unavailable:`, error);
+    throw error;
   }
 }
 
@@ -231,14 +230,8 @@ export async function getPods(params?: K8sPodsQueryParams): Promise<K8sPod[]> {
     const response = await apiClient.get<K8sPodsResponse>('/k8s/pods', { params });
     return response.data.pods;
   } catch (error) {
-    console.warn('K8s pods API unavailable, using mock data:', error);
-    const filtered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
-    if (params?.limit !== undefined || params?.offset !== undefined) {
-      const offset = params?.offset ?? 0;
-      const limit = params?.limit ?? 50;
-      return filtered.slice(offset, offset + limit);
-    }
-    return filtered;
+    console.error('K8s pods API unavailable:', error);
+    throw error;
   }
 }
 
@@ -269,14 +262,8 @@ export async function getPodsWithTotal(params?: K8sPodsQueryParams): Promise<Pod
       total: response.data.total,
     };
   } catch (error) {
-    console.warn('K8s pods API unavailable, using mock data:', error);
-    const allFiltered = filterPods(params?.namespace, params?.status, params?.nodeName, params?.search);
-    const offset = params?.offset ?? 0;
-    const limit = params?.limit ?? 50;
-    return {
-      pods: allFiltered.slice(offset, offset + limit),
-      total: allFiltered.length,
-    };
+    console.error('K8s pods API unavailable:', error);
+    throw error;
   }
 }
 
@@ -295,8 +282,8 @@ export async function getPod(namespace: string, name: string): Promise<K8sPod | 
     const response = await apiClient.get<K8sPod>(`/k8s/pods/${namespace}/${name}`);
     return response.data;
   } catch (error) {
-    console.warn(`K8s pod ${namespace}/${name} API unavailable, using mock data:`, error);
-    return getPodByName(namespace, name) || null;
+    console.error(`K8s pod ${namespace}/${name} API unavailable:`, error);
+    throw error;
   }
 }
 
@@ -327,10 +314,8 @@ export async function getPodLogs(
     const response = await apiClient.get<string>(`/k8s/pods/${namespace}/${name}/logs`, { params });
     return response.data;
   } catch (error) {
-    console.warn(`K8s pod logs API unavailable, using mock data:`, error);
-    return `[Mock logs for ${namespace}/${name}${container ? `/${container}` : ''}]
-2026-01-25T10:00:00Z INFO  Container started (mock)
-2026-01-25T10:00:01Z WARN  API unavailable, showing mock logs`;
+    console.error('K8s pod logs API unavailable:', error);
+    throw error;
   }
 }
 
@@ -353,11 +338,8 @@ export async function getServices(namespace?: string): Promise<K8sService[]> {
     const response = await apiClient.get<K8sServicesResponse>('/k8s/services', { params });
     return response.data.services;
   } catch (error) {
-    console.warn('K8s services API unavailable, using mock data:', error);
-    if (namespace) {
-      return mockServices.filter((s) => s.namespace === namespace);
-    }
-    return mockServices;
+    console.error('K8s services API unavailable:', error);
+    throw error;
   }
 }
 
@@ -380,11 +362,8 @@ export async function getIngresses(namespace?: string): Promise<K8sIngress[]> {
     const response = await apiClient.get<K8sIngressesResponse>('/k8s/ingresses', { params });
     return response.data.ingresses;
   } catch (error) {
-    console.warn('K8s ingresses API unavailable, using mock data:', error);
-    if (namespace) {
-      return mockIngresses.filter((i) => i.namespace === namespace);
-    }
-    return mockIngresses;
+    console.error('K8s ingresses API unavailable:', error);
+    throw error;
   }
 }
 
@@ -405,8 +384,8 @@ export async function getMetricsHistory(interval: MetricsInterval): Promise<Metr
     });
     return response.data;
   } catch (error) {
-    console.warn('K8s metrics API unavailable, using mock data:', error);
-    return getMockMetricsHistory(interval);
+    console.error('K8s metrics API unavailable:', error);
+    throw error;
   }
 }
 
@@ -426,8 +405,8 @@ export async function executeCommand(request: CommandRequest): Promise<CommandRe
     const response = await apiClient.post<CommandResponse>('/k8s/exec', request);
     return response.data;
   } catch (error) {
-    console.warn('K8s exec API unavailable, using mock response:', error);
-    return getMockCommandResponse(request.command);
+    console.error('K8s exec API unavailable:', error);
+    throw error;
   }
 }
 
@@ -447,8 +426,8 @@ export async function runHealthCheck(type: HealthCheckType): Promise<HealthCheck
     const response = await apiClient.get<HealthCheckResult>(`/k8s/health-check/${type}`);
     return response.data;
   } catch (error) {
-    console.warn(`K8s health check ${type} API unavailable, using mock data:`, error);
-    return getMockHealthCheckResult(type);
+    console.error(`K8s health check ${type} API unavailable:`, error);
+    throw error;
   }
 }
 

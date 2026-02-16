@@ -65,12 +65,10 @@ describe('agents API', () => {
       expect(result).toEqual(mockResponse.agents);
     });
 
-    it('returns empty array on error', async () => {
+    it('throws on error', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
 
-      const result = await fetchAgents();
-
-      expect(result).toEqual([]);
+      await expect(fetchAgents()).rejects.toThrow('Network error');
     });
   });
 
@@ -124,12 +122,10 @@ describe('agents API', () => {
       });
     });
 
-    it('returns empty array on error', async () => {
+    it('throws on error', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
 
-      const result = await fetchAgentLogs('agent-1');
-
-      expect(result).toEqual([]);
+      await expect(fetchAgentLogs('agent-1')).rejects.toThrow('Network error');
     });
   });
 
@@ -190,12 +186,10 @@ describe('agents API', () => {
       });
     });
 
-    it('returns null on error', async () => {
+    it('throws on error', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
 
-      const result = await fetchAgentMetrics();
-
-      expect(result).toBeNull();
+      await expect(fetchAgentMetrics()).rejects.toThrow('Network error');
     });
   });
 
@@ -225,12 +219,10 @@ describe('agents API', () => {
       expect(result).toEqual(mockResponse.timeline);
     });
 
-    it('returns null on error', async () => {
+    it('throws on error', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
 
-      const result = await fetchAgentTimeline('1h');
-
-      expect(result).toBeNull();
+      await expect(fetchAgentTimeline('1h')).rejects.toThrow('Network error');
     });
   });
 

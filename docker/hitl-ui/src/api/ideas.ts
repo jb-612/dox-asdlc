@@ -2,7 +2,7 @@
  * Ideas API client for Brainflare Hub (P08-F05)
  *
  * Handles CRUD operations for ideas with mock mode support.
- * Enable mock mode with VITE_USE_MOCK_API=true
+ * Enable mock mode with VITE_USE_MOCKS=true
  */
 
 import type {
@@ -15,7 +15,7 @@ import type {
 import { mockIdeas, generateMockIdea, simulateIdeaDelay } from './mocks/ideas';
 
 const API_BASE = '/api/brainflare/ideas';
-const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
+const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 /**
  * Fetch a paginated list of ideas with optional filters

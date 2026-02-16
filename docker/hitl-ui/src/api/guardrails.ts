@@ -76,9 +76,9 @@ export async function listGuidelines(params?: GuidelinesListParams): Promise<Gui
   try {
     const { data } = await apiClient.get<GuidelinesListResponse>('/guardrails', { params });
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    return getMockGuidelinesListResponse(params);
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -96,11 +96,9 @@ export async function getGuideline(id: string): Promise<Guideline> {
   try {
     const { data } = await apiClient.get<Guideline>(`/guardrails/${id}`);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    const found = mockGuidelines.find((g) => g.id === id);
-    if (!found) throw new Error(`Guideline not found: ${id}`);
-    return found;
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -130,22 +128,9 @@ export async function createGuideline(body: GuidelineCreateRequest): Promise<Gui
   try {
     const { data } = await apiClient.post<Guideline>('/guardrails', body);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, returning mock response');
-    return {
-      id: `gl-mock-${Date.now()}`,
-      name: body.name,
-      description: body.description ?? '',
-      category: body.category,
-      priority: body.priority ?? 500,
-      enabled: body.enabled ?? true,
-      condition: body.condition,
-      action: body.action,
-      version: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: 'mock-user',
-    };
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -169,16 +154,9 @@ export async function updateGuideline(id: string, body: GuidelineUpdateRequest):
   try {
     const { data } = await apiClient.put<Guideline>(`/guardrails/${id}`, body);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, returning mock response');
-    const existing = mockGuidelines.find((g) => g.id === id);
-    if (!existing) throw new Error(`Guideline not found: ${id}`);
-    return {
-      ...existing,
-      ...body,
-      version: existing.version + 1,
-      updated_at: new Date().toISOString(),
-    };
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -193,8 +171,9 @@ export async function deleteGuideline(id: string): Promise<void> {
 
   try {
     await apiClient.delete(`/guardrails/${id}`);
-  } catch {
-    console.warn('Guardrails API unavailable, simulating delete');
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -212,11 +191,9 @@ export async function toggleGuideline(id: string): Promise<Guideline> {
   try {
     const { data } = await apiClient.post<Guideline>(`/guardrails/${id}/toggle`);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    const existing = mockGuidelines.find((g) => g.id === id);
-    if (!existing) throw new Error(`Guideline not found: ${id}`);
-    return { ...existing, enabled: !existing.enabled, updated_at: new Date().toISOString() };
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -232,9 +209,9 @@ export async function listAuditLogs(params?: AuditListParams): Promise<AuditLogR
   try {
     const { data } = await apiClient.get<AuditLogResponse>('/guardrails/audit', { params });
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    return getMockAuditLogResponse(params);
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -251,9 +228,9 @@ export async function evaluateContext(body: TaskContextRequest): Promise<Evaluat
   try {
     const { data } = await apiClient.post<EvaluatedContextResponse>('/guardrails/evaluate', body);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    return mockEvaluatedContext;
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -273,12 +250,9 @@ export async function exportGuidelines(category?: string): Promise<Guideline[]> 
     const params = category ? { category } : undefined;
     const { data } = await apiClient.get<Guideline[]>('/guardrails/export', { params });
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, using mock data');
-    if (category) {
-      return mockGuidelines.filter((g) => g.category === category);
-    }
-    return [...mockGuidelines];
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 
@@ -294,9 +268,9 @@ export async function importGuidelines(guidelines: GuidelineCreateRequest[]): Pr
   try {
     const { data } = await apiClient.post<ImportResult>('/guardrails/import', guidelines);
     return data;
-  } catch {
-    console.warn('Guardrails API unavailable, returning mock result');
-    return { imported: guidelines.length, errors: [] };
+  } catch (error) {
+    console.error('Guardrails API unavailable:', error);
+    throw error;
   }
 }
 

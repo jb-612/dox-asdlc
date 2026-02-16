@@ -2,7 +2,7 @@
  * Classification API client (P08-F03)
  *
  * Handles classification operations and taxonomy management.
- * Enable mock mode with VITE_USE_MOCK_API=true
+ * Enable mock mode with VITE_USE_MOCKS=true
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -27,7 +27,7 @@ import {
 } from './mocks/classification';
 
 const API_BASE = '/api';
-const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true';
+const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ============================================================================
 // Query Keys

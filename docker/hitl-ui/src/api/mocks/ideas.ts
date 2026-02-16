@@ -2,7 +2,7 @@
  * Mock data for Brainflare Hub Ideas (P08-F05)
  *
  * Provides mock ideas for development without a backend.
- * Enable with VITE_USE_MOCK_API=true in .env.local
+ * Enable with VITE_USE_MOCKS=true in .env.local
  */
 
 import type { Idea, CreateIdeaRequest } from '../../types/ideas';

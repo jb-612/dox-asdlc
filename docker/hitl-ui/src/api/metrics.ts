@@ -69,8 +69,9 @@ export async function getMetricsHealth(options?: MetricsQueryOptions): Promise<M
   try {
     const response = await apiClient.get<MetricsHealthResponse>('/metrics/health');
     return response.data;
-  } catch {
-    return { status: 'unhealthy' };
+  } catch (error) {
+    console.error('Failed to fetch metrics health:', error);
+    throw error;
   }
 }
 
