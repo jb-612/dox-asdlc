@@ -29,6 +29,8 @@ export default function CostDashboardPage() {
     setGroupBy,
     autoRefresh,
     toggleAutoRefresh,
+    currentPage,
+    setCurrentPage,
   } = useCostsStore();
 
   const refreshInterval = autoRefresh ? 30000 : undefined;
@@ -43,7 +45,7 @@ export default function CostDashboardPage() {
   const {
     data: recordsData,
     isLoading: recordsLoading,
-  } = useCostRecords(undefined, refreshInterval);
+  } = useCostRecords({ page: currentPage, pageSize: 50 }, refreshInterval);
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: costsQueryKeys.all });
@@ -57,16 +59,34 @@ export default function CostDashboardPage() {
   );
 
   const handlePageChange = useCallback(
-    (_page: number) => {
-      // Page change would refetch with new page param
-      // For now, records are fetched without pagination override
+    (page: number) => {
+      setCurrentPage(page);
     },
-    []
+    [setCurrentPage]
   );
 
   const handleRetry = useCallback(() => {
     refetchSummary();
   }, [refetchSummary]);
+
+  const isInitialLoading = summaryLoading && !summaryData && recordsLoading && !recordsData;
+
+  if (isInitialLoading) {
+    return (
+      <div
+        data-testid="cost-dashboard-page"
+        role="main"
+        className="h-full flex flex-col bg-bg-primary"
+      >
+        <div className="flex-1 flex items-center justify-center">
+          <div data-testid="loading-state" className="text-center">
+            <div className="animate-spin h-8 w-8 border-2 border-accent-blue border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-text-secondary">Loading cost data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (summaryError && !summaryData) {
     return (
@@ -85,6 +105,26 @@ export default function CostDashboardPage() {
             >
               Retry
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isEmpty = summaryData && summaryData.groups.length === 0 && summaryData.total_cost_usd === 0;
+
+  if (isEmpty && !summaryLoading) {
+    return (
+      <div
+        data-testid="cost-dashboard-page"
+        role="main"
+        className="h-full flex flex-col bg-bg-primary"
+      >
+        <div className="flex-1 flex items-center justify-center">
+          <div data-testid="empty-state" className="text-center">
+            <CurrencyDollarIcon className="h-16 w-16 text-text-tertiary mx-auto mb-4" />
+            <h2 className="text-lg font-medium text-text-primary mb-2">No Cost Data</h2>
+            <p className="text-text-secondary">No cost records found for the selected time range.</p>
           </div>
         </div>
       </div>

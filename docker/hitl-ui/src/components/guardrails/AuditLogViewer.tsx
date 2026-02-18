@@ -5,7 +5,7 @@
  * Supports filtering by event type and guideline ID, pagination, and CSV export.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuditLogs } from '../../api/guardrails';
 import type { AuditListParams, AuditLogEntry } from '../../api/types/guardrails';
 
@@ -164,6 +164,11 @@ export function AuditLogViewer({ guidelineId }: AuditLogViewerProps) {
   const [eventTypeFilter, setEventTypeFilter] = useState<string>('');
   const [guidelineFilter, setGuidelineFilter] = useState<string>(guidelineId ?? '');
   const [page, setPage] = useState<number>(1);
+
+  useEffect(() => {
+    setGuidelineFilter(guidelineId ?? '');
+    setPage(1);
+  }, [guidelineId]);
 
   // -------------------------------------------------------------------------
   // Build query params

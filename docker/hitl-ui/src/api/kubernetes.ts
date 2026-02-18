@@ -30,6 +30,7 @@ import {
 } from './mocks/index';
 import type {
   ClusterHealth,
+  ClusterHealthStatus,
   K8sNode,
   K8sPod,
   K8sService,
@@ -128,7 +129,11 @@ export async function getClusterHealth(): Promise<ClusterHealth> {
     return response.data.health;
   } catch (error) {
     console.error('K8s health API unavailable:', error);
-    throw error;
+    return {
+      ...mockClusterHealth,
+      status: 'degraded' as ClusterHealthStatus,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 }
 
@@ -427,7 +432,13 @@ export async function runHealthCheck(type: HealthCheckType): Promise<HealthCheck
     return response.data;
   } catch (error) {
     console.error(`K8s health check ${type} API unavailable:`, error);
-    throw error;
+    return {
+      type,
+      status: 'fail' as HealthCheckResult['status'],
+      message: 'Health check endpoint unavailable',
+      duration: 0,
+      timestamp: new Date().toISOString(),
+    };
   }
 }
 

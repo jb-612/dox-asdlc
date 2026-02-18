@@ -99,10 +99,13 @@ describe('Services API', () => {
       expect(apiClient.get).not.toHaveBeenCalled();
     });
 
-    it('throws error when API fails and useMock is false', async () => {
+    it('returns degraded response when API fails and useMock is false', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('Network error'));
 
-      await expect(getServicesHealth({ useMock: false })).rejects.toThrow('Network error');
+      const result = await getServicesHealth({ useMock: false });
+      expect(result.services).toEqual([]);
+      expect(result.connections).toEqual([]);
+      expect(result.timestamp).toBeDefined();
     });
   });
 
@@ -244,14 +247,16 @@ describe('Services Hooks', () => {
       expect(result.current.isLoading).toBe(true);
     });
 
-    it('returns error state on failure', async () => {
+    it('returns degraded data on API failure instead of error', async () => {
       vi.mocked(apiClient.get).mockRejectedValue(new Error('API Error'));
 
       const { result } = renderHook(() => useServicesHealth({ useMock: false }), { wrapper });
 
       await waitFor(() => {
-        expect(result.current.isError).toBe(true);
+        expect(result.current.isSuccess).toBe(true);
       });
+
+      expect(result.current.data?.services).toEqual([]);
     });
   });
 

@@ -224,13 +224,15 @@ async function fetchPendingRules(
     let filtered = [...mockRuleProposals];
 
     if (params?.agent) {
-      filtered = filtered.filter((r) => r.affectedAgents.includes(params.agent!));
+      const agent = params.agent;
+      filtered = filtered.filter((r) => r.affectedAgents.includes(agent));
     }
     if (params?.ruleType) {
       filtered = filtered.filter((r) => r.ruleType === params.ruleType);
     }
     if (params?.minConfidence) {
-      filtered = filtered.filter((r) => r.confidence >= params.minConfidence!);
+      const minConf = params.minConfidence;
+      filtered = filtered.filter((r) => r.confidence >= minConf);
     }
     if (params?.limit) {
       filtered = filtered.slice(0, params.limit);

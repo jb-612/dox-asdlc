@@ -98,11 +98,20 @@ export function GuidelineCard({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect?.(guideline.id);
+        }
+      }}
       className={`p-3 rounded-lg border cursor-pointer transition-colors
         ${isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}
         ${!guideline.enabled ? 'opacity-60' : ''}`}
       onClick={() => onSelect?.(guideline.id)}
       data-testid={`guideline-card-${guideline.id}`}
+      aria-label={`Select guideline: ${guideline.name}`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">

@@ -29,7 +29,17 @@ async function fetchPendingGates(
   if (USE_MOCKS) {
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));
-    return mockGates;
+    let gates = mockGates.gates;
+    if (params?.type) {
+      gates = gates.filter((g) => g.type === params.type);
+    }
+    if (params?.session_id) {
+      gates = gates.filter((g) => g.session_id === params.session_id);
+    }
+    if (params?.limit) {
+      gates = gates.slice(0, params.limit);
+    }
+    return { gates, total: gates.length };
   }
 
   const { data } = await apiClient.get<GatesResponse>('/gates/pending', {

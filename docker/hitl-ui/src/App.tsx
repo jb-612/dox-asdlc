@@ -38,6 +38,21 @@ import { useDevOpsActivity } from "./api/devops";
 import { useDevOpsStore } from "./stores/devopsStore";
 
 /**
+ * Per-route ErrorBoundary wrapper to isolate route-level crashes
+ */
+function RouteErrorBoundary({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary
+      fallbackRender={({ error, resetErrorBoundary }) => (
+        <ErrorFallback error={error} resetErrorBoundary={resetErrorBoundary} />
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+/**
  * DevOps notification banner wrapper component
  * Must be inside BrowserRouter to use useNavigate
  */
@@ -113,33 +128,33 @@ function App() {
         >
           <Routes>
             <Route path="/" element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="gates" element={<GatesPage />} />
-              <Route path="gates/:gateId" element={<GateDetailPage />} />
-              <Route path="workers" element={<WorkersPage />} />
-              <Route path="sessions" element={<SessionsPage />} />
-              <Route path="cockpit" element={<CockpitPage />} />
-              <Route path="cockpit/runs/:runId" element={<RunDetailPage />} />
-              <Route path="k8s" element={<K8sPage />} />
-              <Route path="metrics" element={<MetricsPage />} />
-              <Route path="agents" element={<AgentsDashboardPage />} />
-              <Route path="artifacts" element={<ArtifactsPage />} />
-              <Route path="artifacts/:artifactId" element={<ArtifactDetailPage />} />
-              <Route path="docs" element={<DocsPage />} />
-              <Route path="docs/diagrams/:diagramId" element={<DiagramDetailPage />} />
-              <Route path="docs/:docPath" element={<DocDetailPage />} />
-              <Route path="studio" element={<StudioDiscoveryPage />} />
+              <Route index element={<RouteErrorBoundary><Dashboard /></RouteErrorBoundary>} />
+              <Route path="gates" element={<RouteErrorBoundary><GatesPage /></RouteErrorBoundary>} />
+              <Route path="gates/:gateId" element={<RouteErrorBoundary><GateDetailPage /></RouteErrorBoundary>} />
+              <Route path="workers" element={<RouteErrorBoundary><WorkersPage /></RouteErrorBoundary>} />
+              <Route path="sessions" element={<RouteErrorBoundary><SessionsPage /></RouteErrorBoundary>} />
+              <Route path="cockpit" element={<RouteErrorBoundary><CockpitPage /></RouteErrorBoundary>} />
+              <Route path="cockpit/runs/:runId" element={<RouteErrorBoundary><RunDetailPage /></RouteErrorBoundary>} />
+              <Route path="k8s" element={<RouteErrorBoundary><K8sPage /></RouteErrorBoundary>} />
+              <Route path="metrics" element={<RouteErrorBoundary><MetricsPage /></RouteErrorBoundary>} />
+              <Route path="agents" element={<RouteErrorBoundary><AgentsDashboardPage /></RouteErrorBoundary>} />
+              <Route path="artifacts" element={<RouteErrorBoundary><ArtifactsPage /></RouteErrorBoundary>} />
+              <Route path="artifacts/:artifactId" element={<RouteErrorBoundary><ArtifactDetailPage /></RouteErrorBoundary>} />
+              <Route path="docs" element={<RouteErrorBoundary><DocsPage /></RouteErrorBoundary>} />
+              <Route path="docs/diagrams/:diagramId" element={<RouteErrorBoundary><DiagramDetailPage /></RouteErrorBoundary>} />
+              <Route path="docs/:docPath" element={<RouteErrorBoundary><DocDetailPage /></RouteErrorBoundary>} />
+              <Route path="studio" element={<RouteErrorBoundary><StudioDiscoveryPage /></RouteErrorBoundary>} />
               <Route path="studio/discovery" element={<Navigate to="/studio" replace />} />
-              <Route path="studio/ideation" element={<StudioIdeationPage />} />
-              <Route path="rules" element={<RuleProposalsPage />} />
-              <Route path="review" element={<CodeReviewPage />} />
-              <Route path="search" element={<SearchPage />} />
-              <Route path="admin/llm" element={<LLMConfigPage />} />
-              <Route path="admin/labels" element={<AdminLabelsPage />} />
-              <Route path="brainflare" element={<BrainflareHubPage />} />
-              <Route path="guardrails" element={<GuardrailsPage />} />
-              <Route path="costs" element={<CostDashboardPage />} />
-              <Route path="architect" element={<ArchitectBoardPage />} />
+              <Route path="studio/ideation" element={<RouteErrorBoundary><StudioIdeationPage /></RouteErrorBoundary>} />
+              <Route path="rules" element={<RouteErrorBoundary><RuleProposalsPage /></RouteErrorBoundary>} />
+              <Route path="review" element={<RouteErrorBoundary><CodeReviewPage /></RouteErrorBoundary>} />
+              <Route path="search" element={<RouteErrorBoundary><SearchPage /></RouteErrorBoundary>} />
+              <Route path="admin/llm" element={<RouteErrorBoundary><LLMConfigPage /></RouteErrorBoundary>} />
+              <Route path="admin/labels" element={<RouteErrorBoundary><AdminLabelsPage /></RouteErrorBoundary>} />
+              <Route path="brainflare" element={<RouteErrorBoundary><BrainflareHubPage /></RouteErrorBoundary>} />
+              <Route path="guardrails" element={<RouteErrorBoundary><GuardrailsPage /></RouteErrorBoundary>} />
+              <Route path="costs" element={<RouteErrorBoundary><CostDashboardPage /></RouteErrorBoundary>} />
+              <Route path="architect" element={<RouteErrorBoundary><ArchitectBoardPage /></RouteErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

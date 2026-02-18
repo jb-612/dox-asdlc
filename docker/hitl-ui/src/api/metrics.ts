@@ -71,7 +71,7 @@ export async function getMetricsHealth(options?: MetricsQueryOptions): Promise<M
     return response.data;
   } catch (error) {
     console.error('Failed to fetch metrics health:', error);
-    throw error;
+    return { status: 'unhealthy' as MetricsHealthResponse['status'] };
   }
 }
 

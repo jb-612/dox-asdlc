@@ -18,6 +18,9 @@ export interface CostsState {
   selectedGroupBy: CostGroupBy;
   selectedSessionId: string | null;
 
+  // Pagination state
+  currentPage: number;
+
   // UI state
   autoRefresh: boolean;
 
@@ -25,6 +28,7 @@ export interface CostsState {
   setTimeRange: (range: CostTimeRange) => void;
   setGroupBy: (groupBy: CostGroupBy) => void;
   setSelectedSession: (sessionId: string | null) => void;
+  setCurrentPage: (page: number) => void;
   toggleAutoRefresh: () => void;
   reset: () => void;
 }
@@ -37,6 +41,7 @@ const initialState = {
   selectedTimeRange: '24h' as CostTimeRange,
   selectedGroupBy: 'agent' as CostGroupBy,
   selectedSessionId: null as string | null,
+  currentPage: 1,
   autoRefresh: true,
 };
 
@@ -52,6 +57,8 @@ export const useCostsStore = create<CostsState>((set) => ({
   setGroupBy: (groupBy) => set({ selectedGroupBy: groupBy }),
 
   setSelectedSession: (sessionId) => set({ selectedSessionId: sessionId }),
+
+  setCurrentPage: (page) => set({ currentPage: page }),
 
   toggleAutoRefresh: () =>
     set((state) => ({ autoRefresh: !state.autoRefresh })),

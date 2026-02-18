@@ -7,7 +7,7 @@
  * loading state during save.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useCreateGuideline, useUpdateGuideline } from '@/api/guardrails';
 import { ConditionBuilder } from './ConditionBuilder';
 import { ActionBuilder } from './ActionBuilder';
@@ -73,7 +73,22 @@ export function GuidelineEditor({
   const [action, setAction] = useState<GuidelineAction>(
     guideline?.action ?? { action_type: 'instruction', instruction: '' }
   );
+  const [enabled, setEnabled] = useState(guideline?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
+
+  // -------------------------------------------------------------------------
+  // Reset form state when guideline prop changes
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    setName(guideline?.name ?? '');
+    setDescription(guideline?.description ?? '');
+    setCategory(guideline?.category ?? 'custom');
+    setPriority(guideline?.priority ?? 100);
+    setCondition(guideline?.condition ?? {});
+    setAction(guideline?.action ?? { action_type: 'instruction', instruction: '' });
+    setEnabled(guideline?.enabled ?? true);
+    setError(null);
+  }, [guideline?.id, isCreating]);
 
   // -------------------------------------------------------------------------
   // Mutations
@@ -156,6 +171,7 @@ export function GuidelineEditor({
             description,
             category,
             priority,
+            enabled,
             condition,
             action,
             version: guideline.version,
@@ -167,6 +183,7 @@ export function GuidelineEditor({
           description,
           category,
           priority,
+          enabled,
           condition,
           action,
         });
@@ -297,6 +314,28 @@ export function GuidelineEditor({
               text-gray-900 dark:text-gray-100
               focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </label>
+
+        {/* Enabled */}
+        <label className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Enabled
+          </span>
+          <button
+            type="button"
+            data-testid="editor-enabled-toggle"
+            onClick={() => { setEnabled(!enabled); clearError(); }}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors
+              ${enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Enable guideline"
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                ${enabled ? 'translate-x-6' : 'translate-x-1'}`}
+            />
+          </button>
         </label>
 
         {/* Conditions */}
