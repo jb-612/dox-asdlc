@@ -68,6 +68,9 @@ chroma_data/
 context/packs/.cache/
 context/packs/*.json
 
+# Side projects (separate git repos)
+side-projects/
+
 # Wiki (separate git repo, cloned locally for VS Code visibility)
 wiki/
 
