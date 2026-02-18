@@ -411,7 +411,16 @@ export const useIdeationStore = create<IdeationState>()(
     }),
     {
       name: 'ideation-session',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted: unknown, version: number) => {
+        // Version 0 (or missing version): stale data from older builds.
+        // Reset to defaults so components don't crash on incompatible shapes.
+        if (version === 0 || version === undefined) {
+          return { ...DEFAULT_STATE };
+        }
+        return persisted as Record<string, unknown>;
+      },
       partialize: (state) => ({
         sessionId: state.sessionId,
         projectName: state.projectName,
