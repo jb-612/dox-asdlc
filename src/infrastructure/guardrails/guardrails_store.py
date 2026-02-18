@@ -11,6 +11,7 @@ prepended to index names.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -64,6 +65,11 @@ class GuardrailsStore:
             es_client: An ``AsyncElasticsearch`` instance.
             index_prefix: Optional prefix for multi-tenancy index isolation.
         """
+        if index_prefix and not re.match(r"^[a-zA-Z0-9_-]*$", index_prefix):
+            raise GuardrailsError(
+                "Invalid index prefix: contains unsafe characters",
+                details={"index_prefix": index_prefix},
+            )
         self._client = es_client
         self._index_prefix = index_prefix
         self._index_exists_cache: dict[str, bool] = {}
@@ -380,6 +386,7 @@ class GuardrailsStore:
             GuardrailsError: If the indexing call fails.
         """
         await self._ensure_indices_exist()
+        entry = dict(entry)  # Defensive copy to avoid mutating caller's dict
         entry_id = entry.get("id", str(uuid.uuid4()))
         entry["id"] = entry_id
         if "timestamp" not in entry:

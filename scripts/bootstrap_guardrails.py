@@ -647,16 +647,42 @@ def get_default_guidelines() -> list[Guideline]:
     ]
 
 
+def _guideline_needs_update(existing: Guideline, desired: Guideline) -> bool:
+    """Check if an existing guideline differs from the desired state.
+
+    Compares name, description, priority, and action instruction to
+    determine if an update is needed.
+
+    Args:
+        existing: The currently stored guideline.
+        desired: The desired guideline state from bootstrap definitions.
+
+    Returns:
+        True if the existing guideline should be updated.
+    """
+    if existing.name != desired.name:
+        return True
+    if existing.description != desired.description:
+        return True
+    if existing.priority != desired.priority:
+        return True
+    if existing.action.instruction != desired.action.instruction:
+        return True
+    if existing.action.type != desired.action.type:
+        return True
+    return False
+
+
 async def upsert_guidelines(
     store: Any,
     guidelines: list[Guideline],
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Create guidelines that do not already exist in the store.
+    """Create or update guidelines in the store.
 
-    For each guideline, tries get_guideline first. If the guideline
-    already exists, it is skipped (idempotent). If GuidelineNotFoundError
-    is raised, the guideline is created.
+    For each guideline, tries to read the existing version. If not found,
+    creates it. If found but content differs, updates it with the current
+    version for optimistic locking. If found and unchanged, skips it.
 
     Args:
         store: A GuardrailsStore instance (or mock).
@@ -665,17 +691,19 @@ async def upsert_guidelines(
             would have been created.
 
     Returns:
-        A summary dict with keys: created, skipped, errors, dry_run.
+        A summary dict with keys: created, updated, skipped, errors, dry_run.
     """
     created = 0
+    updated = 0
     skipped = 0
     errors = 0
 
     if dry_run:
         for g in guidelines:
-            logger.info("[DRY RUN] Would create guideline: %s (%s)", g.id, g.name)
+            logger.info("[DRY RUN] Would create/update guideline: %s (%s)", g.id, g.name)
         return {
             "created": 0,
+            "updated": 0,
             "skipped": 0,
             "errors": 0,
             "dry_run": True,
@@ -684,9 +712,19 @@ async def upsert_guidelines(
 
     for g in guidelines:
         try:
-            await store.get_guideline(g.id)
-            logger.info("Guideline already exists, skipping: %s", g.id)
-            skipped += 1
+            existing = await store.get_guideline(g.id)
+            # Check if content has changed
+            if _guideline_needs_update(existing, g):
+                # Build updated guideline with the existing version for OCC
+                update_data = g.to_dict()
+                update_data["version"] = existing.version
+                update_guideline = Guideline.from_dict(update_data)
+                await store.update_guideline(update_guideline)
+                logger.info("Updated guideline: %s (v%d -> v%d)", g.id, existing.version, existing.version + 1)
+                updated += 1
+            else:
+                logger.info("Guideline unchanged, skipping: %s", g.id)
+                skipped += 1
         except GuidelineNotFoundError:
             try:
                 await store.create_guideline(g)
@@ -695,9 +733,19 @@ async def upsert_guidelines(
             except Exception:
                 logger.exception("Failed to create guideline: %s", g.id)
                 errors += 1
+        except Exception:
+            # #159: If the read itself fails, try to create anyway
+            try:
+                await store.create_guideline(g)
+                logger.info("Created guideline (after read failure): %s", g.id)
+                created += 1
+            except Exception:
+                logger.exception("Failed to create guideline: %s", g.id)
+                errors += 1
 
     return {
         "created": created,
+        "updated": updated,
         "skipped": skipped,
         "errors": errors,
         "dry_run": False,
@@ -756,6 +804,7 @@ async def main(args: list[str] | None = None) -> None:
     print(f"\nBootstrap Summary:")
     print(f"  Total guidelines: {result['total']}")
     print(f"  Created:          {result['created']}")
+    print(f"  Updated:          {result.get('updated', 0)}")
     print(f"  Skipped:          {result['skipped']}")
     print(f"  Errors:           {result['errors']}")
     print(f"  Dry run:          {result['dry_run']}")

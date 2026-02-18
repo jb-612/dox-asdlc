@@ -152,7 +152,7 @@ class TestFullEvaluationFlow:
         assert "Follow coding standards." in result.combined_instruction
 
         # Verify store was called
-        store.list_guidelines.assert_awaited_once_with(enabled=True, page_size=1000)
+        store.list_guidelines.assert_awaited_once_with(enabled=True, page_size=10000)
 
     @pytest.mark.asyncio
     async def test_evaluation_with_no_matches_returns_empty_context(self) -> None:

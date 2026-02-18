@@ -36,6 +36,10 @@ from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
 
 logger = logging.getLogger(__name__)
 
+MAX_STATIC_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_INSTRUCTION_LENGTH = 10000  # Per-guideline instruction limit
+MAX_COMBINED_LENGTH = 50000  # Total combined instruction limit
+
 
 class StaticGuardrailsStore:
     """A read-only guidelines store backed by a local JSON file.
@@ -50,17 +54,43 @@ class StaticGuardrailsStore:
     def __init__(self, file_path: str | Path) -> None:
         self._file_path = Path(file_path)
         self._guidelines: list[Guideline] | None = None
+        self._last_mtime: float | None = None
 
     def _load(self) -> list[Guideline]:
-        """Load and cache guidelines from the JSON file."""
-        if self._guidelines is not None:
-            return self._guidelines
+        """Load guidelines from the JSON file, reloading if modified."""
         try:
+            current_mtime = self._file_path.stat().st_mtime
+        except OSError:
+            if self._guidelines is not None:
+                return self._guidelines
+            self._guidelines = []
+            return self._guidelines
+
+        # Return cached if file hasn't changed
+        if (
+            self._guidelines is not None
+            and self._last_mtime is not None
+            and current_mtime == self._last_mtime
+        ):
+            return self._guidelines
+
+        try:
+            file_size = self._file_path.stat().st_size
+            if file_size > MAX_STATIC_FILE_SIZE:
+                logger.warning(
+                    "Static guidelines file too large (%d bytes, max %d): %s",
+                    file_size, MAX_STATIC_FILE_SIZE, self._file_path,
+                )
+                self._guidelines = []
+                self._last_mtime = current_mtime
+                return self._guidelines
             data = json.loads(self._file_path.read_text(encoding="utf-8"))
             self._guidelines = [Guideline.from_dict(g) for g in data]
-        except Exception as exc:
+            self._last_mtime = current_mtime
+        except (json.JSONDecodeError, OSError, ValueError, KeyError, TypeError) as exc:
             logger.warning("Failed to load static guidelines from %s: %s", self._file_path, exc)
             self._guidelines = []
+            self._last_mtime = current_mtime
         return self._guidelines
 
     async def list_guidelines(
@@ -124,6 +154,12 @@ class GuardrailsEvaluator:
         self._cache_ttl = cache_ttl
         self._cached_guidelines: list[Guideline] | None = None
         self._cache_timestamp: datetime | None = None
+
+    @staticmethod
+    def _is_safe_path(path: str) -> bool:
+        """Reject paths containing directory traversal."""
+        parts = path.replace("\\", "/").split("/")
+        return ".." not in parts
 
     def _count_non_none_fields(self, condition: GuidelineCondition) -> int:
         """Count the number of non-None/non-empty fields in a condition.
@@ -213,11 +249,16 @@ class GuardrailsEvaluator:
             # Condition has path patterns but context has no paths -> no match
             if not context.paths:
                 return False, ()
+            # Filter out unsafe paths containing directory traversal
+            safe_cond = [p for p in cond_paths if self._is_safe_path(p)]
+            safe_ctx = [p for p in context.paths if self._is_safe_path(p)]
+            if not safe_cond or not safe_ctx:
+                return False, ()
             # OR logic: any context path matching any condition pattern
             path_matched = any(
                 fnmatch.fnmatch(ctx_path, pattern)
-                for pattern in cond_paths
-                for ctx_path in context.paths
+                for pattern in safe_cond
+                for ctx_path in safe_ctx
             )
             if path_matched:
                 matched.append("paths")
@@ -225,6 +266,13 @@ class GuardrailsEvaluator:
                 return False, ()
 
         return True, tuple(matched)
+
+    @staticmethod
+    def _sanitize_instruction(instruction: str) -> str:
+        """Sanitize a guideline instruction to prevent prompt injection."""
+        if len(instruction) > MAX_INSTRUCTION_LENGTH:
+            instruction = instruction[:MAX_INSTRUCTION_LENGTH] + "... [truncated]"
+        return instruction
 
     def _resolve_conflicts(
         self,
@@ -262,7 +310,7 @@ class GuardrailsEvaluator:
             action = eg.guideline.action
 
             if action.instruction:
-                instructions.append(action.instruction)
+                instructions.append(self._sanitize_instruction(action.instruction))
 
             if action.tools_allowed is not None:
                 tools_allowed.update(action.tools_allowed)
@@ -276,10 +324,14 @@ class GuardrailsEvaluator:
         # Deny always wins over allow
         final_tools_allowed = tools_allowed - tools_denied
 
+        combined = "\n\n".join(instructions)
+        if len(combined) > MAX_COMBINED_LENGTH:
+            combined = combined[:MAX_COMBINED_LENGTH] + "\n\n[... additional instructions truncated]"
+
         return EvaluatedContext(
             context=context,
             matched_guidelines=tuple(sorted_matched),
-            combined_instruction="\n\n".join(instructions),
+            combined_instruction=combined,
             tools_allowed=tuple(sorted(final_tools_allowed)),
             tools_denied=tuple(sorted(tools_denied)),
             hitl_gates=tuple(sorted(hitl_gates)),
@@ -325,9 +377,16 @@ class GuardrailsEvaluator:
         if cache_valid:
             guidelines = self._cached_guidelines
         else:
-            guidelines, _ = await self._store.list_guidelines(
-                enabled=True, page_size=1000
+            guidelines, total = await self._store.list_guidelines(
+                enabled=True, page_size=10000
             )
+            if total > len(guidelines):
+                logger.warning(
+                    "Evaluator fetched %d of %d enabled guidelines; "
+                    "some may be missed. Consider increasing page_size.",
+                    len(guidelines),
+                    total,
+                )
             # Update cache
             if self._cache_ttl > 0.0:
                 self._cached_guidelines = guidelines

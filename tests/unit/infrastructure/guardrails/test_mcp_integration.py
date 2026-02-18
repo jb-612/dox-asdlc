@@ -674,7 +674,7 @@ class TestErrorPropagation:
 
         assert result["success"] is False
         assert "error" in result
-        assert "Elasticsearch connection failed" in result["error"]
+        assert "Evaluation failed" in result["error"]
 
     @pytest.mark.asyncio
     async def test_log_decision_store_error(
@@ -702,7 +702,7 @@ class TestErrorPropagation:
 
         assert result["success"] is False
         assert "error" in result
-        assert "Audit log failed" in result["error"]
+        assert "Decision logging failed" in result["error"]
 
 
 class TestAuditLogStructure:

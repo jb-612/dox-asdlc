@@ -27,8 +27,6 @@ def read_cache(session_id: str) -> dict | None:
     """Read guardrails cache written by UserPromptSubmit hook."""
     cache_path = Path(tempfile.gettempdir()) / f"guardrails-{session_id}.json"
     try:
-        if not cache_path.exists():
-            return None
         data = json.loads(cache_path.read_text())
         # Check TTL
         ts = datetime.fromisoformat(data.get("timestamp", ""))
@@ -37,7 +35,7 @@ def read_cache(session_id: str) -> dict | None:
         if age > ttl:
             return None  # Cache expired
         return data.get("evaluated")
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError, OSError):
         return None
 
 
@@ -103,8 +101,9 @@ def check_path_restriction(paths: list[str], evaluated: dict) -> tuple[str | Non
 def main():
     try:
         input_data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, Exception):
-        sys.exit(0)  # Can't parse input, allow through
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARNING: guardrails-enforce failed to parse input: {e}", file=sys.stderr)
+        sys.exit(0)  # Fail-open
 
     tool = input_data.get("tool", "")
     arguments = input_data.get("arguments", {})
@@ -113,7 +112,8 @@ def main():
     # Read cached guardrails
     evaluated = read_cache(session_id)
     if not evaluated:
-        sys.exit(0)  # No cached guardrails, allow through
+        print(f"INFO: No guardrails cache for session {session_id}, allowing tool '{tool}'", file=sys.stderr)
+        sys.exit(0)  # Fail-open
 
     # Check path sanitization first
     paths = extract_paths_from_arguments(tool, arguments)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,9 @@ from src.orchestrator.api.models.costs import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/costs", tags=["costs"])
+
+VALID_GROUP_BY = {"agent", "model", "session", "tool"}
+_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
 
 def _get_db_path() -> Path | None:
@@ -60,6 +64,11 @@ async def list_costs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> CostRecordsListResponse:
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            status_code=400,
+            detail="date_from must not be greater than date_to",
+        )
     try:
         sqlite_store = _get_sqlite_store()
         from src.core.costs.models import CostFilter
@@ -93,6 +102,16 @@ async def cost_summary(
     date_from: Optional[float] = Query(None),
     date_to: Optional[float] = Query(None),
 ) -> CostSummaryResponse:
+    if group_by not in VALID_GROUP_BY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid group_by: {group_by!r}. Must be one of: {', '.join(sorted(VALID_GROUP_BY))}",
+        )
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(
+            status_code=400,
+            detail="date_from must not be greater than date_to",
+        )
     try:
         sqlite_store = _get_sqlite_store()
         from src.core.costs.models import CostFilter
@@ -134,6 +153,8 @@ async def cost_summary(
 
 @router.get("/sessions/{session_id}", response_model=SessionCostBreakdownResponse)
 async def session_costs(session_id: str) -> SessionCostBreakdownResponse:
+    if not _SESSION_ID_RE.match(session_id):
+        raise HTTPException(status_code=400, detail="Invalid session_id format")
     try:
         sqlite_store = _get_sqlite_store()
         data = sqlite_store.get_session_costs(session_id=session_id, db_path=_get_db_path())

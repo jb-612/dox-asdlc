@@ -45,8 +45,6 @@ def read_parent_cache(parent_session_id: str) -> dict | None:
     """
     cache_path = Path(tempfile.gettempdir()) / f"guardrails-{parent_session_id}.json"
     try:
-        if not cache_path.exists():
-            return None
         data = json.loads(cache_path.read_text())
         # Check TTL
         ts = datetime.fromisoformat(data.get("timestamp", ""))
@@ -55,12 +53,15 @@ def read_parent_cache(parent_session_id: str) -> dict | None:
         if age > ttl:
             return None  # Cache expired
         return data.get("evaluated")
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, ValueError, OSError):
         return None
 
 
 def write_agent_cache(session_id: str, agent_name: str, evaluated: dict) -> None:
-    """Write agent's guardrails cache for its PreToolUse hooks."""
+    """Write agent's guardrails cache for its PreToolUse hooks using atomic write."""
+    import os
+    import stat
+
     cache_path = Path(tempfile.gettempdir()) / f"guardrails-{session_id}.json"
     cache_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -69,8 +70,20 @@ def write_agent_cache(session_id: str, agent_name: str, evaluated: dict) -> None
         "evaluated": evaluated,
     }
     try:
-        cache_path.write_text(json.dumps(cache_data))
-    except Exception:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=tempfile.gettempdir(),
+            prefix=f"guardrails-{session_id}-",
+            suffix=".tmp",
+        )
+        try:
+            os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+            with os.fdopen(fd, "w") as f:
+                json.dump(cache_data, f)
+            os.replace(tmp_path, str(cache_path))  # Atomic on POSIX
+        except OSError:
+            os.unlink(tmp_path)
+            raise
+    except OSError:
         pass  # Best-effort caching
 
 
@@ -134,12 +147,12 @@ async def evaluate_for_agent(agent_name: str, session_id: str) -> dict | None:
             # Quick connectivity check
             await es_client.ping()
             store = GuardrailsStore(es_client=es_client, index_prefix=config.index_prefix)
-        except Exception:
+        except (ConnectionError, OSError, ImportError):
             # ES unavailable -- close client if opened
             if es_client is not None:
                 try:
                     await es_client.close()
-                except Exception:
+                except OSError:
                     pass
                 es_client = None
 
@@ -166,29 +179,32 @@ async def evaluate_for_agent(agent_name: str, session_id: str) -> dict | None:
         finally:
             if es_client is not None:
                 await es_client.close()
-    except Exception:
+    except (ImportError, ConnectionError, OSError):
         return None
 
 
 def main():
     try:
         input_data = json.loads(sys.stdin.read())
-    except Exception:
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARNING: guardrails-subagent failed to parse input: {e}", file=sys.stderr)
         sys.exit(0)  # Never block on bad input
 
     agent_name = input_data.get("agentName", "unknown")
     session_id = input_data.get("sessionId", "unknown")
     parent_session_id = input_data.get("parentSessionId")
 
-    # Try parent cache first
-    evaluated = None
-    if parent_session_id:
-        evaluated = read_parent_cache(parent_session_id)
+    # Always evaluate for the specific subagent, don't inherit parent guardrails
+    # Parent cache is only used as a fallback when ES is unavailable
+    ensure_project_on_path()
+    evaluated = asyncio.run(evaluate_for_agent(agent_name, session_id))
 
-    # If no cache, try direct evaluator call
-    if evaluated is None:
-        ensure_project_on_path()
-        evaluated = asyncio.run(evaluate_for_agent(agent_name, session_id))
+    if evaluated is None and parent_session_id:
+        # ES unavailable - fall back to parent cache as degraded mode
+        parent_evaluated = read_parent_cache(parent_session_id)
+        if parent_evaluated:
+            print(f"WARNING: Using parent guardrails for {agent_name} (ES unavailable)", file=sys.stderr)
+            evaluated = parent_evaluated
 
     # Write this agent's cache for its own PreToolUse hooks
     if evaluated:

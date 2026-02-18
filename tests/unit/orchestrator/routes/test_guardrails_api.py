@@ -264,6 +264,61 @@ class TestGetGuideline:
         assert action["instruction"] == "Follow TDD"
 
 
+class TestImportBatchLimit:
+    """Tests for POST /api/guardrails/import batch size enforcement."""
+
+    def _make_import_item(self, name: str = "Test") -> dict:
+        """Create a minimal import item payload."""
+        return {
+            "name": name,
+            "description": "test",
+            "category": "custom",
+            "priority": 100,
+            "enabled": True,
+            "condition": {"agents": ["backend"]},
+            "action": {"action_type": "instruction", "instruction": "do x"},
+        }
+
+    def test_import_rejects_oversized_batch(
+        self, client: TestClient, mock_store: AsyncMock
+    ) -> None:
+        """Import with >100 items returns 400."""
+        items = [self._make_import_item(f"g-{i}") for i in range(101)]
+
+        response = client.post("/api/guardrails/import", json=items)
+
+        assert response.status_code == 400
+        assert "too large" in response.json()["detail"].lower()
+
+    def test_import_accepts_max_batch(
+        self, client: TestClient, mock_store: AsyncMock
+    ) -> None:
+        """Import with exactly 100 items is accepted."""
+        mock_store.create_guideline.return_value = _make_guideline()
+        mock_store.log_audit_entry.return_value = "audit-1"
+        items = [self._make_import_item(f"g-{i}") for i in range(100)]
+
+        response = client.post("/api/guardrails/import", json=items)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported"] == 100
+
+    def test_import_accepts_single_item(
+        self, client: TestClient, mock_store: AsyncMock
+    ) -> None:
+        """Import with a single item works."""
+        mock_store.create_guideline.return_value = _make_guideline()
+        mock_store.log_audit_entry.return_value = "audit-1"
+        items = [self._make_import_item("single")]
+
+        response = client.post("/api/guardrails/import", json=items)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported"] == 1
+
+
 class TestGetGuardrailsStoreFactory:
     """Tests for get_guardrails_store singleton factory and shutdown."""
 

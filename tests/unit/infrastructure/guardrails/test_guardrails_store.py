@@ -558,13 +558,15 @@ class TestAuditEntries:
         entry_id = await store.log_audit_entry(entry)
 
         assert entry_id  # non-empty
-        assert entry["id"] == entry_id
+        # The internal copy gets the id, not the caller's dict (defensive copy)
+        call_kwargs = mock_es_client.index.call_args.kwargs
+        assert call_kwargs["id"] == entry_id
 
     @pytest.mark.asyncio
     async def test_log_audit_entry_sets_timestamp(
         self, store: "GuardrailsStore", mock_es_client: AsyncMock  # noqa: F821
     ) -> None:
-        """When no timestamp is provided, one should be set."""
+        """When no timestamp is provided, one should be set in the indexed doc."""
         mock_es_client.index.return_value = {"result": "created"}
 
         entry: dict[str, Any] = {
@@ -573,7 +575,9 @@ class TestAuditEntries:
         }
         await store.log_audit_entry(entry)
 
-        assert "timestamp" in entry
+        # The internal copy gets the timestamp, verify via the ES call
+        call_kwargs = mock_es_client.index.call_args.kwargs
+        assert "timestamp" in call_kwargs["body"]
 
     @pytest.mark.asyncio
     async def test_list_audit_entries(
@@ -752,6 +756,63 @@ class TestErrorPropagation:
 # ===================================================================
 # Close / resource cleanup
 # ===================================================================
+
+
+class TestIndexPrefixValidation:
+    """Index prefix should reject unsafe characters."""
+
+    def test_init_rejects_unsafe_index_prefix(self, mock_es_client: AsyncMock) -> None:
+        """Index prefix containing path traversal chars raises GuardrailsError."""
+        from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+        with pytest.raises(GuardrailsError, match="Invalid index prefix"):
+            GuardrailsStore(es_client=mock_es_client, index_prefix="../evil")
+
+    def test_init_rejects_dotdot_prefix(self, mock_es_client: AsyncMock) -> None:
+        """Index prefix with dots and slashes raises GuardrailsError."""
+        from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+        with pytest.raises(GuardrailsError, match="Invalid index prefix"):
+            GuardrailsStore(es_client=mock_es_client, index_prefix="a/b")
+
+    def test_init_accepts_valid_prefix(self, mock_es_client: AsyncMock) -> None:
+        """Alphanumeric prefix with hyphens and underscores is accepted."""
+        from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+        store = GuardrailsStore(es_client=mock_es_client, index_prefix="tenant_1-dev")
+        assert store._index_prefix == "tenant_1-dev"
+
+    def test_init_accepts_empty_prefix(self, mock_es_client: AsyncMock) -> None:
+        """Empty prefix is accepted (no multi-tenancy)."""
+        from src.infrastructure.guardrails.guardrails_store import GuardrailsStore
+
+        store = GuardrailsStore(es_client=mock_es_client, index_prefix="")
+        assert store._index_prefix == ""
+
+
+class TestLogAuditEntryMutation:
+    """log_audit_entry should not mutate the caller's dict."""
+
+    @pytest.mark.asyncio
+    async def test_log_audit_entry_does_not_mutate_input(
+        self, store: "GuardrailsStore", mock_es_client: AsyncMock  # noqa: F821
+    ) -> None:
+        """Caller's dict should not be modified after log_audit_entry."""
+        mock_es_client.index.return_value = {"result": "created"}
+
+        original_entry: dict[str, Any] = {
+            "event_type": "guideline_created",
+            "guideline_id": "test-1",
+        }
+        # Save a copy to compare later
+        entry_before = dict(original_entry)
+
+        await store.log_audit_entry(original_entry)
+
+        # The original dict should not have been mutated
+        assert original_entry == entry_before
+        assert "id" not in original_entry
+        assert "timestamp" not in original_entry
 
 
 class TestClose:

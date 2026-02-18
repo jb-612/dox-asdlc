@@ -25,6 +25,7 @@ from src.core.guardrails.models import (
     TaskContext,
 )
 from src.orchestrator.routes.guardrails_api import (
+    get_guardrails_evaluator,
     get_guardrails_store,
     router,
 )
@@ -256,13 +257,13 @@ class TestEvaluate:
             hitl_gates=("devops_invocation",),
         )
 
-        with patch(
-            "src.orchestrator.routes.guardrails_api.GuardrailsEvaluator"
-        ) as mock_evaluator_cls:
-            mock_evaluator = AsyncMock()
-            mock_evaluator.get_context.return_value = evaluated_context
-            mock_evaluator_cls.return_value = mock_evaluator
+        mock_evaluator = AsyncMock()
+        mock_evaluator.get_context.return_value = evaluated_context
 
+        with patch(
+            "src.orchestrator.routes.guardrails_api.get_guardrails_evaluator",
+            return_value=mock_evaluator,
+        ):
             response = client.post(
                 "/api/guardrails/evaluate",
                 json={"agent": "backend", "domain": "P01"},
@@ -296,13 +297,13 @@ class TestEvaluate:
             hitl_gates=(),
         )
 
-        with patch(
-            "src.orchestrator.routes.guardrails_api.GuardrailsEvaluator"
-        ) as mock_evaluator_cls:
-            mock_evaluator = AsyncMock()
-            mock_evaluator.get_context.return_value = evaluated_context
-            mock_evaluator_cls.return_value = mock_evaluator
+        mock_evaluator = AsyncMock()
+        mock_evaluator.get_context.return_value = evaluated_context
 
+        with patch(
+            "src.orchestrator.routes.guardrails_api.get_guardrails_evaluator",
+            return_value=mock_evaluator,
+        ):
             response = client.post(
                 "/api/guardrails/evaluate",
                 json={"agent": "unknown-agent"},
@@ -321,15 +322,15 @@ class TestEvaluate:
         self, client: TestClient, mock_store: AsyncMock
     ) -> None:
         """Test that evaluator errors return 503."""
-        with patch(
-            "src.orchestrator.routes.guardrails_api.GuardrailsEvaluator"
-        ) as mock_evaluator_cls:
-            mock_evaluator = AsyncMock()
-            mock_evaluator.get_context.side_effect = GuardrailsError(
-                "ES connection failed"
-            )
-            mock_evaluator_cls.return_value = mock_evaluator
+        mock_evaluator = AsyncMock()
+        mock_evaluator.get_context.side_effect = GuardrailsError(
+            "ES connection failed"
+        )
 
+        with patch(
+            "src.orchestrator.routes.guardrails_api.get_guardrails_evaluator",
+            return_value=mock_evaluator,
+        ):
             response = client.post(
                 "/api/guardrails/evaluate",
                 json={"agent": "backend"},

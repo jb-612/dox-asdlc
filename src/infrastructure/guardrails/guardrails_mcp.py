@@ -184,11 +184,17 @@ class GuardrailsMCPServer:
                 "guidelines": guidelines_list,
             }
 
-        except Exception as e:
-            logger.error(f"Guardrails evaluation failed: {e}")
+        except (ConnectionError, OSError) as e:
+            logger.error("Guardrails evaluation failed (connection): %s", e)
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Evaluation failed. Check server logs.",
+            }
+        except Exception as e:
+            logger.exception("Unexpected error in guardrails evaluation")
+            return {
+                "success": False,
+                "error": "Evaluation failed. Check server logs.",
             }
 
     async def guardrails_log_decision(
@@ -269,11 +275,17 @@ class GuardrailsMCPServer:
                 "audit_id": audit_id,
             }
 
-        except Exception as e:
-            logger.error(f"Guardrails decision logging failed: {e}")
+        except (ConnectionError, OSError) as e:
+            logger.error("Guardrails decision logging failed (connection): %s", e)
             return {
                 "success": False,
-                "error": str(e),
+                "error": "Decision logging failed. Check server logs.",
+            }
+        except Exception as e:
+            logger.exception("Unexpected error in guardrails decision logging")
+            return {
+                "success": False,
+                "error": "Decision logging failed. Check server logs.",
             }
 
     async def shutdown(self) -> None:
@@ -434,9 +446,19 @@ class GuardrailsMCPServer:
                 arguments = params.get("arguments", {})
 
                 if tool_name == "guardrails_get_context":
-                    result = await self.guardrails_get_context(**arguments)
+                    allowed_keys = {"agent", "domain", "action", "paths", "event", "gate_type", "session_id"}
+                    unknown_keys = set(arguments.keys()) - allowed_keys
+                    if unknown_keys:
+                        logger.warning("Unknown arguments for %s: %s", tool_name, unknown_keys)
+                    filtered_args = {k: v for k, v in arguments.items() if k in allowed_keys}
+                    result = await self.guardrails_get_context(**filtered_args)
                 elif tool_name == "guardrails_log_decision":
-                    result = await self.guardrails_log_decision(**arguments)
+                    allowed_keys = {"guideline_id", "result", "reason", "gate_type", "user_response", "agent", "domain", "action", "session_id"}
+                    unknown_keys = set(arguments.keys()) - allowed_keys
+                    if unknown_keys:
+                        logger.warning("Unknown arguments for %s: %s", tool_name, unknown_keys)
+                    filtered_args = {k: v for k, v in arguments.items() if k in allowed_keys}
+                    result = await self.guardrails_log_decision(**filtered_args)
                 else:
                     return {
                         "jsonrpc": "2.0",
@@ -474,14 +496,24 @@ class GuardrailsMCPServer:
                     },
                 }
 
-        except Exception as e:
-            logger.error(f"Error handling request: {e}")
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            logger.error("Error handling request: %s", e)
             return {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "error": {
                     "code": -32603,
-                    "message": str(e),
+                    "message": "Internal server error",
+                },
+            }
+        except Exception as e:
+            logger.exception("Unexpected error handling request")
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32603,
+                    "message": "Internal server error",
                 },
             }
 
@@ -509,7 +541,7 @@ class GuardrailsMCPServer:
                 try:
                     request = json.loads(line)
                 except json.JSONDecodeError as e:
-                    logger.error(f"Invalid JSON: {e}")
+                    logger.error("Invalid JSON: %s", e)
                     continue
 
                 response = await self.handle_request(request)
@@ -519,8 +551,10 @@ class GuardrailsMCPServer:
 
             except KeyboardInterrupt:
                 break
+            except (ConnectionError, OSError) as e:
+                logger.error("Error in main loop: %s", e)
             except Exception as e:
-                logger.error(f"Error in main loop: {e}")
+                logger.exception("Unexpected error in main loop")
 
         # Cleanup - close the store and its ES client
         await self.shutdown()

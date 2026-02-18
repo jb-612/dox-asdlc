@@ -73,12 +73,12 @@ async def evaluate_guardrails(context_dict: dict) -> dict | None:
             # Quick connectivity check
             await es_client.ping()
             store = GuardrailsStore(es_client=es_client, index_prefix=config.index_prefix)
-        except Exception:
+        except (ConnectionError, OSError, ImportError) as exc:
             # ES unavailable -- close client if opened
             if es_client is not None:
                 try:
                     await es_client.close()
-                except Exception:
+                except OSError:
                     pass
                 es_client = None
 
@@ -101,12 +101,19 @@ async def evaluate_guardrails(context_dict: dict) -> dict | None:
         finally:
             if es_client is not None:
                 await es_client.close()
+    except (ImportError, ConnectionError, OSError) as exc:
+        return None
     except Exception:
+        import traceback
+        print(f"WARNING: Unexpected guardrails error: {traceback.format_exc()}", file=sys.stderr)
         return None
 
 
 def write_cache(session_id: str, context: dict, guidelines: dict | None) -> None:
-    """Write guidelines cache for PreToolUse hook."""
+    """Write guidelines cache for PreToolUse hook using atomic write."""
+    import os
+    import stat
+
     cache_path = Path(tempfile.gettempdir()) / f"guardrails-{session_id}.json"
     cache_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -115,8 +122,20 @@ def write_cache(session_id: str, context: dict, guidelines: dict | None) -> None
         "evaluated": guidelines,
     }
     try:
-        cache_path.write_text(json.dumps(cache_data))
-    except Exception:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=tempfile.gettempdir(),
+            prefix=f"guardrails-{session_id}-",
+            suffix=".tmp",
+        )
+        try:
+            os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+            with os.fdopen(fd, "w") as f:
+                json.dump(cache_data, f)
+            os.replace(tmp_path, str(cache_path))  # Atomic on POSIX
+        except OSError:
+            os.unlink(tmp_path)
+            raise
+    except OSError:
         pass  # Best-effort caching
 
 
@@ -147,11 +166,15 @@ def format_additional_context(evaluated: dict) -> str:
 def main():
     try:
         input_data = json.loads(sys.stdin.read())
-    except (json.JSONDecodeError, Exception):
-        sys.exit(0)  # Never block on bad input
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"WARNING: guardrails-inject failed to parse input: {e}", file=sys.stderr)
+        sys.exit(0)  # Fail-open
 
     prompt = input_data.get("prompt", "")
     session_id = input_data.get("sessionId", "unknown")
+
+    # Ensure project root is on sys.path for src imports
+    ensure_project_on_path()
 
     # Import context_detector directly to avoid triggering src.core.__init__
     import importlib.util
@@ -166,16 +189,20 @@ def main():
     detector = ContextDetector(default_agent=default_agent)
     detected = detector.detect(prompt)
 
-    # Build context dict for evaluator
-    context_dict = {}
-    if detected.agent:
-        context_dict["agent"] = detected.agent
+    # Build context dict — agent is required for meaningful guardrails evaluation
+    agent = detected.agent or os.environ.get("CLAUDE_INSTANCE_ID") or "unknown"
+    context_dict = {
+        "agent": agent,
+        "session_id": session_id,
+        "event": "UserPromptSubmit",
+    }
     if detected.domain:
         context_dict["domain"] = detected.domain
     if detected.action:
         context_dict["action"] = detected.action
-    context_dict["session_id"] = session_id
-    context_dict["event"] = "UserPromptSubmit"
+
+    if agent == "unknown":
+        print("WARNING: No agent context detected. Guardrails may not match correctly.", file=sys.stderr)
 
     # Evaluate guardrails
     evaluated = asyncio.run(evaluate_guardrails(context_dict))

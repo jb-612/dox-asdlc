@@ -281,7 +281,7 @@ class TestGuardrailsGetContext:
         # Assert
         assert result["success"] is False
         assert "error" in result
-        assert "Evaluator error" in result["error"]
+        assert "Evaluation failed" in result["error"]
 
 
 class TestGetToolSchemas:
@@ -706,7 +706,7 @@ class TestGuardrailsLogDecision:
         # Assert
         assert result["success"] is False
         assert "error" in result
-        assert "Elasticsearch unavailable" in result["error"]
+        assert "Decision logging failed" in result["error"]
 
     @pytest.mark.asyncio
     async def test_log_decision_with_gate_type(self, server, mock_evaluator):

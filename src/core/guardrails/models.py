@@ -467,12 +467,21 @@ class GateDecision:
         context: Optional task context at the time of decision.
     """
 
+    _VALID_RESULTS = ("approved", "rejected", "skipped")
+
     guideline_id: str
     gate_type: str
     result: str
     reason: str = ""
     user_response: str = ""
     context: TaskContext | None = None
+
+    def __post_init__(self) -> None:
+        if self.result not in self._VALID_RESULTS:
+            raise ValueError(
+                f"Invalid result {self.result!r}; "
+                f"must be one of {self._VALID_RESULTS}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.

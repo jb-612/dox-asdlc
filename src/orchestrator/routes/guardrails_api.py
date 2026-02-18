@@ -18,6 +18,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -31,6 +32,7 @@ from src.core.guardrails.exceptions import (
     GuardrailsError,
     GuidelineConflictError,
     GuidelineNotFoundError,
+    GuidelineValidationError,
 )
 from src.core.guardrails.evaluator import GuardrailsEvaluator
 from src.core.guardrails.models import (
@@ -62,12 +64,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/guardrails", tags=["guardrails"])
 
+MAX_IMPORT_BATCH_SIZE = 100
+
 # ---------------------------------------------------------------------------
 # Lazy-init dependency for GuardrailsStore
 # ---------------------------------------------------------------------------
 
 _es_client = None
 _store: Optional[GuardrailsStore] = None
+_evaluator: Optional[GuardrailsEvaluator] = None
+_store_lock = asyncio.Lock()
 
 
 async def get_guardrails_store() -> GuardrailsStore:
@@ -75,13 +81,18 @@ async def get_guardrails_store() -> GuardrailsStore:
 
     Loads configuration from environment via ``GuardrailsConfig.from_env()``
     so that ``GUARDRAILS_INDEX_PREFIX`` and ``ELASTICSEARCH_URL`` are
-    respected.
+    respected.  Uses an asyncio lock to prevent duplicate initialization
+    under concurrent requests.
 
     Returns:
         GuardrailsStore backed by AsyncElasticsearch.
     """
     global _es_client, _store
-    if _store is None:
+    if _store is not None:
+        return _store
+    async with _store_lock:
+        if _store is not None:
+            return _store
         from elasticsearch import AsyncElasticsearch
 
         from src.core.guardrails.config import GuardrailsConfig
@@ -95,18 +106,37 @@ async def get_guardrails_store() -> GuardrailsStore:
     return _store
 
 
+async def get_guardrails_evaluator() -> GuardrailsEvaluator:
+    """Get or create the GuardrailsEvaluator singleton.
+
+    Uses the shared GuardrailsStore and cache TTL from configuration.
+
+    Returns:
+        GuardrailsEvaluator backed by the shared store.
+    """
+    global _evaluator
+    if _evaluator is None:
+        from src.core.guardrails.config import GuardrailsConfig
+
+        store = await get_guardrails_store()
+        config = GuardrailsConfig.from_env()
+        _evaluator = GuardrailsEvaluator(store=store, cache_ttl=config.cache_ttl)
+    return _evaluator
+
+
 async def shutdown_guardrails_store() -> None:
     """Shut down the guardrails store singleton and release resources.
 
     Closes the underlying Elasticsearch client to prevent socket/file
     descriptor leaks.  Safe to call even if the store was never created.
     """
-    global _es_client, _store
+    global _es_client, _store, _evaluator
     if _store is not None:
         await _store.close()
         logger.info("Guardrails store shut down")
     _es_client = None
     _store = None
+    _evaluator = None
 
 
 # ---------------------------------------------------------------------------
@@ -268,30 +298,33 @@ def _apply_update_to_guideline(
     if body.enabled is not None:
         data["enabled"] = body.enabled
     if body.condition is not None:
-        data["condition"] = {
-            k: v
-            for k, v in body.condition.model_dump().items()
-            if v is not None
-        }
+        # Deep-merge: only overwrite fields explicitly provided
+        existing_condition = dict(data.get("condition", {}))
+        for k, v in body.condition.model_dump().items():
+            if v is not None:
+                existing_condition[k] = v
+        data["condition"] = existing_condition
     if body.action is not None:
-        action_dict: dict = {"type": body.action.action_type.value}
+        # Deep-merge: start from existing action, override provided fields
+        existing_action = dict(data.get("action", {}))
+        existing_action["type"] = body.action.action_type.value
         if body.action.instruction is not None:
-            action_dict["instruction"] = body.action.instruction
+            existing_action["instruction"] = body.action.instruction
         if body.action.tools_allowed is not None:
-            action_dict["tools_allowed"] = body.action.tools_allowed
+            existing_action["tools_allowed"] = body.action.tools_allowed
         if body.action.tools_denied is not None:
-            action_dict["tools_denied"] = body.action.tools_denied
+            existing_action["tools_denied"] = body.action.tools_denied
         if body.action.gate_type is not None:
-            action_dict["gate_type"] = body.action.gate_type
+            existing_action["gate_type"] = body.action.gate_type
         if body.action.gate_threshold is not None:
-            action_dict["gate_threshold"] = body.action.gate_threshold
+            existing_action["gate_threshold"] = body.action.gate_threshold
         if body.action.max_files is not None:
-            action_dict["max_files"] = body.action.max_files
+            existing_action["max_files"] = body.action.max_files
         if body.action.require_tests is not None:
-            action_dict["require_tests"] = body.action.require_tests
+            existing_action["require_tests"] = body.action.require_tests
         if body.action.require_review is not None:
-            action_dict["require_review"] = body.action.require_review
-        data["action"] = action_dict
+            existing_action["require_review"] = body.action.require_review
+        data["action"] = existing_action
 
     # Keep version from the request body for optimistic locking
     data["version"] = body.version
@@ -347,7 +380,9 @@ async def list_guidelines(
             page=page,
             page_size=page_size,
         )
-    except Exception as exc:
+    except GuidelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GuardrailsError as exc:
         logger.error("Error listing guidelines: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -421,7 +456,9 @@ async def list_audit_entries(
             ],
             total=total,
         )
-    except Exception as exc:
+    except GuidelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GuardrailsError as exc:
         logger.error("Error listing audit entries: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -432,7 +469,6 @@ async def list_audit_entries(
 @router.post("/evaluate", response_model=EvaluatedContextResponse)
 async def evaluate_context(
     body: TaskContextRequest,
-    store: GuardrailsStore = Depends(get_guardrails_store),
 ) -> EvaluatedContextResponse:
     """Evaluate a task context against all enabled guidelines.
 
@@ -460,7 +496,7 @@ async def evaluate_context(
             gate_type=body.gate_type,
             session_id=body.session_id,
         )
-        evaluator = GuardrailsEvaluator(store)
+        evaluator = await get_guardrails_evaluator()
         evaluated = await evaluator.get_context(task_context)
         return EvaluatedContextResponse(
             matched_count=len(evaluated.matched_guidelines),
@@ -479,7 +515,9 @@ async def evaluate_context(
                 for eg in evaluated.matched_guidelines
             ],
         )
-    except Exception as exc:
+    except GuidelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GuardrailsError as exc:
         logger.error("Error evaluating context: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -517,7 +555,7 @@ async def export_guidelines(
             page_size=10000,
         )
         return [_guideline_to_response(g) for g in guidelines]
-    except Exception as exc:
+    except GuardrailsError as exc:
         logger.error("Error exporting guidelines: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -546,6 +584,11 @@ async def import_guidelines(
     Raises:
         HTTPException: 503 if a catastrophic error prevents processing.
     """
+    if len(body) > MAX_IMPORT_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Import batch too large: {len(body)} items (max {MAX_IMPORT_BATCH_SIZE})",
+        )
     imported = 0
     errors: list[str] = []
     try:
@@ -603,7 +646,7 @@ async def get_guideline(
             status_code=404,
             detail=f"Guideline not found: {guideline_id}",
         )
-    except Exception as exc:
+    except GuardrailsError as exc:
         logger.error("Error getting guideline %s: %s", guideline_id, exc)
         raise HTTPException(
             status_code=503,
@@ -637,7 +680,9 @@ async def create_guideline(
             "changes": {"name": created.name},
         })
         return _guideline_to_response(created)
-    except Exception as exc:
+    except GuidelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except GuardrailsError as exc:
         logger.error("Error creating guideline: %s", exc)
         raise HTTPException(
             status_code=503,
@@ -688,7 +733,7 @@ async def update_guideline(
             status_code=409,
             detail=str(exc),
         )
-    except Exception as exc:
+    except GuardrailsError as exc:
         logger.error(
             "Error updating guideline %s: %s", guideline_id, exc
         )
@@ -728,7 +773,7 @@ async def delete_guideline(
             status_code=404,
             detail=f"Guideline not found: {guideline_id}",
         )
-    except Exception as exc:
+    except GuardrailsError as exc:
         logger.error(
             "Error deleting guideline %s: %s", guideline_id, exc
         )
@@ -785,7 +830,7 @@ async def toggle_guideline(
             status_code=409,
             detail=str(exc),
         )
-    except Exception as exc:
+    except GuardrailsError as exc:
         logger.error(
             "Error toggling guideline %s: %s", guideline_id, exc
         )
