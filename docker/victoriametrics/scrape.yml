@@ -40,3 +40,11 @@ scrape_configs:
           service: 'hook-telemetry'
     metrics_path: /metrics
     scrape_interval: 30s
+
+  - job_name: 'hitl-ui'
+    static_configs:
+      - targets: ['hitl-ui:3000']
+        labels:
+          service: 'hitl-ui'
+    metrics_path: /metrics
+    honor_labels: true

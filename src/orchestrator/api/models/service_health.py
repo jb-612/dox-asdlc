@@ -63,15 +63,35 @@ class SparklineDataPoint(BaseModel):
     value: float
 
 
+class ServiceConnectionType(str, Enum):
+    """Connection type between services."""
+
+    HTTP = "http"
+    REDIS = "redis"
+    ELASTICSEARCH = "elasticsearch"
+
+
+class ServiceConnection(BaseModel):
+    """Connection between two services in the topology map."""
+
+    from_service: str = Field(alias="from")
+    to_service: str = Field(alias="to")
+    type: ServiceConnectionType
+
+    model_config = {"populate_by_name": True}
+
+
 class ServicesHealthResponse(BaseModel):
     """Response model for all services health endpoint.
 
     Attributes:
         services: List of health info for each service.
+        connections: Topology connections between services.
         timestamp: When this health snapshot was taken.
     """
 
     services: list[ServiceHealthInfo]
+    connections: list[ServiceConnection] = Field(default_factory=list)
     timestamp: datetime
 
 

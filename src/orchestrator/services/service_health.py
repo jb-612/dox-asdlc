@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from src.orchestrator.api.models.service_health import (
+    ServiceConnection,
     ServiceHealthInfo,
     ServiceHealthStatus,
     ServicesHealthResponse,
@@ -63,6 +64,15 @@ MEMORY_UNHEALTHY_THRESHOLD = 95.0
 # Cache configuration
 HEALTH_CACHE_TTL = 300  # 5 minutes in seconds
 SPARKLINE_CACHE_TTL = 60  # 1 minute in seconds
+
+DEFAULT_SERVICE_CONNECTIONS: list[dict[str, str]] = [
+    {"from": "hitl-ui", "to": "orchestrator", "type": "http"},
+    {"from": "orchestrator", "to": "workers", "type": "http"},
+    {"from": "orchestrator", "to": "redis", "type": "redis"},
+    {"from": "workers", "to": "redis", "type": "redis"},
+    {"from": "workers", "to": "elasticsearch", "type": "elasticsearch"},
+    {"from": "orchestrator", "to": "elasticsearch", "type": "elasticsearch"},
+]
 
 
 def determine_health_status(
@@ -344,8 +354,16 @@ class ServiceHealthService:
             health = await self.get_service_health(service_name)
             services.append(health)
 
+        connections = [
+            ServiceConnection(
+                from_service=c["from"], to_service=c["to"], type=c["type"]
+            )
+            for c in DEFAULT_SERVICE_CONNECTIONS
+        ]
+
         return ServicesHealthResponse(
             services=services,
+            connections=connections,
             timestamp=datetime.now(UTC),
         )
 

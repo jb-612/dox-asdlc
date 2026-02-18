@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py post-tool-use echo ok",
+            "command": "python3 scripts/hooks/hook-wrapper.py post-tool-use echo '{}'",
             "timeout": 5000
           }
         ]
@@ -143,7 +143,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py session-stop echo ok",
+            "command": "python3 scripts/hooks/hook-wrapper.py session-stop echo '{}'",
             "timeout": 5000
           }
         ]
@@ -155,7 +155,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py notification echo ok",
+            "command": "python3 scripts/hooks/hook-wrapper.py notification echo '{}'",
             "timeout": 5000
           }
         ]

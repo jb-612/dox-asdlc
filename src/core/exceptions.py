@@ -254,6 +254,11 @@ class IngestionError(ASDLCError):
         file_path: str | None = None,
         cause: Exception | None = None,
     ) -> None:
-        super().__init__(message)
+        details: dict = {}
+        if file_path:
+            details["file_path"] = file_path
+        if cause:
+            details["cause"] = str(cause)
+        super().__init__(message, details=details)
         self.file_path = file_path
         self.cause = cause

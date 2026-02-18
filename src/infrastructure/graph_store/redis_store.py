@@ -84,6 +84,21 @@ class RedisGraphStore:
                 return value
         return value
 
+    async def _scan_keys(self, pattern: str) -> list[str]:
+        """Scan for keys matching a pattern without blocking Redis.
+
+        Args:
+            pattern: Glob pattern to match keys.
+
+        Returns:
+            List of matching key names.
+        """
+        redis = await self._get_redis()
+        keys: list[str] = []
+        async for key in redis.scan_iter(match=pattern):
+            keys.append(key)
+        return keys
+
     async def add_node(self, node_id: str, properties: dict) -> None:
         """Add or update a node.
 
@@ -169,7 +184,7 @@ class RedisGraphStore:
             members = await redis.smembers(f"GRAPH:NEIGHBORS:{node_id}:{edge_type}")
             return list(members)
         # Get all edge types
-        keys = await redis.keys(f"GRAPH:NEIGHBORS:{node_id}:*")
+        keys = await self._scan_keys(f"GRAPH:NEIGHBORS:{node_id}:*")
         neighbors: set[str] = set()
         for key in keys:
             members = await redis.smembers(key)
@@ -217,7 +232,7 @@ class RedisGraphStore:
                         break
                 else:
                     # Check all edge types
-                    keys = await redis.keys(f"GRAPH:EDGE:{from_id}:{to_id}:*")
+                    keys = await self._scan_keys(f"GRAPH:EDGE:{from_id}:{to_id}:*")
                     for key in keys:
                         et = key.split(":")[-1]
                         props = await redis.hgetall(key)
@@ -299,7 +314,7 @@ class RedisGraphStore:
         redis = await self._get_redis()
         # Get all neighbors to clean up reverse edges
         neighbors = await self.get_neighbors(node_id)
-        keys = await redis.keys(f"GRAPH:NEIGHBORS:{node_id}:*")
+        keys = await self._scan_keys(f"GRAPH:NEIGHBORS:{node_id}:*")
 
         for key in keys:
             edge_type = key.split(":")[-1]
@@ -311,8 +326,8 @@ class RedisGraphStore:
         await redis.delete(f"GRAPH:NODE:{node_id}")
 
         # Remove edges involving this node
-        edge_keys = await redis.keys(f"GRAPH:EDGE:{node_id}:*")
-        reverse_edge_keys = await redis.keys(f"GRAPH:EDGE:*:{node_id}:*")
+        edge_keys = await self._scan_keys(f"GRAPH:EDGE:{node_id}:*")
+        reverse_edge_keys = await self._scan_keys(f"GRAPH:EDGE:*:{node_id}:*")
         for key in edge_keys + reverse_edge_keys:
             await redis.delete(key)
 

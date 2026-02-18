@@ -91,20 +91,12 @@ check_session_start() {
     echo "Checking instance identity..."
     echo "-----------------------------"
 
-    # Check identity file exists
-    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
-    if [[ -f "$identity_file" ]]; then
-        check "Identity file exists" "true"
-        local instance_id
-        instance_id=$(python3 -c "import json; print(json.load(open('$identity_file')).get('instance_id', 'unknown'))" 2>/dev/null || echo "unknown")
-        echo "  Instance: $instance_id"
+    # Check CLAUDE_INSTANCE_ID environment variable
+    if [[ -n "${CLAUDE_INSTANCE_ID:-}" ]]; then
+        check "CLAUDE_INSTANCE_ID set" "true"
+        echo "  Instance: $CLAUDE_INSTANCE_ID"
     else
-        check "Identity file exists" "false"
-        echo -e "  ${RED}CRITICAL: Use a launcher script to start Claude Code${NC}"
-        echo -e "  ${RED}  ./start-backend.sh      # For backend development${NC}"
-        echo -e "  ${RED}  ./start-frontend.sh     # For frontend development${NC}"
-        echo -e "  ${RED}  ./start-orchestrator.sh # For review/merge operations${NC}"
-        FAIL=$((FAIL + 1))
+        warn "CLAUDE_INSTANCE_ID not set (defaults to 'pm' in main repo)"
     fi
 
     echo ""

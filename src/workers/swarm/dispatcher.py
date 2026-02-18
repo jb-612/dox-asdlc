@@ -310,6 +310,9 @@ class SwarmDispatcher:
         """
         await self._session_manager.update_status(session_id, SwarmStatus.FAILED)
 
+        session_key = f"{self._store._config.key_prefix}:session:{session_id}"
+        await self._store._redis.hset(session_key, "error_message", error)
+
         await self._publish(
             "SWARM_FAILED",
             f"Swarm failed: {session_id}",

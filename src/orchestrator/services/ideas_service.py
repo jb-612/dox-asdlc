@@ -97,7 +97,7 @@ class IdeasService:
                     redis_client=redis_client,
                     classification_service=classification_service,
                 )
-            except Exception as e:
+            except (ImportError, ConnectionError, OSError) as e:
                 logger.warning(f"Failed to initialize classification worker: {e}")
                 self._classification_worker = None
 
@@ -232,10 +232,12 @@ class IdeasService:
             Idea | None: The idea if found, None otherwise.
         """
         es = self._get_es()
+        from elasticsearch import NotFoundError
+
         try:
             result = await es.get(index=IDEAS_INDEX, id=idea_id)
             return Idea(**result["_source"])
-        except Exception:
+        except NotFoundError:
             return None
 
     async def update_idea(self, idea_id: str, request: UpdateIdeaRequest) -> Idea | None:
@@ -292,10 +294,12 @@ class IdeasService:
             bool: True if deleted, False if not found.
         """
         es = self._get_es()
+        from elasticsearch import NotFoundError
+
         try:
             await es.delete(index=IDEAS_INDEX, id=idea_id)
             return True
-        except Exception:
+        except NotFoundError:
             return False
 
     async def list_ideas(

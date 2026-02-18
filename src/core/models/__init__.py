@@ -4,6 +4,11 @@ Contains pure Python domain models used across the application.
 These models have no external dependencies - only standard library.
 """
 
+from src.core.models.context import (
+    AgentRole,
+    ContextPack,
+    FileContent,
+)
 from src.core.models.ideation import (
     ProjectStatus,
     DataSource,
@@ -21,6 +26,9 @@ from src.core.models.ideation import (
 )
 
 __all__ = [
+    "AgentRole",
+    "ContextPack",
+    "FileContent",
     "ProjectStatus",
     "DataSource",
     "MessageRole",

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
-
 import tree_sitter_javascript as ts_js
 import tree_sitter_typescript as ts_ts
 from tree_sitter import Language, Node, Parser
@@ -15,33 +13,6 @@ from src.workers.repo_mapper.models import (
     SymbolInfo,
     SymbolKind,
 )
-
-
-class ASTParser(Protocol):
-    """Protocol for language-specific AST parsers."""
-
-    def parse_file(self, file_path: str) -> ParsedFile:
-        """Parse a single file and extract symbols.
-
-        Args:
-            file_path: Path to the file to parse
-
-        Returns:
-            ParsedFile containing extracted symbols and imports
-
-        Raises:
-            FileNotFoundError: If file does not exist
-            SyntaxError: If file has syntax errors
-        """
-        ...
-
-    def get_supported_extensions(self) -> list[str]:
-        """Return file extensions this parser handles.
-
-        Returns:
-            List of file extensions (e.g., [".ts"])
-        """
-        ...
 
 
 class TypeScriptParser:

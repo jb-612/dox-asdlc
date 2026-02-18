@@ -57,7 +57,7 @@ spec:
                 - -c
                 - |
                   {{- if .Values.auth.enabled }}
-                  redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+                  REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG
                   {{- else }}
                   redis-cli ping | grep -q PONG
                   {{- end }}
@@ -74,7 +74,7 @@ spec:
                 - -c
                 - |
                   {{- if .Values.auth.enabled }}
-                  redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+                  REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping | grep -q PONG
                   {{- else }}
                   redis-cli ping | grep -q PONG
                   {{- end }}

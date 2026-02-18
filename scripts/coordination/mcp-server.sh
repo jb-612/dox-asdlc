@@ -18,14 +18,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Read instance ID from identity file
+# Read instance ID from environment variable
 get_instance_id() {
-    local identity_file="$PROJECT_ROOT/.claude/instance-identity.json"
-    if [[ ! -f "$identity_file" ]]; then
-        echo ""
-        return
-    fi
-    python3 -c "import json; print(json.load(open('$identity_file')).get('instance_id', ''))" 2>/dev/null || echo ""
+    echo "${CLAUDE_INSTANCE_ID:-pm}"
 }
 
 # Load common functions
@@ -41,10 +36,7 @@ fi
 CLAUDE_INSTANCE_ID=$(get_instance_id)
 
 if [[ -z "$CLAUDE_INSTANCE_ID" ]]; then
-    echo "ERROR: Identity file not found or invalid" >&2
-    echo "Start Claude Code using a launcher script first:" >&2
-    echo "  ./start-backend.sh" >&2
-    exit 1
+    echo "WARNING: CLAUDE_INSTANCE_ID not set, defaulting to 'pm'" >&2
 fi
 
 # Export for Python module

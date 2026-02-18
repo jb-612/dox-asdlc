@@ -33,7 +33,7 @@ persistence:
 auth:
   enabled: true
   # Password is expected to be provided via parent chart secrets
-  existingSecret: ""
+  existingSecret: null
   existingSecretPasswordKey: "redis-password"
 
 # Redis configuration

@@ -10,6 +10,7 @@ All write operations fail silently to avoid breaking hooks.
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional, TYPE_CHECKING
@@ -69,14 +70,32 @@ CREATE INDEX IF NOT EXISTS idx_cost_records_model ON cost_records(model);
 """
 
 
+_thread_local = threading.local()
+
+
 def _get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    """Create a WAL-mode SQLite connection, ensuring the parent directory exists."""
+    """Get a thread-local WAL-mode SQLite connection.
+
+    Reuses an existing connection for the current thread if the db_path
+    matches, avoiding the overhead of creating a new connection per call.
+    """
     path = db_path or DEFAULT_DB_PATH
+    path_str = str(path)
+    cached: Optional[sqlite3.Connection] = getattr(_thread_local, "conn", None)
+    cached_path: Optional[str] = getattr(_thread_local, "conn_path", None)
+    if cached is not None and cached_path == path_str:
+        try:
+            cached.execute("SELECT 1")
+            return cached
+        except sqlite3.ProgrammingError:
+            pass
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), timeout=5.0)
+    conn = sqlite3.connect(path_str, timeout=5.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=3000")
     conn.row_factory = sqlite3.Row
+    _thread_local.conn = conn
+    _thread_local.conn_path = path_str
     return conn
 
 
@@ -85,7 +104,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
     try:
         conn = _get_connection(db_path)
         conn.executescript(_SCHEMA_SQL)
-        conn.close()
     except Exception:
         pass
 
@@ -128,7 +146,6 @@ def record_event(
             ),
         )
         conn.commit()
-        conn.close()
     except Exception:
         pass
 
@@ -154,7 +171,6 @@ def record_session_start(
             (session_id, time.time(), agent_type, instance_id, model),
         )
         conn.commit()
-        conn.close()
     except Exception:
         pass
 
@@ -171,7 +187,6 @@ def record_session_end(
             (time.time(), session_id),
         )
         conn.commit()
-        conn.close()
     except Exception:
         pass
 
@@ -203,7 +218,6 @@ def get_events(
         params.append(limit)
 
         rows = conn.execute(query, params).fetchall()
-        conn.close()
         return [dict(row) for row in rows]
     except Exception:
         return []
@@ -224,7 +238,6 @@ def get_sessions(
             rows = conn.execute(
                 "SELECT * FROM sessions ORDER BY started_at DESC LIMIT 50"
             ).fetchall()
-        conn.close()
         return [dict(row) for row in rows]
     except Exception:
         return []
@@ -261,8 +274,6 @@ def get_stats(db_path: Optional[Path] = None) -> dict[str, Any]:
         active_sessions = conn.execute(
             "SELECT COUNT(*) as c FROM sessions WHERE ended_at IS NULL"
         ).fetchone()["c"]
-
-        conn.close()
 
         return {
             "total_events": total,
@@ -319,7 +330,6 @@ def record_cost(
             ),
         )
         conn.commit()
-        conn.close()
     except Exception:
         pass
 
@@ -369,7 +379,6 @@ def get_costs(
             f" ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         )
         rows = conn.execute(query, params + [page_size, offset]).fetchall()
-        conn.close()
         return [dict(row) for row in rows], total
     except Exception:
         return [], 0
@@ -433,7 +442,6 @@ def get_cost_summary(
             f" ORDER BY total_cost_usd DESC"
         )
         rows = conn.execute(query, params).fetchall()
-        conn.close()
         return [dict(row) for row in rows]
     except Exception:
         return []
@@ -483,8 +491,6 @@ def get_session_costs(
             "SELECT SUM(estimated_cost_usd) as total FROM cost_records WHERE session_id = ?",
             (session_id,),
         ).fetchone()
-
-        conn.close()
 
         return {
             "model_breakdown": [dict(r) for r in model_rows],

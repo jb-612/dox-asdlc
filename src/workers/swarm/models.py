@@ -189,5 +189,8 @@ class SwarmSession(BaseModel):
     unified_report: UnifiedReport | None = Field(
         default=None, description="Final aggregated report"
     )
+    error_message: str | None = Field(
+        default=None, description="Error message if session failed"
+    )
 
     model_config = {"use_enum_values": True}

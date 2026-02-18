@@ -213,7 +213,7 @@ async def _ensure_swarm_components() -> (
             )
             return _cached_redis_store, _cached_session_manager, _cached_dispatcher
         except Exception as exc:
-            logger.warning(f"Could not initialize swarm components: {exc}")
+            logger.warning("Could not initialize swarm components: %s", exc)
             return None
 
 
@@ -400,11 +400,11 @@ async def run_swarm_background(
         await dispatcher.finalize_swarm(swarm_id, report)
 
     except Exception as e:
-        logger.error(f"Swarm {swarm_id} background processing failed: {e}")
+        logger.error("Swarm %s background processing failed: %s", swarm_id, e)
         try:
             await dispatcher.fail_swarm(swarm_id, str(e))
         except Exception as fail_err:
-            logger.error(f"Failed to mark swarm {swarm_id} as failed: {fail_err}")
+            logger.error("Failed to mark swarm %s as failed: %s", swarm_id, fail_err)
     finally:
         await unregister_swarm(swarm_id)
 
@@ -522,7 +522,7 @@ async def get_swarm_status(
         try:
             actual_results = await redis_store.get_all_results(swarm_id)
         except Exception as exc:
-            logger.warning(f"Failed to fetch results for {swarm_id}: {exc}")
+            logger.warning("Failed to fetch results for %s: %s", swarm_id, exc)
     if not actual_results and session.results:
         actual_results = session.results
 
@@ -562,5 +562,5 @@ async def get_swarm_status(
         reviewers=reviewers,
         unified_report=session.unified_report,
         duration_seconds=duration_seconds,
-        error_message=None,  # TODO: Store error message in session
+        error_message=session.error_message,
     )
