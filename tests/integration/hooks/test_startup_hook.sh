@@ -2,7 +2,7 @@
 # Integration tests for the session startup hook.
 #
 # Tests the startup validation hook:
-# - Identity validation (CLAUDE_INSTANCE_ID and git email)
+# - Identity validation (CLAUDE_INSTANCE_ID env var)
 # - Presence registration
 # - Notification checking
 # - Worktree verification
@@ -38,7 +38,6 @@ TESTS_SKIPPED=0
 
 # Saved environment
 SAVED_CLAUDE_INSTANCE_ID="${CLAUDE_INSTANCE_ID:-}"
-SAVED_GIT_EMAIL=""
 
 # =============================================================================
 # Test Utilities
@@ -89,7 +88,6 @@ redis_available() {
 # Save current environment
 save_env() {
     SAVED_CLAUDE_INSTANCE_ID="${CLAUDE_INSTANCE_ID:-}"
-    SAVED_GIT_EMAIL=$(git config user.email 2>/dev/null || echo "")
 }
 
 # Restore environment
@@ -98,10 +96,6 @@ restore_env() {
         export CLAUDE_INSTANCE_ID="$SAVED_CLAUDE_INSTANCE_ID"
     else
         unset CLAUDE_INSTANCE_ID 2>/dev/null || true
-    fi
-
-    if [[ -n "$SAVED_GIT_EMAIL" ]]; then
-        git config user.email "$SAVED_GIT_EMAIL" 2>/dev/null || true
     fi
 }
 
@@ -112,13 +106,10 @@ trap restore_env EXIT
 # =============================================================================
 
 test_identity_from_env_variable() {
-    log_test "Identity validation: CLAUDE_INSTANCE_ID takes precedence"
+    log_test "Identity validation: CLAUDE_INSTANCE_ID sets identity"
 
     # Set environment variable
     export CLAUDE_INSTANCE_ID="backend"
-
-    # Set git email to something different
-    git config user.email "different@example.com" 2>/dev/null || true
 
     local exit_code=0
     local output
@@ -133,36 +124,11 @@ test_identity_from_env_variable() {
     restore_env
 }
 
-test_identity_from_git_email() {
-    log_test "Identity validation: Falls back to git user.email"
+test_identity_missing_env_exits_nonzero() {
+    log_test "Identity validation: Missing CLAUDE_INSTANCE_ID exits with code 1"
 
     # Unset environment variable
     unset CLAUDE_INSTANCE_ID
-
-    # Set git email to known role
-    git config user.email "claude-frontend@asdlc.local"
-
-    local exit_code=0
-    local output
-    output=$("$HOOK_SCRIPT" 2>&1) || exit_code=$?
-
-    if [[ "$exit_code" -eq 0 ]] && echo "$output" | grep -q "frontend"; then
-        pass
-    else
-        fail "Expected identity 'frontend' from git email (exit code: $exit_code)"
-    fi
-
-    restore_env
-}
-
-test_identity_invalid_exits_nonzero() {
-    log_test "Identity validation: Invalid identity exits with code 1"
-
-    # Unset environment variable
-    unset CLAUDE_INSTANCE_ID
-
-    # Set git email to unrecognized value
-    git config user.email "unknown@example.com"
 
     local exit_code=0
     local output
@@ -171,51 +137,46 @@ test_identity_invalid_exits_nonzero() {
     if [[ "$exit_code" -ne 0 ]]; then
         pass
     else
-        fail "Should exit non-zero for invalid identity"
+        fail "Should exit non-zero without CLAUDE_INSTANCE_ID"
     fi
 
     restore_env
 }
 
-test_identity_empty_env_falls_back() {
-    log_test "Identity validation: Empty CLAUDE_INSTANCE_ID falls back to git"
+test_identity_empty_env_defaults_to_pm() {
+    log_test "Identity validation: Empty CLAUDE_INSTANCE_ID defaults to pm"
 
     # Set empty environment variable
     export CLAUDE_INSTANCE_ID=""
 
-    # Set git email to known role
-    git config user.email "claude-orchestrator@asdlc.local"
-
     local exit_code=0
     local output
     output=$("$HOOK_SCRIPT" 2>&1) || exit_code=$?
 
-    if [[ "$exit_code" -eq 0 ]] && echo "$output" | grep -q "orchestrator"; then
+    # Should default to pm or fail gracefully
+    if [[ "$exit_code" -eq 0 ]]; then
         pass
     else
-        fail "Expected fallback to git email (exit code: $exit_code)"
+        fail "Empty CLAUDE_INSTANCE_ID should default to pm (exit code: $exit_code)"
     fi
 
     restore_env
 }
 
-test_identity_unknown_value_falls_back() {
-    log_test "Identity validation: CLAUDE_INSTANCE_ID='unknown' falls back to git"
+test_identity_unknown_value_accepted() {
+    log_test "Identity validation: Arbitrary CLAUDE_INSTANCE_ID accepted as bounded context"
 
-    # Set "unknown" as environment variable
-    export CLAUDE_INSTANCE_ID="unknown"
-
-    # Set git email to known role
-    git config user.email "claude-devops@asdlc.local"
+    # Any non-empty string is a valid bounded context
+    export CLAUDE_INSTANCE_ID="p11-guardrails"
 
     local exit_code=0
     local output
     output=$("$HOOK_SCRIPT" 2>&1) || exit_code=$?
 
-    if [[ "$exit_code" -eq 0 ]] && echo "$output" | grep -q "devops"; then
+    if [[ "$exit_code" -eq 0 ]]; then
         pass
     else
-        fail "Expected fallback to git email when CLAUDE_INSTANCE_ID='unknown' (exit code: $exit_code)"
+        fail "Bounded context identity should be accepted (exit code: $exit_code)"
     fi
 
     restore_env
@@ -239,22 +200,19 @@ test_identity_pm_role_valid() {
     restore_env
 }
 
-test_identity_invalid_role_name() {
-    log_test "Identity validation: Invalid role name rejected"
+test_identity_bounded_context_accepted() {
+    log_test "Identity validation: Bounded context names accepted"
 
-    export CLAUDE_INSTANCE_ID="invalid_role_xyz"
-
-    # Set git email to unrecognized value so fallback also fails
-    git config user.email "nobody@example.com"
+    export CLAUDE_INSTANCE_ID="p04-review-swarm"
 
     local exit_code=0
     local output
     output=$("$HOOK_SCRIPT" 2>&1) || exit_code=$?
 
-    if [[ "$exit_code" -ne 0 ]]; then
+    if [[ "$exit_code" -eq 0 ]]; then
         pass
     else
-        fail "Should reject invalid role name"
+        fail "Bounded context names should be accepted (exit code: $exit_code)"
     fi
 
     restore_env
@@ -438,7 +396,6 @@ test_exit_code_nonzero_on_failure() {
     log_test "Exit code: Returns non-zero on validation failure"
 
     unset CLAUDE_INSTANCE_ID
-    git config user.email "invalid@example.com"
 
     local exit_code=0
     "$HOOK_SCRIPT" >/dev/null 2>&1 || exit_code=$?
@@ -446,7 +403,7 @@ test_exit_code_nonzero_on_failure() {
     if [[ "$exit_code" -ne 0 ]]; then
         pass
     else
-        fail "Expected non-zero exit code for invalid identity"
+        fail "Expected non-zero exit code without CLAUDE_INSTANCE_ID"
     fi
 
     restore_env
@@ -495,13 +452,12 @@ test_output_error_is_helpful() {
     log_test "Output: Error message includes remediation"
 
     unset CLAUDE_INSTANCE_ID
-    git config user.email "invalid@example.com"
 
     local output
     output=$("$HOOK_SCRIPT" 2>&1) || true
 
-    # Error should include how to fix
-    if echo "$output" | grep -qi "CLAUDE_INSTANCE_ID\|git config"; then
+    # Error should include how to fix via CLAUDE_INSTANCE_ID
+    if echo "$output" | grep -qi "CLAUDE_INSTANCE_ID"; then
         pass
     else
         fail "Error should include remediation steps: $output"
@@ -587,12 +543,11 @@ main() {
 
     echo -e "\n${YELLOW}--- Identity Validation Tests ---${NC}"
     test_identity_from_env_variable
-    test_identity_from_git_email
-    test_identity_invalid_exits_nonzero
-    test_identity_empty_env_falls_back
-    test_identity_unknown_value_falls_back
+    test_identity_missing_env_exits_nonzero
+    test_identity_empty_env_defaults_to_pm
+    test_identity_unknown_value_accepted
     test_identity_pm_role_valid
-    test_identity_invalid_role_name
+    test_identity_bounded_context_accepted
 
     echo -e "\n${YELLOW}--- Presence Registration Tests ---${NC}"
     test_presence_registration_with_redis

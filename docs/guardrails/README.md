@@ -83,7 +83,7 @@ Configuration is loaded from environment variables via `GuardrailsConfig.from_en
 | `ELASTICSEARCH_URL` | `http://localhost:9200` | Elasticsearch connection URL. |
 | `GUARDRAILS_INDEX_PREFIX` | `""` (empty) | Tenant prefix for Elasticsearch indices. When set, indices become `<prefix>_guardrails-config` and `<prefix>_guardrails-audit`. |
 | `GUARDRAILS_CACHE_TTL` | `60.0` | Seconds to cache enabled guidelines in the evaluator. Set to `0` to disable caching. |
-| `GUARDRAILS_FALLBACK_MODE` | `permissive` | Behavior when Elasticsearch is unavailable: `permissive` (allow all) or `restrictive` (block). |
+| `GUARDRAILS_FALLBACK_MODE` | `static` | Behavior when Elasticsearch is unavailable: `static` (use local JSON file at `GUARDRAILS_STATIC_FILE`), `permissive` (allow all), or `restrictive` (block). |
 
 ## Guideline Schema Reference
 
