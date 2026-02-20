@@ -242,7 +242,7 @@ This permission model integrates with:
 
 - **hitl-gates.md**: Gate 4 (Destructive Workstation Operation) references this environment detection
 - **parallel-coordination.md**: Path restrictions per agent apply to Tier 1 permissions
-- **pm-cli.md**: PM CLI handles Tier 3 permission forwarding
+- **pm-cli/**: PM CLI handles Tier 3 permission forwarding
 - **devops.md**: DevOps agent has expanded Tier 2 permissions when invoked
 
 ## Troubleshooting

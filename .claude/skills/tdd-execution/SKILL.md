@@ -1,6 +1,7 @@
 ---
 name: tdd-execution
 description: Guides test-driven development using Red-Green-Refactor cycle. Use when implementing tasks from tasks.md, writing tests before code, or debugging failing tests.
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
 Execute TDD for the specified task using Red-Green-Refactor:
@@ -50,3 +51,8 @@ After tests pass:
 - Never write code before tests
 - Never skip to next task while tests fail
 - Never refactor while tests are red
+
+## Cross-References
+
+- `@testing` — Run full quality gates after TDD cycle
+- `@feature-completion` — Validate when all tasks complete
