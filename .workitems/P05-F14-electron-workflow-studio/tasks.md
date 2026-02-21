@@ -1,11 +1,15 @@
 # P05-F14: Electron Workflow Studio - Task Breakdown
 
+> **SUPERSEDED**: This feature has been extracted into its own epic P14 (Electron Workflow Studio).
+> See `.workitems/P14-F01-*` through `.workitems/P14-F06-*` for the restructured breakdown.
+> This file is retained for historical reference only.
+
 ## Progress
 
 - Started: 2026-02-21
 - Tasks Complete: 0/42
 - Percentage: 0%
-- Status: NOT_STARTED
+- Status: SUPERSEDED
 - Blockers: None
 
 ---

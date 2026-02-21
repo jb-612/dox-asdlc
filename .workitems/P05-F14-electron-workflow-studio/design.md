@@ -1,8 +1,12 @@
 # P05-F14: Electron Workflow Studio - Technical Design
 
+> **SUPERSEDED**: This feature has been extracted into its own epic P14 (Electron Workflow Studio).
+> See `.workitems/P14-F01-*` through `.workitems/P14-F06-*` for the restructured breakdown.
+> This file is retained for historical reference only.
+
 **Version:** 1.0
 **Date:** 2026-02-21
-**Status:** Draft
+**Status:** SUPERSEDED
 
 ## 1. Overview
 
