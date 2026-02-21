@@ -2,33 +2,27 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { builtinModules } from 'module';
 
-// Vite config for Electron main process
+// Vite config for Electron preload script
 export default defineConfig({
   build: {
-    outDir: 'dist/main',
+    outDir: 'dist/preload',
     lib: {
-      entry: resolve(__dirname, 'src/main/index.ts'),
+      entry: resolve(__dirname, 'src/preload/preload.ts'),
       formats: ['cjs'],
-      fileName: () => 'index.js',
+      fileName: () => 'preload.js',
     },
     rollupOptions: {
       external: [
         'electron',
         ...builtinModules,
         ...builtinModules.map((m) => `node:${m}`),
-        ...builtinModules.map((m) => `${m}/promises`),
       ],
       output: {
-        entryFileNames: 'index.js',
+        entryFileNames: 'preload.js',
       },
     },
     minify: false,
     sourcemap: true,
     emptyOutDir: true,
-  },
-  resolve: {
-    alias: {
-      '@main': resolve(__dirname, 'src/main'),
-    },
   },
 });

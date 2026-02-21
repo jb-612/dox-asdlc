@@ -11,7 +11,7 @@ export interface GateDecisionFormProps {
   context?: string;
   options: GateOption[];
   timeoutSeconds?: number;
-  onSubmit: (gateId: string, decision: string, feedback?: string) => void;
+  onSubmit: (gateId: string, selectedOption: string, reason?: string) => void;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { app } from 'electron';
+import type { AppSettings } from '../../shared/types/settings';
 
 // ---------------------------------------------------------------------------
 // SettingsService
@@ -11,24 +12,11 @@ import { app } from 'electron';
 // immediately.
 // ---------------------------------------------------------------------------
 
-export interface AppSettings {
-  /** Directory where workflow .json files are stored. */
-  workflowDir: string;
-  /** Directory where workflow templates are stored. */
-  templateDir: string;
-  /** Auto-save interval for the canvas editor, in seconds. */
-  autoSaveIntervalSeconds: number;
-  /** Default working directory for spawned CLI sessions. */
-  cliDefaultCwd: string;
-  /** Redis connection URL for coordination. */
-  redisUrl: string;
-}
-
 function getDefaultSettings(): AppSettings {
   const userDataPath = app?.getPath('userData') || join(process.env.HOME || '~', '.asdlc');
   return {
-    workflowDir: join(userDataPath, 'workflows'),
-    templateDir: join(userDataPath, 'templates'),
+    workflowDirectory: join(userDataPath, 'workflows'),
+    templateDirectory: join(userDataPath, 'templates'),
     autoSaveIntervalSeconds: 60,
     cliDefaultCwd: process.cwd(),
     redisUrl: 'redis://localhost:6379',

@@ -10,41 +10,6 @@ import type { WorkItemReference } from '../../shared/types/workitem';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 
 // ---------------------------------------------------------------------------
-// Type declarations for the preload bridge (window.electronAPI)
-// ---------------------------------------------------------------------------
-
-interface ElectronExecutionAPI {
-  start: (config: {
-    workflowId: string;
-    workflow?: WorkflowDefinition;
-    workItem?: WorkItemReference;
-    variables?: Record<string, unknown>;
-  }) => Promise<{ success: boolean; executionId?: string; error?: string }>;
-  pause: () => Promise<{ success: boolean; error?: string }>;
-  resume: () => Promise<{ success: boolean; error?: string }>;
-  abort: () => Promise<{ success: boolean; executionId?: string; error?: string }>;
-  gateDecision: (decision: {
-    executionId: string;
-    gateId: string;
-    nodeId: string;
-    decision: string;
-    comment?: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-}
-
-interface ElectronAPI {
-  execution: ElectronExecutionAPI;
-  onEvent: (channel: string, callback: (...args: unknown[]) => void) => void;
-  removeListener: (channel: string) => void;
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
 
@@ -102,8 +67,8 @@ export interface ExecutionState {
   submitGateDecision: (
     nodeId: string,
     gateId: string,
-    decision: string,
-    comment?: string,
+    selectedOption: string,
+    reason?: string,
   ) => Promise<void>;
 
   // --- Subscription management ---
@@ -253,7 +218,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     }
   },
 
-  submitGateDecision: async (nodeId, gateId, decision, comment) => {
+  submitGateDecision: async (nodeId, gateId, selectedOption, reason) => {
     const { execution } = get();
     if (!execution) {
       set({ lastError: 'No active execution' });
@@ -266,8 +231,9 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         executionId: execution.id,
         gateId,
         nodeId,
-        decision,
-        comment,
+        selectedOption,
+        decidedBy: 'user',
+        reason,
       });
       if (!result.success) {
         set({ lastError: result.error ?? 'Failed to submit gate decision' });

@@ -44,8 +44,11 @@ export function registerWorkflowHandlers(fileService: WorkflowFileService | null
     const fromFile = fileSummaries.map((s) => ({
       id: s.id,
       name: s.name,
+      description: s.description,
+      version: s.version,
       updatedAt: s.updatedAt,
       nodeCount: s.nodeCount,
+      tags: s.tags,
     }));
 
     return [...fromFile, ...memorySummaries];

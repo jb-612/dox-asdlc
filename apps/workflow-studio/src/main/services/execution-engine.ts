@@ -162,7 +162,7 @@ export class ExecutionEngine {
     if (this.execution && this.execution.status === 'running') {
       this.isPaused = true;
       this.setStatus('paused');
-      this.emitEvent('execution_started', undefined, 'Execution paused');
+      this.emitEvent('execution_paused', undefined, 'Execution paused');
       this.sendStateUpdate();
     }
   }
@@ -172,7 +172,7 @@ export class ExecutionEngine {
     if (this.execution && this.execution.status === 'paused') {
       this.isPaused = false;
       this.setStatus('running');
-      this.emitEvent('execution_started', undefined, 'Execution resumed');
+      this.emitEvent('execution_resumed', undefined, 'Execution resumed');
       this.sendStateUpdate();
     }
   }
@@ -235,7 +235,7 @@ export class ExecutionEngine {
     this.updateNodeState(nodeId, 'waiting_gate');
     this.setStatus('waiting_gate');
     this.emitEvent(
-      'gate_reached',
+      'gate_waiting',
       nodeId,
       `HITL Gate: ${gate.prompt}`,
       {
@@ -262,7 +262,7 @@ export class ExecutionEngine {
       'gate_decided',
       nodeId,
       `Gate decision: ${decision}`,
-      { gateId: gate.id, decision },
+      { gateId: gate.id, selectedOption: decision, decidedBy: 'user' },
     );
     this.setStatus('running');
     this.sendStateUpdate();

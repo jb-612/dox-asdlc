@@ -16,7 +16,7 @@ import GateDecisionForm from './GateDecisionForm';
 export interface ExecutionDetailsPanelProps {
   execution: Execution;
   selectedNodeId: string | null;
-  onGateDecision: (gateId: string, decision: string, feedback?: string) => void;
+  onGateDecision: (gateId: string, selectedOption: string, reason?: string) => void;
 }
 
 // ---------------------------------------------------------------------------

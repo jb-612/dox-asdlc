@@ -6,12 +6,20 @@ import { NODE_TYPE_METADATA } from '../../../shared/constants';
 export interface AgentNodeData {
   type: AgentNodeType;
   label: string;
-  config: AgentNodeConfig;
+  config?: AgentNodeConfig;
   description?: string;
 }
 
 function AgentNodeComponent({ data, selected }: NodeProps<AgentNodeData>): JSX.Element {
-  const meta = NODE_TYPE_METADATA[data.type];
+  const meta = NODE_TYPE_METADATA[data.type] ?? {
+    label: data.type ?? 'Unknown',
+    color: '#6B7280',
+    bgColor: '#6B728020',
+    icon: '',
+    category: 'development' as const,
+    description: '',
+  };
+  const config = data.config ?? {};
 
   return (
     <div
@@ -55,19 +63,19 @@ function AgentNodeComponent({ data, selected }: NodeProps<AgentNodeData>): JSX.E
 
         {/* Config summary */}
         <div className="flex flex-wrap gap-1">
-          {data.config.model && (
+          {config.model && (
             <span className="text-[10px] text-gray-500 bg-gray-700/50 px-1.5 py-0.5 rounded">
-              {data.config.model}
+              {config.model}
             </span>
           )}
-          {data.config.maxTurns != null && (
+          {config.maxTurns != null && (
             <span className="text-[10px] text-gray-500 bg-gray-700/50 px-1.5 py-0.5 rounded">
-              {data.config.maxTurns} turns
+              {config.maxTurns} turns
             </span>
           )}
-          {data.config.timeoutSeconds != null && (
+          {config.timeoutSeconds != null && (
             <span className="text-[10px] text-gray-500 bg-gray-700/50 px-1.5 py-0.5 rounded">
-              {data.config.timeoutSeconds}s
+              {config.timeoutSeconds}s
             </span>
           )}
         </div>

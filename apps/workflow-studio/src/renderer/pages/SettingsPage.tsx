@@ -8,11 +8,8 @@ import { DEFAULT_SETTINGS } from '../../shared/types/settings';
 
 async function loadSettings(): Promise<AppSettings> {
   try {
-    if (window.electronAPI && 'settings' in window.electronAPI) {
-      const api = window.electronAPI as unknown as {
-        settings: { load: () => Promise<AppSettings> };
-      };
-      return await api.settings.load();
+    if (window.electronAPI?.settings) {
+      return await window.electronAPI.settings.load();
     }
   } catch {
     // Fall through to defaults
@@ -22,11 +19,8 @@ async function loadSettings(): Promise<AppSettings> {
 
 async function saveSettings(settings: AppSettings): Promise<boolean> {
   try {
-    if (window.electronAPI && 'settings' in window.electronAPI) {
-      const api = window.electronAPI as unknown as {
-        settings: { save: (s: AppSettings) => Promise<{ success: boolean }> };
-      };
-      const result = await api.settings.save(settings);
+    if (window.electronAPI?.settings) {
+      const result = await window.electronAPI.settings.save(settings);
       return result.success;
     }
   } catch {
@@ -91,11 +85,8 @@ export default function SettingsPage(): JSX.Element {
   const handleBrowse = useCallback(
     async (field: keyof AppSettings) => {
       try {
-        if (window.electronAPI && 'dialog' in window.electronAPI) {
-          const api = window.electronAPI as unknown as {
-            dialog: { openDirectory: () => Promise<string | null> };
-          };
-          const path = await api.dialog.openDirectory();
+        if (window.electronAPI?.dialog) {
+          const path = await window.electronAPI.dialog.openDirectory();
           if (path) {
             updateField(field, path);
           }
@@ -104,7 +95,6 @@ export default function SettingsPage(): JSX.Element {
       } catch {
         // Fall through to manual entry
       }
-      // If dialog is not available, focus the field for manual entry
     },
     [updateField],
   );

@@ -30,18 +30,21 @@ export interface NodeExecutionState {
 
 export type ExecutionEventType =
   | 'execution_started'
+  | 'execution_paused'
+  | 'execution_resumed'
   | 'execution_completed'
   | 'execution_failed'
   | 'execution_aborted'
   | 'node_started'
   | 'node_completed'
   | 'node_failed'
-  | 'gate_reached'
+  | 'node_skipped'
+  | 'gate_waiting'
   | 'gate_decided'
-  | 'variable_set'
-  | 'cli_spawned'
   | 'cli_output'
-  | 'cli_exited';
+  | 'cli_error'
+  | 'cli_exit'
+  | 'variable_updated';
 
 export interface ExecutionEvent {
   id: string;

@@ -2,9 +2,12 @@ import { registerWorkflowHandlers, seedWorkflow } from './workflow-handlers';
 import { registerExecutionHandlers } from './execution-handlers';
 import { registerWorkItemHandlers } from './workitem-handlers';
 import { registerCLIHandlers } from './cli-handlers';
+import { registerSettingsHandlers } from './settings-handlers';
+import { registerDialogHandlers } from './dialog-handlers';
 import type { CLISpawner } from '../services/cli-spawner';
 import type { WorkItemService } from '../services/workitem-service';
 import type { WorkflowFileService } from '../services/workflow-file-service';
+import type { SettingsService } from '../services/settings-service';
 import { v4 as uuidv4 } from 'uuid';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 
@@ -16,6 +19,7 @@ export interface IPCServiceDeps {
   cliSpawner: CLISpawner;
   workItemService: WorkItemService;
   workflowFileService: WorkflowFileService;
+  settingsService: SettingsService;
 }
 
 /**
@@ -30,6 +34,8 @@ export function registerAllHandlers(deps: IPCServiceDeps): void {
   registerExecutionHandlers();
   registerWorkItemHandlers(deps.workItemService);
   registerCLIHandlers(deps.cliSpawner);
+  registerSettingsHandlers(deps.settingsService);
+  registerDialogHandlers();
 
   // Seed sample workflows so the UI has content on first launch
   seedSampleWorkflows();

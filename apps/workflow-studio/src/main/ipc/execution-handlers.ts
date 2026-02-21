@@ -152,8 +152,9 @@ export function registerExecutionHandlers(): void {
         executionId: string;
         gateId: string;
         nodeId: string;
-        decision: string;
-        comment?: string;
+        selectedOption: string;
+        decidedBy?: string;
+        reason?: string;
       },
     ) => {
       const eng = engine;
@@ -166,7 +167,7 @@ export function registerExecutionHandlers(): void {
         return { success: false, error: 'Execution not found' };
       }
 
-      eng.submitGateDecision(decision.nodeId, decision.decision);
+      eng.submitGateDecision(decision.nodeId, decision.selectedOption);
       return { success: true };
     },
   );

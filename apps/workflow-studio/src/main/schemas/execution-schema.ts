@@ -40,18 +40,21 @@ export const NodeExecutionStateSchema = z.object({
 
 export const EXECUTION_EVENT_TYPES = [
   'execution_started',
+  'execution_paused',
+  'execution_resumed',
   'execution_completed',
   'execution_failed',
   'execution_aborted',
   'node_started',
   'node_completed',
   'node_failed',
-  'gate_reached',
+  'node_skipped',
+  'gate_waiting',
   'gate_decided',
-  'variable_set',
-  'cli_spawned',
   'cli_output',
-  'cli_exited',
+  'cli_error',
+  'cli_exit',
+  'variable_updated',
 ] as const;
 
 export const ExecutionEventTypeSchema = z.enum(EXECUTION_EVENT_TYPES);
@@ -103,8 +106,10 @@ export const ExecutionStartRequestSchema = z.object({
 export const GateDecisionRequestSchema = z.object({
   executionId: z.string().uuid(),
   gateId: z.string().uuid(),
-  decision: z.string().min(1),
-  comment: z.string().optional(),
+  nodeId: z.string().uuid(),
+  selectedOption: z.string().min(1),
+  decidedBy: z.string().min(1).default('user'),
+  reason: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------

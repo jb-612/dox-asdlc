@@ -3,29 +3,6 @@ import type { CLISession, CLISpawnConfig } from '../../shared/types/cli';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 
 // ---------------------------------------------------------------------------
-// Type declarations for the preload bridge (window.electronAPI)
-// ---------------------------------------------------------------------------
-
-interface ElectronCLIAPI {
-  spawn: (config: CLISpawnConfig) => Promise<{ success: boolean; sessionId?: string; pid?: number; error?: string }>;
-  kill: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
-  list: () => Promise<CLISession[]>;
-  write: (sessionId: string, data: string) => Promise<{ success: boolean; error?: string }>;
-}
-
-interface ElectronAPI {
-  cli: ElectronCLIAPI;
-  onEvent: (channel: string, callback: (...args: unknown[]) => void) => void;
-  removeListener: (channel: string) => void;
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 

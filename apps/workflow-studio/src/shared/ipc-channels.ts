@@ -30,6 +30,13 @@ export const IPC_CHANNELS = {
   CLI_OUTPUT: 'cli:output',
   CLI_EXIT: 'cli:exit',
   CLI_ERROR: 'cli:error',
+
+  // Settings operations
+  SETTINGS_LOAD: 'settings:load',
+  SETTINGS_SAVE: 'settings:save',
+
+  // Dialog operations
+  DIALOG_OPEN_DIRECTORY: 'dialog:open-directory',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

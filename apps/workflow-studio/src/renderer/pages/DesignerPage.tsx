@@ -32,9 +32,7 @@ function workflowNodesToReactFlow(store: ReturnType<typeof useWorkflowStore.getS
       selected: store.selectedNodeId === node.id,
       data: {
         label: node.label,
-        agentType: node.type,
-        color: meta?.color ?? '#6B7280',
-        bgColor: meta?.bgColor ?? '#6B728020',
+        type: node.type,
         description: node.description,
         hasGate,
       },

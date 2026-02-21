@@ -173,13 +173,14 @@ app.whenReady().then(async () => {
 
   const projectRoot = process.env.ASDLC_PROJECT_ROOT || process.cwd();
   const workItemService = new WorkItemService(projectRoot);
-  const workflowFileService = new WorkflowFileService(settings.workflowDir);
+  const workflowFileService = new WorkflowFileService(settings.workflowDirectory);
 
   // Register all IPC handlers with live service instances
   registerAllHandlers({
     cliSpawner,
     workItemService,
     workflowFileService,
+    settingsService,
   });
 
   app.on('activate', () => {

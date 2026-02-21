@@ -95,7 +95,7 @@ function buildNodes(execution: Execution): Node[] {
   const gateNodes: Node<GateNodeData & { executionStatus: NodeExecutionStatus; statusClass: string }>[] =
     workflow.gates.map((gate) => {
       const parentNode = workflow.nodes.find((n) => n.id === gate.nodeId);
-      const nodeState = nodeStates[gate.id];
+      const nodeState = nodeStates[gate.nodeId];
       const status: NodeExecutionStatus = nodeState?.status ?? 'pending';
       return {
         id: gate.id,

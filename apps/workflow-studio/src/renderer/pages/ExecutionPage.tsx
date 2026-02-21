@@ -4,6 +4,7 @@ import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
 import { NODE_TYPE_METADATA } from '../../shared/constants';
 import WorkItemPickerDialog from '../components/workitems/WorkItemPickerDialog';
+import { useExecutionStore } from '../stores/executionStore';
 
 // ---------------------------------------------------------------------------
 // Mock saved workflows -- will come from IPC workflow:list
@@ -207,6 +208,7 @@ function VariableOverridesForm({ workflow, values, onChange }: VariableOverrides
  */
 export default function ExecutionPage(): JSX.Element {
   const navigate = useNavigate();
+  const startExecution = useExecutionStore((s) => s.startExecution);
 
   const [workflows] = useState<WorkflowDefinition[]>(createMockWorkflows);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDefinition | null>(null);
@@ -234,13 +236,11 @@ export default function ExecutionPage(): JSX.Element {
     setVariableOverrides((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleStart = useCallback(() => {
+  const handleStart = useCallback(async () => {
     if (!selectedWorkflow) return;
-    // In a real implementation, this would call IPC execution:start
-    // and create an execution in the executionStore.
-    // For now, navigate to the walkthrough page.
+    await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides);
     navigate('/execute/run');
-  }, [selectedWorkflow, navigate]);
+  }, [selectedWorkflow, selectedWorkItem, variableOverrides, startExecution, navigate]);
 
   const canStart = selectedWorkflow !== null;
 

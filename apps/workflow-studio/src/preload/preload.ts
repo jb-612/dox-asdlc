@@ -41,6 +41,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('cli:write', sessionId, data),
   },
 
+  /** Application settings */
+  settings: {
+    load: () => ipcRenderer.invoke('settings:load'),
+    save: (settings: unknown) => ipcRenderer.invoke('settings:save', settings),
+  },
+
+  /** Native dialog access */
+  dialog: {
+    openDirectory: () => ipcRenderer.invoke('dialog:open-directory'),
+  },
+
   /** Subscribe to push events from the main process */
   onEvent: (channel: string, callback: (...args: unknown[]) => void) => {
     ipcRenderer.on(channel, (_event, ...args) => callback(...args));

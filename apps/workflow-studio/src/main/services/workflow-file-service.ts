@@ -15,8 +15,11 @@ import { WorkflowDefinitionSchema } from '../schemas/workflow-schema';
 export interface WorkflowSummary {
   id: string;
   name: string;
+  description?: string;
+  version?: string;
   updatedAt: string;
   nodeCount: number;
+  tags?: string[];
 }
 
 export class WorkflowFileService {
@@ -49,8 +52,11 @@ export class WorkflowFileService {
         workflows.push({
           id: workflow.id,
           name: workflow.metadata?.name || file,
+          description: workflow.metadata?.description,
+          version: workflow.metadata?.version,
           updatedAt: workflow.metadata?.updatedAt || '',
           nodeCount: workflow.nodes?.length || 0,
+          tags: workflow.metadata?.tags,
         });
       } catch {
         /* skip invalid or unreadable files */
