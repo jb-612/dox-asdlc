@@ -20,7 +20,7 @@ Example:
     )
 
     coordinator = create_validation_deployment_coordinator(
-        llm_client=client,
+        backend=backend,
         artifact_writer=writer,
         test_runner=runner,
     )
@@ -33,6 +33,8 @@ Example:
         context, hitl5_approval, validation_report, security_report, "staging"
     )
 """
+
+from typing import TYPE_CHECKING
 
 from src.workers.agents.deployment.config import (
     DeploymentConfig,
@@ -75,6 +77,9 @@ from src.workers.agents.deployment.coordinator import (
     DeploymentResult,
     RejectionResult,
 )
+
+if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
 
 __all__ = [
     # Config
@@ -154,7 +159,7 @@ def register_deployment_agents(dispatcher: "AgentDispatcher") -> None:
 
     Note: This function is called from workers/main.py with proper
     dependency injection. The actual instantiation requires dependencies
-    (llm_client, artifact_writer, etc.) that must be provided at runtime.
+    (backend, artifact_writer, etc.) that must be provided at runtime.
 
     Args:
         dispatcher: The agent dispatcher to register with.
@@ -175,14 +180,14 @@ def register_deployment_agents(dispatcher: "AgentDispatcher") -> None:
 
 
 def create_release_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DeploymentConfig | None = None,
 ) -> ReleaseAgent:
     """Factory function to create a Release agent.
 
     Args:
-        llm_client: LLM client for manifest generation.
+        backend: Agent backend for manifest generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -190,21 +195,21 @@ def create_release_agent(
         ReleaseAgent: Configured Release agent instance.
     """
     return ReleaseAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DeploymentConfig(),
     )
 
 
 def create_deployment_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DeploymentConfig | None = None,
 ) -> DeploymentAgent:
     """Factory function to create a Deployment agent.
 
     Args:
-        llm_client: LLM client for deployment plan generation.
+        backend: Agent backend for deployment plan generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -212,21 +217,21 @@ def create_deployment_agent(
         DeploymentAgent: Configured Deployment agent instance.
     """
     return DeploymentAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DeploymentConfig(),
     )
 
 
 def create_monitor_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DeploymentConfig | None = None,
 ) -> MonitorAgent:
     """Factory function to create a Monitor agent.
 
     Args:
-        llm_client: LLM client for monitoring config generation.
+        backend: Agent backend for monitoring config generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -234,30 +239,28 @@ def create_monitor_agent(
         MonitorAgent: Configured Monitor agent instance.
     """
     return MonitorAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DeploymentConfig(),
     )
 
 
 def create_validation_deployment_coordinator(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     test_runner: "TestRunner",
     validation_config: "ValidationConfig | None" = None,
     deployment_config: DeploymentConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
     hitl_dispatcher: "HITLDispatcher | None" = None,
 ) -> ValidationDeploymentCoordinator:
     """Factory function to create a ValidationDeploymentCoordinator.
 
     Args:
-        llm_client: LLM client for all agents.
+        backend: Agent backend for all agents.
         artifact_writer: Writer for artifacts.
         test_runner: Test runner for validation agent.
         validation_config: Optional validation configuration.
         deployment_config: Optional deployment configuration.
-        rlm_integration: Optional RLM integration.
         hitl_dispatcher: Optional HITL dispatcher.
 
     Returns:
@@ -267,11 +270,10 @@ def create_validation_deployment_coordinator(
     from src.workers.agents.validation.config import ValidationConfig
 
     return ValidationDeploymentCoordinator(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         test_runner=test_runner,
         validation_config=validation_config or ValidationConfig(),
         deployment_config=deployment_config or DeploymentConfig(),
-        rlm_integration=rlm_integration,
         hitl_dispatcher=hitl_dispatcher,
     )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from src.workers.agents.backends.base import BackendResult
 
 
 class TestDesignPackageImports:
@@ -181,36 +183,34 @@ class TestFactoryFunctions:
         """Test creating surveyor agent via factory."""
         from src.workers.agents.design import create_surveyor_agent, SurveyorAgent
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         agent = create_surveyor_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
         assert isinstance(agent, SurveyorAgent)
 
-    def test_create_surveyor_agent_with_options(self) -> None:
-        """Test creating surveyor agent with all options."""
+    def test_create_surveyor_agent_with_config(self) -> None:
+        """Test creating surveyor agent with custom config."""
         from src.workers.agents.design import (
             create_surveyor_agent,
             SurveyorAgent,
             DesignConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
-        mock_rlm = MagicMock()
-        mock_mapper = MagicMock()
         config = DesignConfig()
 
         agent = create_surveyor_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
-            rlm_integration=mock_rlm,
-            repo_mapper=mock_mapper,
         )
 
         assert isinstance(agent, SurveyorAgent)
@@ -219,11 +219,12 @@ class TestFactoryFunctions:
         """Test creating architect agent via factory."""
         from src.workers.agents.design import create_architect_agent, ArchitectAgent
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         agent = create_architect_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -233,11 +234,12 @@ class TestFactoryFunctions:
         """Test creating planner agent via factory."""
         from src.workers.agents.design import create_planner_agent, PlannerAgent
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         agent = create_planner_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -250,11 +252,12 @@ class TestFactoryFunctions:
             DesignCoordinator,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         coordinator = create_design_coordinator(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -268,20 +271,17 @@ class TestFactoryFunctions:
             DesignConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
         mock_hitl = MagicMock()
-        mock_rlm = MagicMock()
-        mock_mapper = MagicMock()
         config = DesignConfig()
 
         coordinator = create_design_coordinator(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             hitl_dispatcher=mock_hitl,
             config=config,
-            rlm_integration=mock_rlm,
-            repo_mapper=mock_mapper,
         )
 
         assert isinstance(coordinator, DesignCoordinator)

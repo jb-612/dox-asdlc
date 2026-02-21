@@ -25,12 +25,19 @@ from src.workers.agents.discovery.models import (
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    client.model_name = "test-model"
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    from src.workers.agents.backends.base import BackendResult
+
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output="{}",
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -129,13 +136,13 @@ class TestDiscoveryCoordinator:
 
     def test_coordinator_initializes_agents(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
         """Test that coordinator initializes PRD and Acceptance agents."""
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -148,7 +155,7 @@ class TestDiscoveryCoordinator:
     @pytest.mark.asyncio
     async def test_run_discovery_calls_agents_in_sequence(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         project_context,
@@ -167,7 +174,7 @@ class TestDiscoveryCoordinator:
         acceptance_path.write_text(sample_acceptance.to_json())
 
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -205,7 +212,7 @@ class TestDiscoveryCoordinator:
     @pytest.mark.asyncio
     async def test_run_discovery_fails_when_prd_agent_fails(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         project_context,
@@ -213,7 +220,7 @@ class TestDiscoveryCoordinator:
     ) -> None:
         """Test that run_discovery fails when PRD agent fails."""
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -246,7 +253,7 @@ class TestDiscoveryCoordinator:
     @pytest.mark.asyncio
     async def test_run_discovery_fails_when_acceptance_agent_fails(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         project_context,
@@ -260,7 +267,7 @@ class TestDiscoveryCoordinator:
         prd_path.write_text(sample_prd.to_json())
 
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -296,7 +303,7 @@ class TestDiscoveryCoordinator:
     @pytest.mark.asyncio
     async def test_run_discovery_submits_to_hitl_when_enabled(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_hitl_dispatcher,
         agent_context,
@@ -320,7 +327,7 @@ class TestDiscoveryCoordinator:
         mock_hitl_dispatcher.request_gate.return_value = mock_gate_request
 
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             hitl_dispatcher=mock_hitl_dispatcher,
             config=config,
@@ -358,7 +365,7 @@ class TestDiscoveryCoordinator:
     @pytest.mark.asyncio
     async def test_run_discovery_skips_hitl_when_disabled(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_hitl_dispatcher,
         agent_context,
@@ -377,7 +384,7 @@ class TestDiscoveryCoordinator:
         acceptance_path.write_text(sample_acceptance.to_json())
 
         coordinator = DiscoveryCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             hitl_dispatcher=mock_hitl_dispatcher,
             config=config,
@@ -444,7 +451,7 @@ class TestRunDiscoveryWorkflow:
     @pytest.mark.asyncio
     async def test_run_discovery_workflow_creates_coordinator(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         sample_prd,
         sample_acceptance,
@@ -476,7 +483,7 @@ class TestRunDiscoveryWorkflow:
                 session_id="session-1",
                 task_id="task-1",
                 workspace_path="/tmp",
-                llm_client=mock_llm_client,
+                backend=mock_backend,
                 artifact_writer=mock_artifact_writer,
                 submit_to_hitl=False,
             )

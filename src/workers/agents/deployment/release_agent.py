@@ -3,15 +3,18 @@
 Release management agent that generates release manifests from validation
 and security reports, creates changelogs from commit messages, and documents
 rollback plans.
+
+Delegates work to a pluggable AgentBackend (Claude Code CLI,
+Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.deployment.config import DeploymentConfig
 from src.workers.agents.deployment.models import (
     ArtifactReference,
@@ -22,10 +25,43 @@ from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.validation.models import SecurityReport, ValidationReport
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+RELEASE_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "version": {"type": "string"},
+        "features": {"type": "array", "items": {"type": "string"}},
+        "changelog": {"type": "string"},
+        "artifacts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "artifact_type": {"type": "string"},
+                    "location": {"type": "string"},
+                    "checksum": {"type": ["string", "null"]},
+                },
+                "required": ["name", "artifact_type", "location"],
+            },
+        },
+        "rollback_plan": {"type": "string"},
+    },
+    "required": ["version", "features", "changelog", "artifacts", "rollback_plan"],
+}
+
+# System prompt for the release backend
+RELEASE_SYSTEM_PROMPT = (
+    "You are a release management agent. Generate release manifests with "
+    "changelogs, artifact references, and rollback plans. "
+    "Always respond with valid JSON matching the requested schema."
+)
 
 
 class ReleaseAgentError(Exception):
@@ -42,8 +78,10 @@ class ReleaseAgent:
     manifest with changelog and rollback documentation.
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = ReleaseAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DeploymentConfig(),
         )
@@ -52,18 +90,18 @@ class ReleaseAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DeploymentConfig,
     ) -> None:
         """Initialize the ReleaseAgent.
 
         Args:
-            llm_client: LLM client for release manifest generation.
+            backend: Agent backend for release manifest generation.
             artifact_writer: Writer for persisting artifacts.
             config: Deployment configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -91,7 +129,10 @@ class ReleaseAgent:
         Returns:
             AgentResult: Result with release manifest artifacts on success.
         """
-        logger.info(f"ReleaseAgent starting for task {context.task_id}")
+        logger.info(
+            f"ReleaseAgent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Validate required inputs
@@ -123,7 +164,7 @@ class ReleaseAgent:
             commits = event_metadata.get("commits", [])
             version = event_metadata.get("version")
 
-            # Generate release manifest using LLM
+            # Generate release manifest using backend
             release_manifest = await self._generate_release_manifest(
                 validation_report=validation_report,
                 security_report=security_report,
@@ -156,6 +197,7 @@ class ReleaseAgent:
                 metadata={
                     "release_manifest": release_manifest.to_dict(),
                     "next_agent": "deployment_agent",
+                    "backend": self._backend.backend_name,
                 },
             )
 
@@ -176,7 +218,7 @@ class ReleaseAgent:
         commits: list[dict[str, Any]],
         version: str | None,
     ) -> ReleaseManifest | None:
-        """Generate release manifest using LLM.
+        """Generate release manifest using backend.
 
         Args:
             validation_report: Validation report from validation agent.
@@ -196,14 +238,33 @@ class ReleaseAgent:
         )
 
         try:
-            response = await self._llm_client.generate(
-                prompt=prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.deployment_model,
+                output_schema=RELEASE_OUTPUT_SCHEMA,
+                system_prompt=RELEASE_SYSTEM_PROMPT,
+                timeout_seconds=300,
             )
 
-            # Parse response
-            manifest_data = self._parse_json_from_response(response.content)
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path="",
+                config=backend_config,
+            )
+
+            if not result.success:
+                logger.warning(
+                    "Release manifest generation failed: %s", result.error
+                )
+                return None
+
+            # Parse response - try structured output first, then text
+            manifest_data = None
+            if result.structured_output:
+                manifest_data = result.structured_output
+            else:
+                manifest_data = parse_json_from_response(result.output)
 
             if not manifest_data:
                 logger.warning("Invalid release manifest response - no valid JSON")
@@ -351,46 +412,6 @@ Include appropriate artifacts for a typical deployment (Docker images, Helm char
 """
 
         return prompt
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     async def _write_artifacts(
         self,

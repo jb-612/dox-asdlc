@@ -3,13 +3,17 @@
 Tests the monitoring configuration agent that defines metrics to collect,
 configures alerts, generates dashboard configurations, and outputs
 MonitoringConfig artifacts.
+
+Uses mock_backend (AgentBackend) instead of mock_llm_client.
 """
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.deployment.config import DeploymentConfig, DeploymentStrategy
 from src.workers.agents.deployment.models import (
@@ -26,19 +30,44 @@ from src.workers.agents.deployment.models import (
     StepType,
 )
 
-# Import the module under test (will be created)
+# Import the module under test
 from src.workers.agents.deployment.monitor_agent import (
     MonitorAgent,
     MonitorAgentError,
 )
 
 
+def _make_backend_result(content_dict: dict) -> BackendResult:
+    """Create a BackendResult from a dict, simulating JSON output."""
+    json_str = json.dumps(content_dict)
+    return BackendResult(
+        success=True,
+        output=json_str,
+        structured_output=content_dict,
+    )
+
+
+def _make_failed_backend_result(error: str) -> BackendResult:
+    """Create a failed BackendResult."""
+    return BackendResult(
+        success=False,
+        output="",
+        error=error,
+    )
+
+
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{"key": "value"}',
+        structured_output={"key": "value"},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -119,13 +148,13 @@ class TestMonitorAgentInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent can be created with required arguments."""
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -135,13 +164,13 @@ class TestMonitorAgentInit:
 
     def test_agent_type_is_monitor_agent(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent_type property returns correct value."""
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -155,14 +184,14 @@ class TestMonitorAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_deployment_plan(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that execute returns failure when no deployment plan provided."""
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -179,72 +208,70 @@ class TestMonitorAgentExecute:
     @pytest.mark.asyncio
     async def test_generates_monitoring_config_successfully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that agent generates a monitoring config successfully."""
-        # Mock LLM response for monitoring config generation
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "http_requests_total",
-                        "metric_type": "counter",
-                        "description": "Total HTTP requests",
-                        "labels": ["method", "path", "status"]
-                    },
-                    {
-                        "name": "http_request_duration_seconds",
-                        "metric_type": "histogram",
-                        "description": "HTTP request duration in seconds",
-                        "labels": ["method", "path"]
-                    },
-                    {
-                        "name": "process_cpu_seconds_total",
-                        "metric_type": "counter",
-                        "description": "Total user and system CPU time",
-                        "labels": ["service"]
-                    },
-                    {
-                        "name": "process_resident_memory_bytes",
-                        "metric_type": "gauge",
-                        "description": "Resident memory size in bytes",
-                        "labels": ["service"]
-                    }
-                ],
-                "alerts": [
-                    {
-                        "name": "HighErrorRate",
-                        "condition": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m]) > 0.05",
-                        "severity": "critical",
-                        "description": "Error rate exceeds 5%",
-                        "runbook_url": "https://runbooks.example.com/high-error-rate"
-                    },
-                    {
-                        "name": "HighLatency",
-                        "condition": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5",
-                        "severity": "warning",
-                        "description": "P99 latency exceeds 500ms",
-                        "runbook_url": null
-                    }
-                ],
-                "dashboards": [
-                    {
-                        "name": "service-overview",
-                        "title": "Service Overview",
-                        "panels": ["requests_per_second", "error_rate", "latency_p99", "cpu_usage", "memory_usage"],
-                        "refresh_interval_seconds": 30
-                    }
-                ]
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "http_requests_total",
+                    "metric_type": "counter",
+                    "description": "Total HTTP requests",
+                    "labels": ["method", "path", "status"],
+                },
+                {
+                    "name": "http_request_duration_seconds",
+                    "metric_type": "histogram",
+                    "description": "HTTP request duration in seconds",
+                    "labels": ["method", "path"],
+                },
+                {
+                    "name": "process_cpu_seconds_total",
+                    "metric_type": "counter",
+                    "description": "Total user and system CPU time",
+                    "labels": ["service"],
+                },
+                {
+                    "name": "process_resident_memory_bytes",
+                    "metric_type": "gauge",
+                    "description": "Resident memory size in bytes",
+                    "labels": ["service"],
+                },
+            ],
+            "alerts": [
+                {
+                    "name": "HighErrorRate",
+                    "condition": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m]) > 0.05",
+                    "severity": "critical",
+                    "description": "Error rate exceeds 5%",
+                    "runbook_url": "https://runbooks.example.com/high-error-rate",
+                },
+                {
+                    "name": "HighLatency",
+                    "condition": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5",
+                    "severity": "warning",
+                    "description": "P99 latency exceeds 500ms",
+                    "runbook_url": None,
+                },
+            ],
+            "dashboards": [
+                {
+                    "name": "service-overview",
+                    "title": "Service Overview",
+                    "panels": ["requests_per_second", "error_rate", "latency_p99", "cpu_usage", "memory_usage"],
+                    "refresh_interval_seconds": 30,
+                },
+            ],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -263,24 +290,23 @@ class TestMonitorAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_monitoring_config_in_metadata(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that monitoring config is returned in metadata."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -304,31 +330,30 @@ class TestMetricDefinitions:
     @pytest.mark.asyncio
     async def test_defines_cpu_metric(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that CPU metric is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "process_cpu_seconds_total",
-                        "metric_type": "counter",
-                        "description": "Total user and system CPU time spent in seconds",
-                        "labels": ["service"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "process_cpu_seconds_total",
+                    "metric_type": "counter",
+                    "description": "Total user and system CPU time spent in seconds",
+                    "labels": ["service"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -348,31 +373,30 @@ class TestMetricDefinitions:
     @pytest.mark.asyncio
     async def test_defines_memory_metric(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that memory metric is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "process_resident_memory_bytes",
-                        "metric_type": "gauge",
-                        "description": "Resident memory size in bytes",
-                        "labels": ["service"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "process_resident_memory_bytes",
+                    "metric_type": "gauge",
+                    "description": "Resident memory size in bytes",
+                    "labels": ["service"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -392,31 +416,30 @@ class TestMetricDefinitions:
     @pytest.mark.asyncio
     async def test_defines_request_rate_metric(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that request rate metric is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "http_requests_total",
-                        "metric_type": "counter",
-                        "description": "Total number of HTTP requests",
-                        "labels": ["method", "path", "status"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "http_requests_total",
+                    "metric_type": "counter",
+                    "description": "Total number of HTTP requests",
+                    "labels": ["method", "path", "status"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -436,31 +459,30 @@ class TestMetricDefinitions:
     @pytest.mark.asyncio
     async def test_defines_latency_metric(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that latency metric is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "http_request_duration_seconds",
-                        "metric_type": "histogram",
-                        "description": "HTTP request latency in seconds",
-                        "labels": ["method", "path"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "http_request_duration_seconds",
+                    "metric_type": "histogram",
+                    "description": "HTTP request latency in seconds",
+                    "labels": ["method", "path"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -480,31 +502,30 @@ class TestMetricDefinitions:
     @pytest.mark.asyncio
     async def test_defines_error_metric(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that error metrics are defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "http_requests_total",
-                        "metric_type": "counter",
-                        "description": "Total HTTP requests with status label for error tracking",
-                        "labels": ["method", "path", "status"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "http_requests_total",
+                    "metric_type": "counter",
+                    "description": "Total HTTP requests with status label for error tracking",
+                    "labels": ["method", "path", "status"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -529,32 +550,31 @@ class TestAlertRules:
     @pytest.mark.asyncio
     async def test_defines_error_rate_alert(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that error rate alert is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [
-                    {
-                        "name": "HighErrorRate",
-                        "condition": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m]) > 0.05",
-                        "severity": "critical",
-                        "description": "Error rate exceeds 5%",
-                        "runbook_url": "https://runbooks.example.com/high-error-rate"
-                    }
-                ],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [
+                {
+                    "name": "HighErrorRate",
+                    "condition": "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m]) > 0.05",
+                    "severity": "critical",
+                    "description": "Error rate exceeds 5%",
+                    "runbook_url": "https://runbooks.example.com/high-error-rate",
+                },
+            ],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -574,32 +594,31 @@ class TestAlertRules:
     @pytest.mark.asyncio
     async def test_defines_latency_threshold_alert(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that latency threshold alert is defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [
-                    {
-                        "name": "HighLatency",
-                        "condition": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5",
-                        "severity": "warning",
-                        "description": "P99 latency exceeds 500ms",
-                        "runbook_url": null
-                    }
-                ],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [
+                {
+                    "name": "HighLatency",
+                    "condition": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m])) > 0.5",
+                    "severity": "warning",
+                    "description": "P99 latency exceeds 500ms",
+                    "runbook_url": None,
+                },
+            ],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -619,32 +638,31 @@ class TestAlertRules:
     @pytest.mark.asyncio
     async def test_alert_has_severity(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that alerts have severity levels."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [
-                    {
-                        "name": "HighErrorRate",
-                        "condition": "error_rate > 0.05",
-                        "severity": "critical",
-                        "description": "Error rate exceeds 5%",
-                        "runbook_url": null
-                    }
-                ],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [
+                {
+                    "name": "HighErrorRate",
+                    "condition": "error_rate > 0.05",
+                    "severity": "critical",
+                    "description": "Error rate exceeds 5%",
+                    "runbook_url": None,
+                },
+            ],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -665,32 +683,31 @@ class TestAlertRules:
     @pytest.mark.asyncio
     async def test_alert_has_condition(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that alerts have PromQL conditions."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [
-                    {
-                        "name": "HighErrorRate",
-                        "condition": "rate(http_requests_total{status=~'5..'}[5m]) > 0.05",
-                        "severity": "critical",
-                        "description": "Error rate exceeds 5%",
-                        "runbook_url": null
-                    }
-                ],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [
+                {
+                    "name": "HighErrorRate",
+                    "condition": "rate(http_requests_total{status=~'5..'}[5m]) > 0.05",
+                    "severity": "critical",
+                    "description": "Error rate exceeds 5%",
+                    "runbook_url": None,
+                },
+            ],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -715,31 +732,30 @@ class TestDashboardConfiguration:
     @pytest.mark.asyncio
     async def test_generates_dashboard_config(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that dashboard configuration is generated."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": [
-                    {
-                        "name": "service-overview",
-                        "title": "Service Overview Dashboard",
-                        "panels": ["requests", "errors", "latency"],
-                        "refresh_interval_seconds": 30
-                    }
-                ]
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [
+                {
+                    "name": "service-overview",
+                    "title": "Service Overview Dashboard",
+                    "panels": ["requests", "errors", "latency"],
+                    "refresh_interval_seconds": 30,
+                },
+            ],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -758,31 +774,30 @@ class TestDashboardConfiguration:
     @pytest.mark.asyncio
     async def test_dashboard_has_panels(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that dashboard configuration includes panels."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": [
-                    {
-                        "name": "service-overview",
-                        "title": "Service Overview",
-                        "panels": ["cpu_usage", "memory_usage", "request_rate", "error_rate", "latency_p99"],
-                        "refresh_interval_seconds": 30
-                    }
-                ]
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [
+                {
+                    "name": "service-overview",
+                    "title": "Service Overview",
+                    "panels": ["cpu_usage", "memory_usage", "request_rate", "error_rate", "latency_p99"],
+                    "refresh_interval_seconds": 30,
+                },
+            ],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -803,31 +818,30 @@ class TestDashboardConfiguration:
     @pytest.mark.asyncio
     async def test_dashboard_has_refresh_interval(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that dashboard has refresh interval configured."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": [
-                    {
-                        "name": "service-overview",
-                        "title": "Service Overview",
-                        "panels": ["requests"],
-                        "refresh_interval_seconds": 30
-                    }
-                ]
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [
+                {
+                    "name": "service-overview",
+                    "title": "Service Overview",
+                    "panels": ["requests"],
+                    "refresh_interval_seconds": 30,
+                },
+            ],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -852,24 +866,23 @@ class TestDeploymentPlanIntegration:
     @pytest.mark.asyncio
     async def test_uses_deployment_id_from_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that deployment ID is derived from context task_id."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -888,31 +901,30 @@ class TestDeploymentPlanIntegration:
     @pytest.mark.asyncio
     async def test_incorporates_health_checks_from_deployment_plan(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that health checks from deployment plan inform monitoring."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [
-                    {
-                        "name": "health_check_success",
-                        "metric_type": "gauge",
-                        "description": "Health check success status",
-                        "labels": ["check_name"]
-                    }
-                ],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [
+                {
+                    "name": "health_check_success",
+                    "metric_type": "gauge",
+                    "description": "Health check success status",
+                    "labels": ["check_name"],
+                },
+            ],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -926,7 +938,7 @@ class TestDeploymentPlanIntegration:
 
         assert result.success is True
         # Verify prompt includes health check info
-        call_args = mock_llm_client.generate.call_args
+        call_args = mock_backend.execute.call_args
         prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
         assert "health" in prompt.lower()
 
@@ -937,24 +949,23 @@ class TestArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_json_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that agent writes JSON artifact."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -973,7 +984,7 @@ class TestArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_markdown_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -991,17 +1002,16 @@ class TestArtifactWriting:
 
         mock_artifact_writer.write_artifact.side_effect = track_calls
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1022,19 +1032,19 @@ class TestErrorHandling:
     """Tests for error handling."""
 
     @pytest.mark.asyncio
-    async def test_handles_llm_error_gracefully(
+    async def test_handles_backend_error_gracefully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
-        """Test that agent handles LLM errors gracefully."""
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        """Test that agent handles backend errors gracefully."""
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1047,25 +1057,27 @@ class TestErrorHandling:
         )
 
         assert result.success is False
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_llm_response(
+    async def test_handles_invalid_backend_response(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
-        """Test that agent handles invalid LLM response."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="This is not valid JSON"
+        """Test that agent handles invalid backend response."""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="This is not valid JSON",
+            structured_output=None,
         )
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1083,25 +1095,24 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_artifact_writer_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         deployment_plan,
     ):
         """Test that agent handles artifact writer errors."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "deployment_id": "task-456",
-                "metrics": [],
-                "alerts": [],
-                "dashboards": []
-            }"""
-        )
+        response_data = {
+            "deployment_id": "task-456",
+            "metrics": [],
+            "alerts": [],
+            "dashboards": [],
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
         mock_artifact_writer.write_artifact.side_effect = Exception("Write failed")
 
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1123,14 +1134,14 @@ class TestValidateContext:
 
     def test_validates_complete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that complete context passes validation."""
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1139,13 +1150,13 @@ class TestValidateContext:
 
     def test_rejects_incomplete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that incomplete context fails validation."""
         agent = MonitorAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )

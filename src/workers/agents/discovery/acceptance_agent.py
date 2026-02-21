@@ -1,16 +1,18 @@
 """Acceptance Agent for generating acceptance criteria.
 
 Transforms PRD documents into testable acceptance criteria
-using Given-When-Then format.
+using Given-When-Then format. Delegates work to a pluggable
+AgentBackend (Claude Code CLI, Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any, TYPE_CHECKING
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.protocols import AgentContext, AgentResult, BaseAgent
 from src.workers.agents.discovery.config import DiscoveryConfig
 from src.workers.agents.discovery.models import (
@@ -19,16 +21,93 @@ from src.workers.agents.discovery.models import (
     PRDDocument,
 )
 from src.workers.agents.discovery.prompts.acceptance_prompts import (
-    ACCEPTANCE_SYSTEM_PROMPT,
+    ACCEPTANCE_SYSTEM_PROMPT as _ACCEPTANCE_SYSTEM_PROMPT,
     format_criteria_generation_prompt,
-    format_coverage_analysis_prompt,
 )
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+ACCEPTANCE_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "criteria": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "requirement_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "given": {"type": "string"},
+                    "when": {"type": "string"},
+                    "then": {"type": "string"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["id", "given", "when", "then"],
+            },
+        },
+    },
+    "required": ["criteria"],
+}
+
+# System prompt for the acceptance backend
+ACCEPTANCE_SYSTEM_PROMPT = _ACCEPTANCE_SYSTEM_PROMPT
+
+
+def _build_acceptance_prompt(prd: PRDDocument) -> str:
+    """Build the complete prompt for the acceptance backend.
+
+    Combines PRD content and requirements list into a single prompt.
+
+    Args:
+        prd: PRD document to generate criteria from.
+
+    Returns:
+        str: Complete prompt for the backend.
+    """
+    prd_content = prd.to_markdown()
+    requirements_list = json.dumps(
+        [r.to_dict() for r in prd.all_requirements], indent=2
+    )
+    return format_criteria_generation_prompt(prd_content, requirements_list)
+
+
+def _parse_criteria_from_result(
+    result: BackendResult,
+) -> list[dict[str, Any]]:
+    """Parse criteria data from backend result.
+
+    Handles structured output (from --json-schema), direct JSON,
+    and JSON embedded in text/code blocks.
+
+    Args:
+        result: Backend execution result.
+
+    Returns:
+        List of criteria dicts, or empty list if parsing fails.
+    """
+    data = None
+
+    # Prefer structured output from --json-schema backends
+    if result.structured_output and "criteria" in result.structured_output:
+        data = result.structured_output
+    else:
+        content = result.output
+        if content:
+            data = parse_json_from_response(content)
+
+    if not data or "criteria" not in data:
+        return []
+
+    return data["criteria"]
 
 
 class AcceptanceAgentError(Exception):
@@ -40,13 +119,14 @@ class AcceptanceAgentError(Exception):
 class AcceptanceAgent:
     """Agent that generates acceptance criteria from PRD documents.
 
-    Implements the BaseAgent protocol to be dispatched by the worker pool.
-    Uses LLM to generate Given-When-Then acceptance criteria and
-    builds a coverage matrix mapping requirements to criteria.
+    Delegates the actual criteria generation to a pluggable AgentBackend
+    (Claude Code CLI, Codex CLI, or direct LLM API).
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = AcceptanceAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DiscoveryConfig(),
         )
@@ -55,18 +135,18 @@ class AcceptanceAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DiscoveryConfig,
     ) -> None:
         """Initialize the Acceptance agent.
 
         Args:
-            llm_client: LLM client for text generation.
+            backend: Agent backend for criteria generation.
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -92,7 +172,10 @@ class AcceptanceAgent:
         Returns:
             AgentResult: Result with artifact paths on success.
         """
-        logger.info(f"Acceptance Agent starting for task {context.task_id}")
+        logger.info(
+            f"Acceptance Agent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Get PRD document from metadata
@@ -116,19 +199,48 @@ class AcceptanceAgent:
                     should_retry=False,
                 )
 
-            # Step 1: Generate acceptance criteria
-            criteria = await self._generate_criteria(prd)
+            # Build prompt
+            prompt = _build_acceptance_prompt(prd)
 
-            if not criteria:
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.acceptance_model,
+                output_schema=ACCEPTANCE_OUTPUT_SCHEMA,
+                system_prompt=ACCEPTANCE_SYSTEM_PROMPT,
+                timeout_seconds=300,
+                allowed_tools=["Read", "Glob", "Grep"],
+            )
+
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not result.success:
                 return AgentResult(
                     success=False,
                     agent_type=self.agent_type,
                     task_id=context.task_id,
-                    error_message="Failed to generate acceptance criteria",
+                    error_message=result.error or "Backend execution failed",
                     should_retry=True,
                 )
 
-            # Step 2: Build acceptance criteria document with coverage matrix
+            # Parse criteria from result
+            criteria_data = _parse_criteria_from_result(result)
+
+            # Build AcceptanceCriterion objects
+            if criteria_data:
+                criteria = self._build_criteria(criteria_data)
+            else:
+                criteria = []
+
+            # Fall back to generated criteria if needed
+            if not criteria:
+                criteria = self._create_fallback_criteria(prd)
+
+            # Build acceptance criteria document with coverage matrix
             requirement_ids = [r.id for r in prd.all_requirements]
             acceptance_doc = AcceptanceCriteria.create(
                 prd_version=prd.version,
@@ -136,7 +248,7 @@ class AcceptanceAgent:
                 requirement_ids=requirement_ids,
             )
 
-            # Step 3: Write artifact
+            # Write artifact
             artifact_path = await self._write_artifact(context, acceptance_doc)
 
             # Calculate coverage stats
@@ -159,6 +271,10 @@ class AcceptanceAgent:
                     "coverage_percentage": coverage_pct,
                     "uncovered_requirements": uncovered,
                     "prd_version": prd.version,
+                    "backend": self._backend.backend_name,
+                    "cost_usd": result.cost_usd,
+                    "turns": result.turns,
+                    "session_id": result.session_id,
                 },
             )
 
@@ -215,81 +331,43 @@ class AcceptanceAgent:
 
         return None
 
-    async def _generate_criteria(
+    def _build_criteria(
         self,
-        prd: PRDDocument,
+        criteria_data: list[dict[str, Any]],
     ) -> list[AcceptanceCriterion]:
-        """Generate acceptance criteria from PRD.
+        """Build AcceptanceCriterion objects from parsed data.
 
         Args:
-            prd: PRD document to generate criteria from.
+            criteria_data: List of criteria dicts.
 
         Returns:
-            list[AcceptanceCriterion]: Generated acceptance criteria.
+            list[AcceptanceCriterion]: Built criterion objects.
         """
-        # Format PRD content for prompt
-        prd_content = prd.to_markdown()
-
-        # Format requirements list
-        requirements_list = json.dumps(
-            [r.to_dict() for r in prd.all_requirements], indent=2
-        )
-
-        prompt = format_criteria_generation_prompt(prd_content, requirements_list)
-
-        for attempt in range(self._config.max_retries):
+        criteria = []
+        for idx, crit_data in enumerate(criteria_data):
             try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=ACCEPTANCE_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
+                criterion = AcceptanceCriterion(
+                    id=crit_data.get("id", f"AC-{idx + 1:03d}"),
+                    requirement_ids=crit_data.get("requirement_ids", []),
+                    given=crit_data.get("given", ""),
+                    when=crit_data.get("when", ""),
+                    then=crit_data.get("then", ""),
+                    notes=crit_data.get("notes", ""),
                 )
 
-                # Parse JSON from response
-                criteria_data = self._parse_json_from_response(response.content)
+                # Validate criterion has meaningful content
+                if criterion.given and criterion.when and criterion.then:
+                    criteria.append(criterion)
+                else:
+                    logger.warning(
+                        f"Skipping incomplete criterion: {criterion.id}"
+                    )
 
-                if not criteria_data or "criteria" not in criteria_data:
-                    logger.warning(f"Invalid criteria response on attempt {attempt + 1}")
-                    if attempt < self._config.max_retries - 1:
-                        await asyncio.sleep(self._config.retry_delay_seconds)
-                    continue
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Skipping invalid criterion: {e}")
+                continue
 
-                # Convert to AcceptanceCriterion objects
-                criteria = []
-                for idx, crit_data in enumerate(criteria_data["criteria"]):
-                    try:
-                        criterion = AcceptanceCriterion(
-                            id=crit_data.get("id", f"AC-{idx + 1:03d}"),
-                            requirement_ids=crit_data.get("requirement_ids", []),
-                            given=crit_data.get("given", ""),
-                            when=crit_data.get("when", ""),
-                            then=crit_data.get("then", ""),
-                            notes=crit_data.get("notes", ""),
-                        )
-
-                        # Validate criterion has meaningful content
-                        if criterion.given and criterion.when and criterion.then:
-                            criteria.append(criterion)
-                        else:
-                            logger.warning(
-                                f"Skipping incomplete criterion: {criterion.id}"
-                            )
-
-                    except (ValueError, KeyError) as e:
-                        logger.warning(f"Skipping invalid criterion: {e}")
-                        continue
-
-                if criteria:
-                    return criteria
-
-            except Exception as e:
-                logger.warning(f"Criteria generation attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        # Fallback: generate minimal criteria
-        return self._create_fallback_criteria(prd)
+        return criteria
 
     def _create_fallback_criteria(
         self,
@@ -357,49 +435,6 @@ class AcceptanceAgent:
         )
 
         return json_path
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        import re
-
-        # Match ```json ... ``` or ``` ... ```
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     def validate_context(self, context: AgentContext) -> bool:
         """Validate that context is suitable for execution.

@@ -33,10 +33,9 @@ from src.workers.agents.validation.security_agent import SecurityAgent
 from src.workers.agents.validation.validation_agent import ValidationAgent
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
     from src.workers.agents.development.test_runner import TestRunner
-    from src.workers.rlm.integration import RLMIntegration
     from src.orchestrator.hitl_dispatcher import HITLDispatcher
 
 logger = logging.getLogger(__name__)
@@ -270,7 +269,7 @@ class ValidationDeploymentCoordinator:
 
     Example:
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             test_runner=runner,
             validation_config=ValidationConfig(),
@@ -279,40 +278,38 @@ class ValidationDeploymentCoordinator:
         result = await coordinator.run_validation(context, implementation, acceptance)
     """
 
-    llm_client: LLMClient
+    backend: AgentBackend
     artifact_writer: ArtifactWriter
     test_runner: TestRunner
     validation_config: ValidationConfig
     deployment_config: DeploymentConfig
-    rlm_integration: RLMIntegration | None = None
     hitl_dispatcher: HITLDispatcher | None = None
 
     def __post_init__(self) -> None:
         """Initialize agents."""
         self._validation_agent = ValidationAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             test_runner=self.test_runner,
             config=self.validation_config,
-            rlm_integration=self.rlm_integration,
         )
         self._security_agent = SecurityAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.validation_config,
         )
         self._release_agent = ReleaseAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.deployment_config,
         )
         self._deployment_agent = DeploymentAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.deployment_config,
         )
         self._monitor_agent = MonitorAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.deployment_config,
         )

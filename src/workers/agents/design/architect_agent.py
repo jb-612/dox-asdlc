@@ -1,16 +1,19 @@
 """Architect Agent for designing system architectures.
 
 Consumes technology surveys and PRDs to design component-based
-architectures with clear interfaces and Mermaid diagrams.
+architectures with clear interfaces and Mermaid diagrams. Delegates
+work to a pluggable AgentBackend (Claude Code CLI, Codex CLI, or
+direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any, TYPE_CHECKING
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.protocols import AgentContext, AgentResult, BaseAgent
 from src.workers.agents.design.config import DesignConfig
 from src.workers.agents.design.models import (
@@ -23,18 +26,214 @@ from src.workers.agents.design.models import (
     Interface,
 )
 from src.workers.agents.design.prompts.architect_prompts import (
-    ARCHITECT_SYSTEM_PROMPT,
-    format_component_design_prompt,
-    format_interface_definition_prompt,
-    format_diagram_generation_prompt,
-    format_nfr_validation_prompt,
+    ARCHITECT_SYSTEM_PROMPT as _ARCHITECT_SYSTEM_PROMPT,
 )
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+ARCHITECT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "architecture_style": {"type": "string"},
+        "style_rationale": {"type": "string"},
+        "components": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "responsibility": {"type": "string"},
+                    "technology": {"type": "string"},
+                    "interfaces": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "description": {"type": "string"},
+                                "methods": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "data_types": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                    "dependencies": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "notes": {"type": "string"},
+                },
+                "required": ["name", "responsibility"],
+            },
+        },
+        "data_flows": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "data_type": {"type": "string"},
+                    "description": {"type": "string"},
+                    "protocol": {"type": "string"},
+                },
+            },
+        },
+        "deployment_model": {"type": "string"},
+        "diagrams": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "diagram_type": {"type": "string"},
+                    "title": {"type": "string"},
+                    "description": {"type": "string"},
+                    "mermaid_code": {"type": "string"},
+                },
+            },
+        },
+        "nfr_evaluation": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "requirement": {"type": "string"},
+                    "category": {"type": "string"},
+                    "status": {"type": "string"},
+                    "how_addressed": {"type": "string"},
+                    "gaps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "recommendations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "security_considerations": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["components"],
+}
+
+# System prompt for the architect backend
+ARCHITECT_SYSTEM_PROMPT = _ARCHITECT_SYSTEM_PROMPT
+
+
+def _build_architect_prompt(
+    tech_survey: str,
+    prd_content: str,
+    context_pack_summary: str = "",
+    nfr_requirements: str = "",
+) -> str:
+    """Build the complete prompt for the architect backend.
+
+    Combines tech survey, PRD, context pack, and NFR requirements
+    into a single prompt requesting a complete architecture design.
+
+    Args:
+        tech_survey: Technology survey JSON content.
+        prd_content: PRD document content.
+        context_pack_summary: Summary from repo mapper context pack.
+        nfr_requirements: Non-functional requirements text.
+
+    Returns:
+        str: Complete prompt for the backend.
+    """
+    context_section = ""
+    if context_pack_summary:
+        context_section = f"""
+## Existing Codebase Context
+{context_pack_summary}
+"""
+
+    nfr_section = ""
+    nfr_instructions = ""
+    if nfr_requirements:
+        nfr_section = f"""
+## Non-Functional Requirements
+{nfr_requirements}
+"""
+        nfr_instructions = """
+5. Validate the architecture against the NFRs and include:
+   - "nfr_evaluation": array of objects with requirement, category, status, how_addressed, gaps, recommendations
+   - "security_considerations": array of security-specific notes"""
+
+    return f"""Design a complete component-based architecture for the system described in the PRD.
+
+## Technology Survey
+{tech_survey}
+
+## PRD Document
+{prd_content}
+{context_section}{nfr_section}
+## Task
+Design the system architecture by:
+1. Identifying major components and their responsibilities, defining boundaries and interfaces
+2. Specifying technology choices per component and identifying dependencies
+3. Defining data flows between components with protocols
+4. Generating Mermaid diagrams (component, sequence, and deployment diagrams)
+{nfr_instructions}
+
+Consider:
+- Single Responsibility Principle for components
+- Loose coupling between components
+- Clear API contracts at boundaries
+- Scalability and maintainability
+
+Respond with a single JSON object containing:
+- "architecture_style": one of "monolith", "microservices", "event_driven", "serverless", "layered", "modular_monolith"
+- "style_rationale": string explaining the style choice
+- "components": array of component objects, each with "name", "responsibility", "technology", "interfaces" (array of {{name, description, methods, data_types}}), "dependencies" (array of component names), "notes"
+- "data_flows": array of flow objects, each with "source", "target", "data_type", "description", "protocol" (REST|gRPC|async|event|direct)
+- "deployment_model": string describing deployment strategy
+- "diagrams": array of diagram objects, each with "diagram_type" (component|sequence|flow|erd|deployment|class), "title", "description", "mermaid_code" (valid Mermaid syntax)
+"""
+
+
+def _parse_design_from_result(
+    result: BackendResult,
+) -> dict[str, Any] | None:
+    """Parse architecture design data from backend result.
+
+    Handles structured output (from --json-schema), direct JSON,
+    and JSON embedded in text/code blocks.
+
+    Args:
+        result: Backend execution result.
+
+    Returns:
+        dict | None: Parsed design data, or None if parsing fails.
+    """
+    data = None
+
+    # Prefer structured output from --json-schema backends
+    if result.structured_output and "components" in result.structured_output:
+        data = result.structured_output
+    else:
+        content = result.output
+        if content:
+            data = parse_json_from_response(content)
+
+    if not data or "components" not in data:
+        return None
+
+    return data
 
 
 class ArchitectAgentError(Exception):
@@ -46,13 +245,14 @@ class ArchitectAgentError(Exception):
 class ArchitectAgent:
     """Agent that designs system architectures from requirements.
 
-    Implements the BaseAgent protocol for worker pool dispatch. Uses LLM
-    to design component architectures, generate Mermaid diagrams, and
-    validate against NFRs.
+    Delegates the actual architecture design to a pluggable AgentBackend
+    (Claude Code CLI, Codex CLI, or direct LLM API).
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = ArchitectAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DesignConfig(),
         )
@@ -61,18 +261,18 @@ class ArchitectAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DesignConfig,
     ) -> None:
         """Initialize the Architect agent.
 
         Args:
-            llm_client: LLM client for text generation.
+            backend: Agent backend for architecture design.
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -100,7 +300,10 @@ class ArchitectAgent:
         Returns:
             AgentResult: Result with artifact paths on success.
         """
-        logger.info(f"Architect Agent starting for task {context.task_id}")
+        logger.info(
+            f"Architect Agent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Extract required inputs
@@ -133,14 +336,47 @@ class ArchitectAgent:
             # Get context pack summary if available
             context_pack_summary = ""
             if context.context_pack:
-                context_pack_summary = self._summarize_context_pack(context.context_pack)
+                context_pack_summary = self._summarize_context_pack(
+                    context.context_pack
+                )
 
-            # Step 1: Design components
-            component_design = await self._design_components(
-                tech_survey, prd_content, context_pack_summary
+            # Build combined prompt
+            prompt = _build_architect_prompt(
+                tech_survey=tech_survey,
+                prd_content=prd_content,
+                context_pack_summary=context_pack_summary,
+                nfr_requirements=nfr_requirements,
             )
 
-            if not component_design:
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.architect_model,
+                output_schema=ARCHITECT_OUTPUT_SCHEMA,
+                system_prompt=ARCHITECT_SYSTEM_PROMPT,
+                timeout_seconds=300,
+                allowed_tools=["Read", "Glob", "Grep"],
+            )
+
+            # Execute via backend (single call for all design work)
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not result.success:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message=result.error or "Backend execution failed",
+                    should_retry=True,
+                )
+
+            # Parse design from result
+            design_data = _parse_design_from_result(result)
+
+            if not design_data:
                 return AgentResult(
                     success=False,
                     agent_type=self.agent_type,
@@ -149,32 +385,32 @@ class ArchitectAgent:
                     should_retry=True,
                 )
 
-            # Step 2: Generate diagrams
-            diagrams = await self._generate_diagrams(component_design)
+            # Extract diagrams from combined result
+            diagrams = design_data.get("diagrams", [])
 
-            # Step 3: Validate against NFRs if provided
-            nfr_considerations = {}
-            security_considerations = []
+            # Extract NFR considerations if present
+            nfr_considerations: dict[str, str] = {}
+            security_considerations: list[str] = []
             if nfr_requirements:
-                nfr_result = await self._validate_nfrs(
-                    json.dumps(component_design), nfr_requirements
-                )
-                if nfr_result:
-                    nfr_considerations = self._extract_nfr_considerations(nfr_result)
-                    security_considerations = nfr_result.get(
-                        "security_considerations", []
+                nfr_eval = design_data.get("nfr_evaluation", [])
+                if nfr_eval:
+                    nfr_considerations = self._extract_nfr_considerations(
+                        {"nfr_evaluation": nfr_eval}
                     )
+                security_considerations = design_data.get(
+                    "security_considerations", []
+                )
 
-            # Step 4: Build architecture document
+            # Build architecture document
             architecture = self._build_architecture(
-                component_design,
-                diagrams,
-                tech_survey_reference,
-                nfr_considerations,
-                security_considerations,
+                design=design_data,
+                diagrams=diagrams,
+                tech_survey_reference=tech_survey_reference,
+                nfr_considerations=nfr_considerations,
+                security_considerations=security_considerations,
             )
 
-            # Step 5: Write artifact
+            # Write artifact
             artifact_path = await self._write_artifact(context, architecture)
 
             logger.info(
@@ -193,6 +429,10 @@ class ArchitectAgent:
                     "diagram_count": len(architecture.diagrams),
                     "architecture_style": architecture.style.value,
                     "tech_survey_reference": tech_survey_reference,
+                    "backend": self._backend.backend_name,
+                    "cost_usd": result.cost_usd,
+                    "turns": result.turns,
+                    "session_id": result.session_id,
                 },
             )
 
@@ -205,132 +445,6 @@ class ArchitectAgent:
                 error_message=str(e),
                 should_retry=True,
             )
-
-    async def _design_components(
-        self,
-        tech_survey: str,
-        prd_content: str,
-        context_pack_summary: str,
-    ) -> dict[str, Any] | None:
-        """Design component architecture.
-
-        Args:
-            tech_survey: Technology survey JSON.
-            prd_content: PRD document content.
-            context_pack_summary: Context pack summary.
-
-        Returns:
-            dict: Component design or None on failure.
-        """
-        prompt = format_component_design_prompt(
-            tech_survey, prd_content, context_pack_summary
-        )
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=ARCHITECT_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                design = self._parse_json_from_response(response.content)
-
-                if design and "components" in design:
-                    return design
-
-                logger.warning(f"Invalid component design on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"Component design attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        return None
-
-    async def _generate_diagrams(
-        self,
-        architecture: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        """Generate Mermaid diagrams for the architecture.
-
-        Args:
-            architecture: Architecture design dictionary.
-
-        Returns:
-            list: List of diagram definitions.
-        """
-        prompt = format_diagram_generation_prompt(json.dumps(architecture))
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=ARCHITECT_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                result = self._parse_json_from_response(response.content)
-
-                if result and "diagrams" in result:
-                    return result["diagrams"]
-
-                logger.warning(f"Invalid diagram response on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"Diagram generation attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        # Return empty list on failure - diagrams are optional
-        return []
-
-    async def _validate_nfrs(
-        self,
-        architecture: str,
-        nfr_requirements: str,
-    ) -> dict[str, Any] | None:
-        """Validate architecture against NFRs.
-
-        Args:
-            architecture: Architecture JSON.
-            nfr_requirements: NFR requirements text.
-
-        Returns:
-            dict: NFR validation result or None.
-        """
-        prompt = format_nfr_validation_prompt(architecture, nfr_requirements)
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=ARCHITECT_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                result = self._parse_json_from_response(response.content)
-
-                if result and "nfr_evaluation" in result:
-                    return result
-
-                logger.warning(f"Invalid NFR validation on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"NFR validation attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        return None
 
     def _build_architecture(
         self,
@@ -429,7 +543,7 @@ class ArchitectAgent:
         Returns:
             dict: NFR category to consideration mapping.
         """
-        considerations = {}
+        considerations: dict[str, str] = {}
         for evaluation in nfr_result.get("nfr_evaluation", []):
             category = evaluation.get("category", "")
             how_addressed = evaluation.get("how_addressed", "")
@@ -486,7 +600,7 @@ class ArchitectAgent:
         Returns:
             str: Summary of context pack.
         """
-        lines = []
+        lines: list[str] = []
 
         if "structure" in context_pack:
             lines.append("### Existing Structure")
@@ -509,48 +623,6 @@ class ArchitectAgent:
             lines.append("")
 
         return "\n".join(lines) if lines else ""
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        import re
-
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     def validate_context(self, context: AgentContext) -> bool:
         """Validate that context is suitable for execution.

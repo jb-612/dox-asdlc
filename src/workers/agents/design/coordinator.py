@@ -21,14 +21,11 @@ from src.workers.agents.design.models import (
 from src.workers.agents.design.surveyor_agent import SurveyorAgent
 from src.workers.agents.design.architect_agent import ArchitectAgent
 from src.workers.agents.design.planner_agent import PlannerAgent
-from src.workers.agents.backends.llm_backend import LLMAgentBackend
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.rlm.integration import RLMIntegration
-    from src.workers.repo_mapper import RepoMapper
     from src.orchestrator.hitl_dispatcher import HITLDispatcher
 
 logger = logging.getLogger(__name__)
@@ -75,36 +72,32 @@ class DesignCoordinator:
 
     Example:
         coordinator = DesignCoordinator(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DesignConfig(),
         )
         result = await coordinator.run(context, prd_content)
     """
 
-    llm_client: LLMClient
+    backend: AgentBackend
     artifact_writer: ArtifactWriter
     config: DesignConfig
-    rlm_integration: RLMIntegration | None = None
-    repo_mapper: RepoMapper | None = None
     hitl_dispatcher: HITLDispatcher | None = None
 
     def __post_init__(self) -> None:
         """Initialize agents."""
         self._surveyor = SurveyorAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.config,
-            rlm_integration=self.rlm_integration,
-            repo_mapper=self.repo_mapper,
         )
         self._architect = ArchitectAgent(
-            llm_client=self.llm_client,
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.config,
         )
         self._planner = PlannerAgent(
-            backend=LLMAgentBackend(llm_client=self.llm_client),
+            backend=self.backend,
             artifact_writer=self.artifact_writer,
             config=self.config,
         )

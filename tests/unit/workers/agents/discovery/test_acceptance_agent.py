@@ -15,16 +15,21 @@ from src.workers.agents.discovery.models import (
     PRDSection,
     Requirement,
 )
-from src.workers.llm.client import LLMResponse
+from src.workers.agents.backends.base import BackendResult
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    client.model_name = "test-model"
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{}',
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -91,13 +96,13 @@ class TestAcceptanceAgent:
 
     def test_agent_type_returns_correct_value(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
         """Test that agent_type returns 'acceptance_agent'."""
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -107,14 +112,14 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_no_prd(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
         """Test that execute returns error when no PRD provided."""
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -127,7 +132,7 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_prd_has_no_requirements(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -142,7 +147,7 @@ class TestAcceptanceAgent:
         )
 
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -158,7 +163,7 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_generates_acceptance_criteria(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -186,13 +191,14 @@ class TestAcceptanceAgent:
             ]
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(criteria_response),
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(criteria_response),
+            structured_output=criteria_response,
         )
 
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -211,7 +217,7 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_accepts_prd_as_dict(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -230,13 +236,14 @@ class TestAcceptanceAgent:
             ]
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(criteria_response),
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(criteria_response),
+            structured_output=criteria_response,
         )
 
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -251,7 +258,7 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_reports_coverage_stats(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -271,13 +278,14 @@ class TestAcceptanceAgent:
             ]
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(criteria_response),
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(criteria_response),
+            structured_output=criteria_response,
         )
 
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -294,7 +302,7 @@ class TestAcceptanceAgent:
     @pytest.mark.asyncio
     async def test_execute_creates_fallback_criteria_on_generation_failure(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -302,13 +310,14 @@ class TestAcceptanceAgent:
     ) -> None:
         """Test that execute creates fallback criteria when generation fails."""
         # Return invalid response
-        mock_llm_client.generate.return_value = LLMResponse(
-            content="Invalid JSON response",
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="Invalid JSON response",
+            structured_output=None,
         )
 
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -328,14 +337,14 @@ class TestAcceptanceAgentValidation:
 
     def test_validate_context_returns_true_for_valid_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
         """Test that validate_context returns True for valid context."""
         agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -344,39 +353,21 @@ class TestAcceptanceAgentValidation:
 
 
 class TestAcceptanceAgentJSONParsing:
-    """Tests for AcceptanceAgent JSON parsing."""
+    """Tests for AcceptanceAgent JSON parsing via response_parser."""
 
-    def test_parse_json_handles_code_blocks(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_handles_code_blocks(self) -> None:
         """Test that JSON is parsed from code blocks."""
-        agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
         content = '```json\n{"criteria": []}\n```'
-        result = agent._parse_json_from_response(content)
+        result = parse_json_from_response(content)
 
         assert result == {"criteria": []}
 
-    def test_parse_json_returns_none_for_invalid_json(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_returns_none_for_invalid_json(self) -> None:
         """Test that None is returned for invalid JSON."""
-        agent = AcceptanceAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
-        result = agent._parse_json_from_response("not valid json")
+        result = parse_json_from_response("not valid json")
 
         assert result is None
