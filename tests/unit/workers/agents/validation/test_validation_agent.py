@@ -1,12 +1,11 @@
 """Tests for ValidationAgent.
 
-Tests the RLM-enabled validation agent that runs E2E tests,
+Tests the backend-based validation agent that runs E2E tests,
 checks integration points, and generates validation reports.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
@@ -21,8 +20,7 @@ from src.workers.agents.validation.models import (
 from src.workers.agents.development.models import TestResult, TestRunResult
 
 
-# Import the module under test (will be created)
-# These imports will fail until implementation exists
+# Import the module under test
 from src.workers.agents.validation.validation_agent import (
     ValidationAgent,
     ValidationAgentError,
@@ -35,7 +33,9 @@ def mock_backend():
     backend = AsyncMock()
     backend.backend_name = "mock"
     backend.execute = AsyncMock(return_value=BackendResult(
-        success=True, output="{}", structured_output={},
+        success=True,
+        output='{"checks": [], "recommendations": []}',
+        structured_output={"checks": [], "recommendations": []},
     ))
     backend.health_check = AsyncMock(return_value=True)
     return backend
@@ -267,19 +267,23 @@ class TestValidationAgentExecute:
         """Test that agent runs E2E tests and succeeds with passing tests."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        # Mock LLM response for validation analysis
-        mock_backend.execute.return_value = BackendResult(success=True, output="""{
+        # Mock backend response for validation analysis
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": true,
+                        "passed": True,
                         "details": "All E2E tests passed",
-                        "evidence": "test_output.log"
+                        "evidence": "test_output.log",
                     }
                 ],
-                "recommendations": []
-            }""", structured_output=None)
+                "recommendations": [],
+            },
+        )
 
         agent = ValidationAgent(
             backend=mock_backend,
@@ -315,19 +319,23 @@ class TestValidationAgentExecute:
         """Test that agent fails when E2E tests fail."""
         mock_test_runner.run_tests.return_value = failing_test_run_result
 
-        # Mock LLM response for validation analysis
-        mock_backend.execute.return_value = BackendResult(success=True, output="""{
+        # Mock backend response for validation analysis
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": false,
+                        "passed": False,
                         "details": "Integration test failed",
-                        "evidence": "test_output.log"
+                        "evidence": "test_output.log",
                     }
                 ],
-                "recommendations": ["Fix integration issues"]
-            }""", structured_output=None)
+                "recommendations": ["Fix integration issues"],
+            },
+        )
 
         agent = ValidationAgent(
             backend=mock_backend,
@@ -362,25 +370,29 @@ class TestValidationAgentExecute:
         """Test that agent generates a proper validation report."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        mock_backend.execute.return_value = BackendResult(success=True, output="""{
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": true,
+                        "passed": True,
                         "details": "All tests passed",
-                        "evidence": null
+                        "evidence": None,
                     },
                     {
                         "name": "Integration Check",
                         "category": "compatibility",
-                        "passed": true,
+                        "passed": True,
                         "details": "All integrations verified",
-                        "evidence": null
-                    }
+                        "evidence": None,
+                    },
                 ],
-                "recommendations": ["Consider adding more edge case tests"]
-            }""", structured_output=None)
+                "recommendations": ["Consider adding more edge case tests"],
+            },
+        )
 
         agent = ValidationAgent(
             backend=mock_backend,
@@ -421,10 +433,14 @@ class TestValidationAgentExecute:
         """Test that agent writes artifacts correctly."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        mock_backend.execute.return_value = BackendResult(success=True, output="""{
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [],
-                "recommendations": []
-            }""", structured_output=None)
+                "recommendations": [],
+            },
+        )
 
         agent = ValidationAgent(
             backend=mock_backend,
@@ -529,7 +545,7 @@ class TestValidationAgentErrorHandling:
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_handles_llm_error(
+    async def test_handles_backend_error(
         self,
         mock_backend,
         mock_artifact_writer,
@@ -538,9 +554,9 @@ class TestValidationAgentErrorHandling:
         agent_context,
         passing_test_run_result,
     ):
-        """Test that agent handles LLM errors gracefully."""
+        """Test that agent handles backend errors gracefully."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
-        mock_backend.execute.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = ValidationAgent(
             backend=mock_backend,
@@ -559,7 +575,7 @@ class TestValidationAgentErrorHandling:
         )
 
         assert result.success is False
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
         assert result.should_retry is True
 
     @pytest.mark.asyncio

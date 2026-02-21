@@ -45,7 +45,7 @@ export default function SpawnDialog({
     const config: CLISpawnConfig = {
       command: command.trim() || 'claude',
       args,
-      cwd: cwd.trim() || process.cwd?.() || '.',
+      cwd: cwd.trim() || '.',
       ...(instanceId.trim() ? { instanceId: instanceId.trim() } : {}),
     };
 
