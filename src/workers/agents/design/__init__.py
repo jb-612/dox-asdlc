@@ -51,7 +51,7 @@ from src.workers.agents.design.models import (
 )
 from src.workers.agents.design.surveyor_agent import SurveyorAgent, SurveyorAgentError
 from src.workers.agents.design.architect_agent import ArchitectAgent, ArchitectAgentError
-from src.workers.agents.design.planner_agent import PlannerAgent, PlannerAgentError
+from src.workers.agents.design.planner_agent import PlannerAgent
 from src.workers.agents.design.coordinator import (
     DesignCoordinator,
     DesignCoordinatorError,
@@ -88,7 +88,6 @@ __all__ = [
     "ArchitectAgent",
     "ArchitectAgentError",
     "PlannerAgent",
-    "PlannerAgentError",
     # Coordinator
     "DesignCoordinator",
     "DesignCoordinatorError",
@@ -203,19 +202,26 @@ def create_planner_agent(
     llm_client: "LLMClient",
     artifact_writer: "ArtifactWriter",
     config: DesignConfig | None = None,
+    backend: "AgentBackend | None" = None,
 ) -> PlannerAgent:
     """Factory function to create a Planner agent.
 
     Args:
-        llm_client: LLM client for generation.
+        llm_client: LLM client for generation (used if no backend).
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
+        backend: Optional AgentBackend. If not provided, wraps
+            llm_client in LLMAgentBackend for backward compatibility.
 
     Returns:
         PlannerAgent: Configured Planner agent instance.
     """
+    if backend is None:
+        from src.workers.agents.backends.llm_backend import LLMAgentBackend
+        backend = LLMAgentBackend(llm_client=llm_client)
+
     return PlannerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DesignConfig(),
     )

@@ -3,36 +3,59 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.workers.agents.protocols import AgentContext, AgentResult
+from src.workers.agents.backends.base import BackendConfig, BackendResult
 from src.workers.agents.design.config import DesignConfig
 from src.workers.agents.design.models import (
     ComplexityLevel,
-    ImplementationPlan,
-    ImplementationTask,
-    Phase,
 )
-from src.workers.agents.design.planner_agent import PlannerAgent, PlannerAgentError
+from src.workers.agents.design.planner_agent import (
+    PlannerAgent,
+    _build_planner_prompt,
+    _parse_plan_from_result,
+    _convert_legacy_format,
+    _build_implementation_plan,
+)
 
 
-@dataclass
-class MockLLMResponse:
-    """Mock LLM response."""
+class MockBackend:
+    """Mock AgentBackend for testing."""
 
-    content: str
+    def __init__(
+        self,
+        result: BackendResult | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self._result = result or BackendResult(success=True, output="{}")
+        self._error = error
+        self.execute_calls: list[dict[str, Any]] = []
 
+    @property
+    def backend_name(self) -> str:
+        return "mock-backend"
 
-@pytest.fixture
-def mock_llm_client() -> MagicMock:
-    """Create mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    return client
+    async def execute(
+        self,
+        prompt: str,
+        workspace_path: str,
+        config: BackendConfig | None = None,
+    ) -> BackendResult:
+        self.execute_calls.append({
+            "prompt": prompt,
+            "workspace_path": workspace_path,
+            "config": config,
+        })
+        if self._error:
+            raise self._error
+        return self._result
+
+    async def health_check(self) -> bool:
+        return True
 
 
 @pytest.fixture
@@ -64,139 +87,95 @@ def agent_context() -> AgentContext:
 
 
 @pytest.fixture
-def sample_task_breakdown_response() -> str:
-    """Sample task breakdown response."""
+def sample_features_response() -> str:
+    """Sample response in new features format."""
     return json.dumps({
-        "tasks": [
+        "features": [
             {
-                "id": "T001",
-                "title": "Setup project infrastructure",
-                "description": "Initialize project and configure build tools",
-                "component": "Infrastructure",
-                "dependencies": [],
-                "acceptance_criteria": [
-                    "Project builds successfully",
-                    "CI pipeline configured",
+                "id": "F01",
+                "name": "User Management",
+                "description": "User registration and authentication",
+                "tasks": [
+                    {
+                        "id": "T001",
+                        "title": "Setup project infrastructure",
+                        "description": "Initialize project and configure build tools",
+                        "component": "Infrastructure",
+                        "dependencies": [],
+                        "acceptance_criteria": [
+                            "Project builds successfully",
+                            "CI pipeline configured",
+                        ],
+                        "estimated_complexity": "M",
+                    },
+                    {
+                        "id": "T002",
+                        "title": "Implement User model",
+                        "description": "Create User entity with validation",
+                        "component": "UserService",
+                        "dependencies": ["T001"],
+                        "acceptance_criteria": [
+                            "User model with required fields",
+                            "Database migrations created",
+                        ],
+                        "estimated_complexity": "M",
+                    },
                 ],
-                "estimated_complexity": "M",
             },
             {
-                "id": "T002",
-                "title": "Implement User model",
-                "description": "Create User entity with validation",
-                "component": "UserService",
-                "dependencies": ["T001"],
-                "acceptance_criteria": [
-                    "User model with required fields",
-                    "Database migrations created",
+                "id": "F02",
+                "name": "User API",
+                "description": "REST API for user operations",
+                "tasks": [
+                    {
+                        "id": "T003",
+                        "title": "Implement User API",
+                        "description": "Create REST endpoints for User CRUD",
+                        "component": "UserService",
+                        "dependencies": ["T002"],
+                        "acceptance_criteria": [
+                            "CRUD endpoints implemented",
+                        ],
+                        "estimated_complexity": "L",
+                    },
                 ],
-                "estimated_complexity": "M",
-            },
-            {
-                "id": "T003",
-                "title": "Implement User API",
-                "description": "Create REST endpoints for User CRUD",
-                "component": "UserService",
-                "dependencies": ["T002"],
-                "acceptance_criteria": [
-                    "CRUD endpoints implemented",
-                    "API documentation generated",
-                ],
-                "estimated_complexity": "L",
             },
         ],
-        "total_task_count": 3,
-        "components_covered": ["Infrastructure", "UserService"],
-    })
-
-
-@pytest.fixture
-def sample_dependency_analysis_response() -> str:
-    """Sample dependency analysis response."""
-    return json.dumps({
-        "refined_dependencies": [
-            {"task_id": "T001", "dependencies": [], "reason": "No changes"},
-            {"task_id": "T002", "dependencies": ["T001"], "reason": "No changes"},
-            {"task_id": "T003", "dependencies": ["T002"], "reason": "No changes"},
-        ],
-        "circular_dependencies": [],
-        "parallelizable_groups": [],
-        "dependency_graph": {
-            "T001": ["T002"],
-            "T002": ["T003"],
-            "T003": [],
-        },
-    })
-
-
-@pytest.fixture
-def sample_complexity_estimation_response() -> str:
-    """Sample complexity estimation response."""
-    return json.dumps({
-        "estimations": [
-            {
-                "task_id": "T001",
-                "complexity": "M",
-                "hours_estimate": 6,
-                "risk_level": "low",
-                "factors": ["Standard setup"],
-                "recommendations": [],
-            },
-            {
-                "task_id": "T002",
-                "complexity": "M",
-                "hours_estimate": 8,
-                "risk_level": "medium",
-                "factors": ["Database integration"],
-                "recommendations": ["Use ORM"],
-            },
-            {
-                "task_id": "T003",
-                "complexity": "L",
-                "hours_estimate": 12,
-                "risk_level": "medium",
-                "factors": ["API design", "Testing"],
-                "recommendations": [],
-            },
-        ],
-        "total_hours": 26,
-        "high_risk_tasks": [],
-        "complexity_distribution": {"S": 0, "M": 2, "L": 1, "XL": 0},
-    })
-
-
-@pytest.fixture
-def sample_critical_path_response() -> str:
-    """Sample critical path response."""
-    return json.dumps({
-        "critical_path": ["T001", "T002", "T003"],
-        "critical_path_duration_hours": 26,
         "phases": [
             {
                 "name": "Phase 1: Setup",
                 "description": "Infrastructure setup",
                 "task_ids": ["T001"],
                 "order": 1,
-                "estimated_hours": 6,
             },
             {
                 "name": "Phase 2: Core",
                 "description": "Core implementation",
                 "task_ids": ["T002", "T003"],
                 "order": 2,
-                "estimated_hours": 20,
             },
         ],
-        "slack_analysis": [],
-        "milestones": [
+        "critical_path": ["T001", "T002", "T003"],
+    })
+
+
+@pytest.fixture
+def sample_legacy_response() -> str:
+    """Sample response in legacy flat-tasks format."""
+    return json.dumps({
+        "tasks": [
             {
-                "name": "Infrastructure Complete",
-                "after_task": "T001",
-                "description": "Project setup complete",
-            }
+                "id": "T001",
+                "title": "Setup",
+                "description": "Initial setup",
+                "component": "Infrastructure",
+                "dependencies": [],
+                "acceptance_criteria": ["Works"],
+                "estimated_complexity": "S",
+            },
         ],
-        "total_estimated_hours": 26,
-        "parallel_efficiency": 1.0,
+        "total_task_count": 1,
+        "components_covered": ["Infrastructure"],
     })
 
 
@@ -205,13 +184,12 @@ class TestPlannerAgentInit:
 
     def test_agent_type(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
-        """Test agent type property."""
+        backend = MockBackend()
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -224,23 +202,23 @@ class TestPlannerAgentExecute:
     @pytest.mark.asyncio
     async def test_execute_success(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_task_breakdown_response: str,
-        sample_dependency_analysis_response: str,
-        sample_critical_path_response: str,
+        sample_features_response: str,
     ) -> None:
-        """Test successful execution."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_task_breakdown_response),
-            MockLLMResponse(content=sample_dependency_analysis_response),
-            MockLLMResponse(content=sample_critical_path_response),
-        ]
+        """Test successful execution with features format."""
+        backend = MockBackend(
+            result=BackendResult(
+                success=True,
+                output=sample_features_response,
+                cost_usd=0.05,
+                turns=3,
+            )
+        )
 
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -248,7 +226,6 @@ class TestPlannerAgentExecute:
         result = await agent.execute(
             context=agent_context,
             event_metadata={
-                "architecture": '{"components": []}',
                 "prd_content": "Build a user management API.",
                 "architecture_reference": "ARCH-001",
             },
@@ -258,94 +235,72 @@ class TestPlannerAgentExecute:
         assert result.agent_type == "planner_agent"
         assert result.task_id == agent_context.task_id
         assert len(result.artifact_paths) > 0
+        assert result.metadata["feature_count"] == 2
         assert result.metadata["task_count"] == 3
         assert result.metadata["phase_count"] == 2
+        assert result.metadata["backend"] == "mock-backend"
+        assert result.metadata["cost_usd"] == 0.05
 
     @pytest.mark.asyncio
-    async def test_execute_with_complexity_estimation(
+    async def test_execute_with_structured_output(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_task_breakdown_response: str,
-        sample_dependency_analysis_response: str,
-        sample_complexity_estimation_response: str,
-        sample_critical_path_response: str,
     ) -> None:
-        """Test execution with complexity estimation."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_task_breakdown_response),
-            MockLLMResponse(content=sample_dependency_analysis_response),
-            MockLLMResponse(content=sample_complexity_estimation_response),
-            MockLLMResponse(content=sample_critical_path_response),
-        ]
+        """Test execution with structured output (from --json-schema)."""
+        structured = {
+            "features": [
+                {
+                    "id": "F01",
+                    "name": "Auth",
+                    "tasks": [
+                        {"id": "T001", "title": "Login", "description": "Login flow"},
+                    ],
+                }
+            ],
+        }
+        backend = MockBackend(
+            result=BackendResult(
+                success=True,
+                output="",
+                structured_output=structured,
+            )
+        )
 
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
 
         result = await agent.execute(
             context=agent_context,
-            event_metadata={
-                "architecture": '{}',
-                "prd_content": "PRD",
-                "tech_survey": '{"technologies": []}',  # Triggers complexity estimation
-            },
+            event_metadata={"prd_content": "Auth system PRD"},
         )
 
         assert result.success is True
-        # Should have called generate 4 times (breakdown, deps, complexity, critical)
-        assert mock_llm_client.generate.call_count == 4
-
-    @pytest.mark.asyncio
-    async def test_execute_missing_architecture(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-        agent_context: AgentContext,
-    ) -> None:
-        """Test execution fails without architecture."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "prd_content": "Some PRD",
-            },
-        )
-
-        assert result.success is False
-        assert "architecture" in result.error_message
-        assert result.should_retry is False
+        assert result.metadata["feature_count"] == 1
+        assert result.metadata["task_count"] == 1
 
     @pytest.mark.asyncio
     async def test_execute_missing_prd_content(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test execution fails without PRD content."""
+        backend = MockBackend()
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
 
         result = await agent.execute(
             context=agent_context,
-            event_metadata={
-                "architecture": '{}',
-            },
+            event_metadata={},
         )
 
         assert result.success is False
@@ -353,308 +308,365 @@ class TestPlannerAgentExecute:
         assert result.should_retry is False
 
     @pytest.mark.asyncio
-    async def test_execute_task_breakdown_failure(
+    async def test_execute_backend_failure(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
-        """Test execution handles task breakdown failure."""
-        mock_llm_client.generate.return_value = MockLLMResponse(
-            content="not valid json"
+        """Test execution handles backend failure."""
+        backend = MockBackend(
+            result=BackendResult(
+                success=False,
+                error="CLI timed out after 300s",
+            )
         )
 
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
 
         result = await agent.execute(
             context=agent_context,
-            event_metadata={
-                "architecture": '{}',
-                "prd_content": "PRD",
-            },
+            event_metadata={"prd_content": "PRD"},
         )
 
         assert result.success is False
-        assert "break down" in result.error_message
+        assert "timed out" in result.error_message
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_execute_continues_with_dependency_failure(
+    async def test_execute_backend_exception(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_task_breakdown_response: str,
-        sample_critical_path_response: str,
     ) -> None:
-        """Test execution continues if dependency analysis fails."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_task_breakdown_response),
-            MockLLMResponse(content="invalid"),  # Dependency analysis fails
-            MockLLMResponse(content=sample_critical_path_response),
-        ]
+        """Test execution handles backend exception."""
+        backend = MockBackend(error=ConnectionError("Redis down"))
 
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
 
         result = await agent.execute(
             context=agent_context,
-            event_metadata={
-                "architecture": '{}',
-                "prd_content": "PRD",
-            },
+            event_metadata={"prd_content": "PRD"},
         )
 
-        # Should still succeed
-        assert result.success is True
+        assert result.success is False
+        assert "Backend error" in result.error_message
+        assert result.should_retry is True
 
-
-class TestPlannerAgentBuilding:
-    """Tests for implementation plan building methods."""
-
-    def test_build_implementation_plan(
+    @pytest.mark.asyncio
+    async def test_execute_unparseable_output(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
+        agent_context: AgentContext,
     ) -> None:
-        """Test building ImplementationPlan from data."""
+        """Test execution handles unparseable backend output."""
+        backend = MockBackend(
+            result=BackendResult(
+                success=True,
+                output="This is not JSON at all",
+            )
+        )
+
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
 
-        tasks_data = {
-            "tasks": [
+        result = await agent.execute(
+            context=agent_context,
+            event_metadata={"prd_content": "PRD"},
+        )
+
+        assert result.success is False
+        assert "parse" in result.error_message.lower()
+
+    @pytest.mark.asyncio
+    async def test_execute_legacy_format(
+        self,
+        mock_artifact_writer: MagicMock,
+        default_config: DesignConfig,
+        agent_context: AgentContext,
+        sample_legacy_response: str,
+    ) -> None:
+        """Test execution with legacy flat-tasks format."""
+        backend = MockBackend(
+            result=BackendResult(success=True, output=sample_legacy_response)
+        )
+
+        agent = PlannerAgent(
+            backend=backend,
+            artifact_writer=mock_artifact_writer,
+            config=default_config,
+        )
+
+        result = await agent.execute(
+            context=agent_context,
+            event_metadata={"prd_content": "PRD"},
+        )
+
+        assert result.success is True
+        assert result.metadata["feature_count"] == 1
+        assert result.metadata["task_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_execute_passes_config_to_backend(
+        self,
+        mock_artifact_writer: MagicMock,
+        default_config: DesignConfig,
+        agent_context: AgentContext,
+        sample_features_response: str,
+    ) -> None:
+        """Test that config is passed through to backend."""
+        backend = MockBackend(
+            result=BackendResult(success=True, output=sample_features_response)
+        )
+
+        agent = PlannerAgent(
+            backend=backend,
+            artifact_writer=mock_artifact_writer,
+            config=default_config,
+        )
+
+        await agent.execute(
+            context=agent_context,
+            event_metadata={"prd_content": "PRD"},
+        )
+
+        assert len(backend.execute_calls) == 1
+        call = backend.execute_calls[0]
+        assert call["workspace_path"] == "/test/workspace"
+        assert call["config"].output_schema is not None
+        assert call["config"].system_prompt is not None
+
+
+class TestParsePlanFromResult:
+    """Tests for plan parsing from backend result."""
+
+    def test_parse_structured_output(self) -> None:
+        """Test parsing from structured_output field."""
+        data = {"features": [{"id": "F01", "name": "X", "tasks": []}]}
+        result = BackendResult(
+            success=True,
+            output="",
+            structured_output=data,
+        )
+        parsed = _parse_plan_from_result(result)
+        assert parsed == data
+
+    def test_parse_json_output(self) -> None:
+        """Test parsing JSON from output string."""
+        data = {"features": [{"id": "F01", "name": "X", "tasks": []}]}
+        result = BackendResult(success=True, output=json.dumps(data))
+        parsed = _parse_plan_from_result(result)
+        assert parsed == data
+
+    def test_parse_json_in_code_block(self) -> None:
+        """Test parsing JSON from markdown code block."""
+        data = {"features": [{"id": "F01", "name": "X", "tasks": []}]}
+        output = f"Here's the plan:\n```json\n{json.dumps(data)}\n```\n"
+        result = BackendResult(success=True, output=output)
+        parsed = _parse_plan_from_result(result)
+        assert parsed == data
+
+    def test_parse_legacy_format(self) -> None:
+        """Test parsing legacy flat-tasks format."""
+        data = {"tasks": [{"id": "T001"}]}
+        result = BackendResult(success=True, output=json.dumps(data))
+        parsed = _parse_plan_from_result(result)
+        assert parsed is not None
+        assert "features" in parsed
+        assert parsed["features"][0]["tasks"] == [{"id": "T001"}]
+
+    def test_parse_empty_output(self) -> None:
+        """Test parsing empty output returns None."""
+        result = BackendResult(success=True, output="")
+        assert _parse_plan_from_result(result) is None
+
+    def test_parse_invalid_json(self) -> None:
+        """Test parsing invalid content returns None."""
+        result = BackendResult(success=True, output="not json at all")
+        assert _parse_plan_from_result(result) is None
+
+
+class TestConvertLegacyFormat:
+    """Tests for legacy format conversion."""
+
+    def test_wraps_tasks_in_feature(self) -> None:
+        data = {"tasks": [{"id": "T001"}], "phases": []}
+        converted = _convert_legacy_format(data)
+        assert len(converted["features"]) == 1
+        assert converted["features"][0]["id"] == "F01"
+        assert converted["features"][0]["tasks"] == [{"id": "T001"}]
+
+    def test_preserves_phases_and_critical_path(self) -> None:
+        data = {
+            "tasks": [],
+            "phases": [{"name": "P1"}],
+            "critical_path": ["T001"],
+        }
+        converted = _convert_legacy_format(data)
+        assert converted["phases"] == [{"name": "P1"}]
+        assert converted["critical_path"] == ["T001"]
+
+
+class TestBuildImplementationPlan:
+    """Tests for implementation plan building."""
+
+    def test_builds_from_features(self) -> None:
+        plan_data = {
+            "features": [
                 {
-                    "id": "T001",
-                    "title": "Setup",
-                    "description": "Initial setup",
-                    "component": "Infrastructure",
-                    "dependencies": [],
-                    "acceptance_criteria": ["Works"],
-                    "estimated_complexity": "S",
+                    "id": "F01",
+                    "name": "Auth",
+                    "tasks": [
+                        {
+                            "id": "T001",
+                            "title": "Login",
+                            "description": "Login flow",
+                            "component": "Auth",
+                            "estimated_complexity": "S",
+                        },
+                    ],
                 },
-                {
-                    "id": "T002",
-                    "title": "Implement",
-                    "description": "Core implementation",
-                    "component": "Core",
-                    "dependencies": ["T001"],
-                    "acceptance_criteria": ["Tests pass"],
-                    "estimated_complexity": "M",
-                },
-            ]
+            ],
+            "critical_path": ["T001"],
         }
 
-        critical_path_data = {
-            "critical_path": ["T001", "T002"],
+        plan = _build_implementation_plan(plan_data, "ARCH-001")
+
+        assert len(plan.tasks) == 1
+        assert plan.tasks[0].id == "T001"
+        assert plan.tasks[0].estimated_complexity == ComplexityLevel.SMALL
+        assert plan.tasks[0].metadata["feature_id"] == "F01"
+        assert plan.architecture_reference == "ARCH-001"
+
+    def test_creates_phases_from_features_when_missing(self) -> None:
+        plan_data = {
+            "features": [
+                {"id": "F01", "name": "Auth", "tasks": [{"id": "T001", "title": "X", "description": "Y"}]},
+                {"id": "F02", "name": "API", "tasks": [{"id": "T002", "title": "Z", "description": "W"}]},
+            ],
+        }
+
+        plan = _build_implementation_plan(plan_data, "ARCH-001")
+
+        assert len(plan.phases) == 2
+        assert plan.phases[0].name == "Phase 1: Auth"
+        assert plan.phases[1].name == "Phase 2: API"
+
+    def test_uses_explicit_phases(self) -> None:
+        plan_data = {
+            "features": [
+                {"id": "F01", "name": "Auth", "tasks": [{"id": "T001", "title": "X", "description": "Y"}]},
+            ],
             "phases": [
+                {"name": "Setup", "description": "Setup phase", "task_ids": ["T001"], "order": 1},
+            ],
+        }
+
+        plan = _build_implementation_plan(plan_data, "ARCH-001")
+
+        assert len(plan.phases) == 1
+        assert plan.phases[0].name == "Setup"
+
+    def test_invalid_complexity_defaults_to_medium(self) -> None:
+        plan_data = {
+            "features": [
                 {
-                    "name": "Phase 1",
-                    "description": "Setup phase",
-                    "task_ids": ["T001"],
-                    "order": 1,
-                },
-                {
-                    "name": "Phase 2",
-                    "description": "Implementation phase",
-                    "task_ids": ["T002"],
-                    "order": 2,
+                    "id": "F01",
+                    "name": "X",
+                    "tasks": [
+                        {"id": "T001", "title": "X", "description": "Y", "estimated_complexity": "INVALID"},
+                    ],
                 },
             ],
         }
 
-        plan = agent._build_implementation_plan(
-            tasks_data=tasks_data,
-            critical_path_data=critical_path_data,
-            architecture_reference="ARCH-001",
-        )
-
-        assert len(plan.tasks) == 2
-        assert plan.tasks[0].id == "T001"
-        assert plan.tasks[0].estimated_complexity == ComplexityLevel.SMALL
-        assert plan.tasks[1].estimated_complexity == ComplexityLevel.MEDIUM
-        assert len(plan.phases) == 2
-        assert plan.critical_path == ["T001", "T002"]
-        assert plan.architecture_reference == "ARCH-001"
-
-    def test_build_implementation_plan_invalid_complexity(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test fallback for invalid complexity level."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        tasks_data = {
-            "tasks": [
-                {
-                    "id": "T001",
-                    "title": "Task",
-                    "description": "Desc",
-                    "component": "Comp",
-                    "dependencies": [],
-                    "acceptance_criteria": [],
-                    "estimated_complexity": "INVALID",
-                }
-            ]
-        }
-
-        plan = agent._build_implementation_plan(
-            tasks_data=tasks_data,
-            critical_path_data=None,
-            architecture_reference="ARCH-001",
-        )
-
-        # Should fallback to MEDIUM
+        plan = _build_implementation_plan(plan_data, "ARCH-001")
         assert plan.tasks[0].estimated_complexity == ComplexityLevel.MEDIUM
 
-    def test_build_implementation_plan_no_critical_path(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test building plan without critical path data."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        tasks_data = {
-            "tasks": [
+    def test_component_falls_back_to_feature_name(self) -> None:
+        plan_data = {
+            "features": [
                 {
-                    "id": "T001",
-                    "title": "Task",
-                    "description": "Desc",
-                    "component": "Comp",
-                    "dependencies": [],
-                    "acceptance_criteria": [],
-                    "estimated_complexity": "M",
-                }
-            ]
+                    "id": "F01",
+                    "name": "Auth",
+                    "tasks": [
+                        {"id": "T001", "title": "X", "description": "Y"},
+                    ],
+                },
+            ],
         }
 
-        plan = agent._build_implementation_plan(
-            tasks_data=tasks_data,
-            critical_path_data=None,
-            architecture_reference="ARCH-001",
+        plan = _build_implementation_plan(plan_data, "ARCH-001")
+        assert plan.tasks[0].component == "Auth"
+
+
+class TestBuildPlannerPrompt:
+    """Tests for prompt building."""
+
+    def test_includes_prd(self) -> None:
+        prompt = _build_planner_prompt(prd_content="My PRD")
+        assert "My PRD" in prompt
+        assert "## PRD Document" in prompt
+
+    def test_includes_optional_sections(self) -> None:
+        prompt = _build_planner_prompt(
+            prd_content="PRD",
+            architecture="ARCH",
+            tech_survey="SURVEY",
+            acceptance_criteria="AC",
         )
+        assert "## Architecture" in prompt
+        assert "ARCH" in prompt
+        assert "## Technology Survey" in prompt
+        assert "SURVEY" in prompt
+        assert "## Acceptance Criteria" in prompt
+        assert "AC" in prompt
 
-        # Should create default phase
-        assert len(plan.phases) == 1
-        assert plan.phases[0].name == "Implementation"
-        assert "T001" in plan.phases[0].task_ids
+    def test_omits_empty_sections(self) -> None:
+        prompt = _build_planner_prompt(prd_content="PRD")
+        assert "## Architecture" not in prompt
+        assert "## Technology Survey" not in prompt
+        assert "## Acceptance Criteria" not in prompt
 
 
-class TestPlannerAgentHelpers:
-    """Tests for helper methods."""
-
-    def test_apply_dependency_refinements(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test applying dependency refinements."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        tasks_data = {
-            "tasks": [
-                {"id": "T001", "dependencies": []},
-                {"id": "T002", "dependencies": ["T001"]},
-            ]
-        }
-
-        dep_analysis = {
-            "refined_dependencies": [
-                {"task_id": "T001", "dependencies": []},
-                {"task_id": "T002", "dependencies": []},  # Removed T001
-            ]
-        }
-
-        result = agent._apply_dependency_refinements(tasks_data, dep_analysis)
-
-        assert result["tasks"][1]["dependencies"] == []
-
-    def test_apply_complexity_updates(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test applying complexity updates."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        tasks_data = {
-            "tasks": [
-                {"id": "T001", "estimated_complexity": "M"},
-                {"id": "T002", "estimated_complexity": "M"},
-            ]
-        }
-
-        complexity_data = {
-            "estimations": [
-                {"task_id": "T001", "complexity": "S"},
-                {"task_id": "T002", "complexity": "L"},
-            ]
-        }
-
-        result = agent._apply_complexity_updates(tasks_data, complexity_data)
-
-        assert result["tasks"][0]["estimated_complexity"] == "S"
-        assert result["tasks"][1]["estimated_complexity"] == "L"
+class TestPlannerAgentValidation:
+    """Tests for context validation."""
 
     def test_validate_context_valid(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
-        """Test context validation with valid context."""
+        backend = MockBackend()
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
-
         assert agent.validate_context(agent_context) is True
 
     def test_validate_context_invalid(
         self,
-        mock_llm_client: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
-        """Test context validation with invalid context."""
+        backend = MockBackend()
         agent = PlannerAgent(
-            llm_client=mock_llm_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -665,67 +677,4 @@ class TestPlannerAgentHelpers:
             tenant_id="tenant",
             workspace_path="/test",
         )
-
         assert agent.validate_context(invalid_context) is False
-
-
-class TestPlannerAgentJsonParsing:
-    """Tests for JSON parsing in Planner Agent."""
-
-    def test_parse_direct_json(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing direct JSON response."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        content = '{"tasks": []}'
-        result = agent._parse_json_from_response(content)
-
-        assert result == {"tasks": []}
-
-    def test_parse_json_in_code_block(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing JSON from code block."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        content = """Here's the plan:
-```json
-{"tasks": [{"id": "T001"}]}
-```
-"""
-        result = agent._parse_json_from_response(content)
-
-        assert result == {"tasks": [{"id": "T001"}]}
-
-    def test_parse_invalid_json(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing invalid JSON returns None."""
-        agent = PlannerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
-        )
-
-        content = "this is not json"
-        result = agent._parse_json_from_response(content)
-
-        assert result is None

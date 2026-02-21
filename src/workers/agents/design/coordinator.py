@@ -21,6 +21,7 @@ from src.workers.agents.design.models import (
 from src.workers.agents.design.surveyor_agent import SurveyorAgent
 from src.workers.agents.design.architect_agent import ArchitectAgent
 from src.workers.agents.design.planner_agent import PlannerAgent
+from src.workers.agents.backends.llm_backend import LLMAgentBackend
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
@@ -103,7 +104,7 @@ class DesignCoordinator:
             config=self.config,
         )
         self._planner = PlannerAgent(
-            llm_client=self.llm_client,
+            backend=LLMAgentBackend(llm_client=self.llm_client),
             artifact_writer=self.artifact_writer,
             config=self.config,
         )
