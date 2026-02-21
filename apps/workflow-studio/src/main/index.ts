@@ -1,6 +1,7 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { registerAllHandlers } from './ipc';
 
 // Window bounds persistence
 interface WindowBounds {
@@ -145,6 +146,7 @@ function createWindow(): void {
 
 // App lifecycle
 app.whenReady().then(() => {
+  registerAllHandlers();
   createWindow();
 
   app.on('activate', () => {
