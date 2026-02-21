@@ -1,0 +1,176 @@
+import type { AgentNodeType } from './types/workflow';
+
+export interface NodeTypeMetadata {
+  label: string;
+  color: string;
+  bgColor: string;
+  icon: string;
+  category: 'discovery' | 'design' | 'development' | 'validation' | 'deployment' | 'governance';
+  description: string;
+}
+
+export const NODE_TYPE_METADATA: Record<AgentNodeType, NodeTypeMetadata> = {
+  ideation: {
+    label: 'Ideation',
+    color: '#8B5CF6',
+    bgColor: '#8B5CF620',
+    icon: 'LightBulbIcon',
+    category: 'discovery',
+    description: 'Generate ideas and PRDs',
+  },
+  prd: {
+    label: 'PRD Generator',
+    color: '#8B5CF6',
+    bgColor: '#8B5CF620',
+    icon: 'DocumentTextIcon',
+    category: 'discovery',
+    description: 'Create product requirements documents',
+  },
+  acceptance: {
+    label: 'Acceptance',
+    color: '#8B5CF6',
+    bgColor: '#8B5CF620',
+    icon: 'ClipboardDocumentCheckIcon',
+    category: 'discovery',
+    description: 'Generate acceptance criteria',
+  },
+  architect: {
+    label: 'Architect',
+    color: '#3B82F6',
+    bgColor: '#3B82F620',
+    icon: 'CubeTransparentIcon',
+    category: 'design',
+    description: 'Design system architecture',
+  },
+  surveyor: {
+    label: 'Surveyor',
+    color: '#3B82F6',
+    bgColor: '#3B82F620',
+    icon: 'MagnifyingGlassIcon',
+    category: 'design',
+    description: 'Survey codebase structure',
+  },
+  planner: {
+    label: 'Planner',
+    color: '#3B82F6',
+    bgColor: '#3B82F620',
+    icon: 'ClipboardDocumentListIcon',
+    category: 'design',
+    description: 'Create task plans',
+  },
+  coding: {
+    label: 'Coder',
+    color: '#10B981',
+    bgColor: '#10B98120',
+    icon: 'CodeBracketIcon',
+    category: 'development',
+    description: 'Write implementation code',
+  },
+  utest: {
+    label: 'Unit Test',
+    color: '#10B981',
+    bgColor: '#10B98120',
+    icon: 'BeakerIcon',
+    category: 'development',
+    description: 'Write unit tests (TDD)',
+  },
+  debugger: {
+    label: 'Debugger',
+    color: '#10B981',
+    bgColor: '#10B98120',
+    icon: 'BugAntIcon',
+    category: 'development',
+    description: 'Debug failing tests',
+  },
+  reviewer: {
+    label: 'Reviewer',
+    color: '#F59E0B',
+    bgColor: '#F59E0B20',
+    icon: 'EyeIcon',
+    category: 'governance',
+    description: 'Review code quality',
+  },
+  orchestrator: {
+    label: 'Orchestrator',
+    color: '#F59E0B',
+    bgColor: '#F59E0B20',
+    icon: 'CogIcon',
+    category: 'governance',
+    description: 'Coordinate and commit',
+  },
+  security: {
+    label: 'Security',
+    color: '#EF4444',
+    bgColor: '#EF444420',
+    icon: 'ShieldCheckIcon',
+    category: 'validation',
+    description: 'Security scanning',
+  },
+  validation: {
+    label: 'Validation',
+    color: '#EF4444',
+    bgColor: '#EF444420',
+    icon: 'CheckBadgeIcon',
+    category: 'validation',
+    description: 'E2E validation',
+  },
+  deployment: {
+    label: 'Deployment',
+    color: '#6366F1',
+    bgColor: '#6366F120',
+    icon: 'RocketLaunchIcon',
+    category: 'deployment',
+    description: 'Generate deployment plans',
+  },
+  monitor: {
+    label: 'Monitor',
+    color: '#6366F1',
+    bgColor: '#6366F120',
+    icon: 'ChartBarIcon',
+    category: 'deployment',
+    description: 'Configure monitoring',
+  },
+  release: {
+    label: 'Release',
+    color: '#6366F1',
+    bgColor: '#6366F120',
+    icon: 'TagIcon',
+    category: 'deployment',
+    description: 'Generate release manifests',
+  },
+  backend: {
+    label: 'Backend',
+    color: '#10B981',
+    bgColor: '#10B98120',
+    icon: 'ServerIcon',
+    category: 'development',
+    description: 'Backend implementation',
+  },
+  frontend: {
+    label: 'Frontend',
+    color: '#10B981',
+    bgColor: '#10B98120',
+    icon: 'ComputerDesktopIcon',
+    category: 'development',
+    description: 'Frontend implementation',
+  },
+  devops: {
+    label: 'DevOps',
+    color: '#6366F1',
+    bgColor: '#6366F120',
+    icon: 'WrenchScrewdriverIcon',
+    category: 'deployment',
+    description: 'Infrastructure operations',
+  },
+};
+
+export const NODE_CATEGORIES = [
+  'discovery',
+  'design',
+  'development',
+  'validation',
+  'deployment',
+  'governance',
+] as const;
+
+export type NodeCategory = typeof NODE_CATEGORIES[number];
