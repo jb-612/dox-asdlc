@@ -22,10 +22,10 @@ Example:
     )
 
     # Create agents
-    utest = create_utest_agent(llm_client=client, artifact_writer=writer)
-    coding = create_coding_agent(llm_client=client, artifact_writer=writer)
-    debugger = create_debugger_agent(llm_client=client, artifact_writer=writer)
-    reviewer = create_reviewer_agent(llm_client=client, artifact_writer=writer)
+    utest = create_utest_agent(backend=backend, artifact_writer=writer)
+    coding = create_coding_agent(backend=backend, artifact_writer=writer)
+    debugger = create_debugger_agent(backend=backend, artifact_writer=writer)
+    reviewer = create_reviewer_agent(backend=backend, artifact_writer=writer)
 
     # Create orchestrator
     orchestrator = create_tdd_orchestrator(
@@ -141,15 +141,15 @@ AGENT_METADATA = {
         "phase": "development",
         "inputs": ["task_description", "test_code"],
         "outputs": ["implementation.json", "source_files"],
-        "capabilities": ["implementation", "rlm_exploration", "retry_handling"],
+        "capabilities": ["implementation", "retry_handling"],
     },
     "debugger_agent": {
         "class": DebuggerAgent,
-        "description": "Analyzes test failures and generates fix suggestions using RLM",
+        "description": "Analyzes test failures and generates fix suggestions via AgentBackend",
         "phase": "development",
         "inputs": ["test_output", "implementation"],
         "outputs": ["debug_analysis.json", "debug_analysis.md"],
-        "capabilities": ["failure_analysis", "root_cause_detection", "rlm_exploration"],
+        "capabilities": ["failure_analysis", "root_cause_detection", "fix_generation"],
     },
     "reviewer_agent": {
         "class": ReviewerAgent,
@@ -188,14 +188,14 @@ def register_development_agents(dispatcher: "AgentDispatcher") -> None:
 
 
 def create_utest_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
 ) -> UTestAgent:
     """Factory function to create a UTest agent.
 
     Args:
-        llm_client: LLM client for test generation.
+        backend: Agent backend for test generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -203,71 +203,65 @@ def create_utest_agent(
         UTestAgent: Configured UTest agent instance.
     """
     return UTestAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DevelopmentConfig(),
     )
 
 
 def create_coding_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
 ) -> CodingAgent:
     """Factory function to create a Coding agent.
 
     Args:
-        llm_client: LLM client for code generation.
+        backend: Agent backend for code generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration for complex tasks.
 
     Returns:
         CodingAgent: Configured Coding agent instance.
     """
     return CodingAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DevelopmentConfig(),
-        rlm_integration=rlm_integration,
     )
 
 
 def create_debugger_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
 ) -> DebuggerAgent:
     """Factory function to create a Debugger agent.
 
     Args:
-        llm_client: LLM client for analysis.
+        backend: Agent backend for debug analysis.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration for codebase exploration.
 
     Returns:
         DebuggerAgent: Configured Debugger agent instance.
     """
     return DebuggerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DevelopmentConfig(),
-        rlm_integration=rlm_integration,
     )
 
 
 def create_reviewer_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
 ) -> ReviewerAgent:
     """Factory function to create a Reviewer agent.
 
     Args:
-        llm_client: LLM client for review generation.
+        backend: AgentBackend for review generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -275,7 +269,7 @@ def create_reviewer_agent(
         ReviewerAgent: Configured Reviewer agent instance.
     """
     return ReviewerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DevelopmentConfig(),
     )

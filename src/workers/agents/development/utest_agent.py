@@ -2,15 +2,18 @@
 
 Generates pytest test cases from task descriptions and acceptance criteria,
 following TDD principles where tests are written before implementation.
+
+Delegates work to a pluggable AgentBackend (Claude Code CLI, Codex CLI,
+or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.development.config import DevelopmentConfig
 from src.workers.agents.development.models import (
     TestCase,
@@ -23,10 +26,119 @@ from src.workers.agents.development.prompts.utest_prompts import (
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+UTEST_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "test_cases": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "test_type": {
+                        "type": "string",
+                        "enum": ["unit", "integration", "e2e"],
+                    },
+                    "code": {"type": "string"},
+                    "requirement_ref": {"type": "string"},
+                },
+                "required": ["id", "name", "code"],
+            },
+        },
+        "setup_code": {"type": "string"},
+        "teardown_code": {"type": "string"},
+        "fixtures": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["test_cases"],
+}
+
+
+def _build_utest_prompt(
+    task_description: str,
+    acceptance_criteria: list[str],
+    existing_context: str | None,
+) -> str:
+    """Build the prompt for the UTest backend.
+
+    Combines the existing format_test_generation_prompt with JSON output
+    format instructions so the backend returns structured data.
+
+    Args:
+        task_description: Description of the implementation task.
+        acceptance_criteria: List of acceptance criteria to cover.
+        existing_context: Optional existing code context.
+
+    Returns:
+        Formatted prompt string.
+    """
+    base_prompt = format_test_generation_prompt(
+        task_description=task_description,
+        acceptance_criteria=acceptance_criteria,
+        context=existing_context,
+    )
+
+    json_output_instructions = "\n".join([
+        "",
+        "## Required JSON Output",
+        "",
+        "Respond with valid JSON matching this schema:",
+        "```json",
+        "{",
+        '  "test_cases": [',
+        "    {",
+        '      "id": "TC-001",',
+        '      "name": "test_should_do_x_when_y",',
+        '      "description": "Describes what the test validates",',
+        '      "test_type": "unit",',
+        '      "code": "def test_should_do_x_when_y():\\n    assert ...",',
+        '      "requirement_ref": "AC-001"',
+        "    }",
+        "  ],",
+        '  "setup_code": "import pytest\\n...",',
+        '  "teardown_code": "",',
+        '  "fixtures": ["fixture_name"]',
+        "}",
+        "```",
+    ])
+
+    return base_prompt + json_output_instructions
+
+
+def _parse_test_suite_from_result(result: BackendResult) -> dict[str, Any] | None:
+    """Parse test suite data from backend result.
+
+    Handles structured output (from --json-schema), direct JSON,
+    and JSON embedded in text/code blocks.
+
+    Args:
+        result: Backend execution result.
+
+    Returns:
+        Parsed dict containing test_cases, or None if parsing fails.
+    """
+    # Prefer structured_output from --json-schema backends
+    if result.structured_output and "test_cases" in result.structured_output:
+        return result.structured_output
+
+    # Fall back to parsing from raw text output
+    content = result.output
+    if not content:
+        return None
+
+    parsed = parse_json_from_response(content)
+    if parsed is None or "test_cases" not in parsed:
+        return None
+
+    return parsed
 
 
 class UTestAgentError(Exception):
@@ -39,12 +151,14 @@ class UTestAgent:
     """Agent that generates pytest test cases from acceptance criteria.
 
     Implements the BaseAgent protocol to be dispatched by the worker pool.
-    Uses LLM to generate comprehensive test cases that will initially fail
-    (TDD red phase), covering all acceptance criteria.
+    Delegates the actual test generation work to a pluggable AgentBackend
+    (Claude Code CLI, Codex CLI, or direct LLM API).
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = UTestAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DevelopmentConfig(),
         )
@@ -53,18 +167,18 @@ class UTestAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DevelopmentConfig,
     ) -> None:
         """Initialize the UTest agent.
 
         Args:
-            llm_client: LLM client for test generation.
+            backend: Pluggable agent backend for test generation.
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -86,12 +200,14 @@ class UTestAgent:
                 Expected keys:
                 - task_description: Description of the implementation task (required)
                 - acceptance_criteria: List of acceptance criteria to cover (required)
-                - existing_context: Optional existing code context
 
         Returns:
-            AgentResult: Result with artifact paths on success.
+            AgentResult with artifact paths on success.
         """
-        logger.info(f"UTest Agent starting for task {context.task_id}")
+        logger.info(
+            f"UTest Agent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Validate required inputs
@@ -118,20 +234,58 @@ class UTestAgent:
             # Build context string from context pack if available
             existing_context = self._build_context_string(context)
 
-            # Generate test cases using LLM
-            test_suite = await self._generate_test_suite(
+            # Build prompt
+            prompt = _build_utest_prompt(
                 task_description=task_description,
                 acceptance_criteria=acceptance_criteria,
                 existing_context=existing_context,
-                task_id=context.task_id,
             )
+
+            # Configure backend
+            backend_config = BackendConfig(
+                model=self._config.utest_model,
+                output_schema=UTEST_OUTPUT_SCHEMA,
+                timeout_seconds=300,
+                allowed_tools=["Read", "Glob", "Grep"],
+            )
+
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not result.success:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message=result.error or "Backend execution failed",
+                    should_retry=True,
+                )
+
+            # Parse test suite from backend output
+            test_data = _parse_test_suite_from_result(result)
+
+            if not test_data:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message="Failed to parse test suite from backend output",
+                    should_retry=True,
+                )
+
+            # Build domain model from parsed data
+            test_suite = self._build_test_suite(test_data, context.task_id)
 
             if not test_suite:
                 return AgentResult(
                     success=False,
                     agent_type=self.agent_type,
                     task_id=context.task_id,
-                    error_message="Failed to generate test suite from acceptance criteria",
+                    error_message="Failed to build test suite from parsed data",
                     should_retry=True,
                 )
 
@@ -158,6 +312,10 @@ class UTestAgent:
                     "fixtures": test_suite.fixtures,
                     "criteria_coverage": criteria_coverage,
                     "tdd_phase": "red",  # Tests are designed to fail initially
+                    "backend": self._backend.backend_name,
+                    "cost_usd": result.cost_usd,
+                    "turns": result.turns,
+                    "session_id": result.session_id,
                 },
             )
 
@@ -178,7 +336,7 @@ class UTestAgent:
             context: Agent context with optional context pack.
 
         Returns:
-            str | None: Context string for prompt or None.
+            Context string for prompt or None.
         """
         if not context.context_pack:
             return None
@@ -200,116 +358,47 @@ class UTestAgent:
 
         return "\n\n".join(context_parts) if context_parts else None
 
-    async def _generate_test_suite(
-        self,
-        task_description: str,
-        acceptance_criteria: list[str],
-        existing_context: str | None,
+    @staticmethod
+    def _build_test_suite(
+        test_data: dict[str, Any],
         task_id: str,
     ) -> TestSuite | None:
-        """Generate test suite from acceptance criteria.
+        """Build a TestSuite domain model from parsed data.
 
         Args:
-            task_description: Description of the task.
-            acceptance_criteria: List of acceptance criteria.
-            existing_context: Optional existing code context.
+            test_data: Parsed dict containing test_cases and optional fields.
             task_id: Task identifier.
 
         Returns:
-            TestSuite | None: Generated test suite or None if failed.
+            TestSuite or None if no valid test cases could be built.
         """
-        prompt = format_test_generation_prompt(
-            task_description=task_description,
-            acceptance_criteria=acceptance_criteria,
-            context=existing_context,
-        )
-
-        try:
-            response = await self._llm_client.generate(
-                prompt=prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
-            )
-
-            # Parse response
-            test_data = self._parse_json_from_response(response.content)
-
-            if not test_data or "test_cases" not in test_data:
-                logger.warning("Invalid test generation response - no test_cases found")
-                return None
-
-            # Build test cases
-            test_cases = []
-            for tc_data in test_data.get("test_cases", []):
-                try:
-                    test_case = TestCase(
-                        id=tc_data.get("id", f"TC-{len(test_cases) + 1:03d}"),
-                        name=tc_data.get("name", ""),
-                        description=tc_data.get("description", ""),
-                        test_type=TestType(tc_data.get("test_type", "unit")),
-                        code=tc_data.get("code", ""),
-                        requirement_ref=tc_data.get("requirement_ref", ""),
-                        metadata=tc_data.get("metadata", {}),
-                    )
-                    test_cases.append(test_case)
-                except (ValueError, KeyError) as e:
-                    logger.warning(f"Skipping invalid test case: {e}")
-                    continue
-
-            if not test_cases:
-                return None
-
-            return TestSuite(
-                task_id=task_id,
-                test_cases=test_cases,
-                setup_code=test_data.get("setup_code", ""),
-                teardown_code=test_data.get("teardown_code", ""),
-                fixtures=test_data.get("fixtures", []),
-            )
-
-        except Exception as e:
-            logger.error(f"Test generation failed: {e}")
-            raise  # Re-raise to let caller handle and report the error
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
+        test_cases: list[TestCase] = []
+        for tc_data in test_data.get("test_cases", []):
             try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
+                test_case = TestCase(
+                    id=tc_data.get("id", f"TC-{len(test_cases) + 1:03d}"),
+                    name=tc_data.get("name", ""),
+                    description=tc_data.get("description", ""),
+                    test_type=TestType(tc_data.get("test_type", "unit")),
+                    code=tc_data.get("code", ""),
+                    requirement_ref=tc_data.get("requirement_ref", ""),
+                    metadata=tc_data.get("metadata", {}),
+                )
+                test_cases.append(test_case)
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Skipping invalid test case: {e}")
+                continue
 
-        return None
+        if not test_cases:
+            return None
+
+        return TestSuite(
+            task_id=task_id,
+            test_cases=test_cases,
+            setup_code=test_data.get("setup_code", ""),
+            teardown_code=test_data.get("teardown_code", ""),
+            fixtures=test_data.get("fixtures", []),
+        )
 
     def _calculate_criteria_coverage(
         self,
@@ -323,7 +412,7 @@ class UTestAgent:
             acceptance_criteria: Original acceptance criteria.
 
         Returns:
-            dict: Mapping of criterion to list of test IDs.
+            Mapping of criterion to list of test IDs.
         """
         coverage: dict[str, list[str]] = {}
 
@@ -351,7 +440,7 @@ class UTestAgent:
             test_suite: Generated test suite.
 
         Returns:
-            list[str]: Paths to written artifacts.
+            Paths to written artifacts.
         """
         from src.workers.artifacts.writer import ArtifactType
 
@@ -388,7 +477,7 @@ class UTestAgent:
             context: Agent context to validate.
 
         Returns:
-            bool: True if context is valid.
+            True if context is valid.
         """
         return bool(
             context.session_id

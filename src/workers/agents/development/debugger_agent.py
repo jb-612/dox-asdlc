@@ -1,35 +1,234 @@
 """Debugger Agent for test failure analysis and fix generation.
 
-Analyzes test failures using RLM exploration to understand codebase context,
+Analyzes test failures using an AgentBackend to understand codebase context,
 identifies root causes, and generates actionable code changes to fix issues.
-Unlike CodingAgent, DebuggerAgent ALWAYS uses RLM for analysis.
+CLI backends (like Claude Code) handle the multi-step analysis natively
+with their agentic loop.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.development.config import DevelopmentConfig
 from src.workers.agents.development.models import (
     CodeChange,
     DebugAnalysis,
 )
-from src.workers.agents.development.prompts.debugger_prompts import (
-    format_failure_analysis_prompt,
-    format_fix_suggestion_prompt,
-    format_root_cause_prompt,
-)
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
-    from src.workers.rlm.integration import RLMIntegration
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Output schema for structured JSON validation
+# ---------------------------------------------------------------------------
+
+DEBUGGER_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "failure_id": {"type": "string"},
+        "root_cause": {"type": "string"},
+        "fix_suggestion": {"type": "string"},
+        "code_changes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "original_code": {"type": "string"},
+                    "new_code": {"type": "string"},
+                    "description": {"type": "string"},
+                    "line_start": {"type": "integer"},
+                    "line_end": {"type": "integer"},
+                },
+                "required": ["file_path", "new_code", "description"],
+            },
+        },
+    },
+    "required": ["root_cause", "fix_suggestion", "code_changes"],
+}
+
+
+# ---------------------------------------------------------------------------
+# System prompt derived from debugger_prompts.py prompt constants
+# ---------------------------------------------------------------------------
+
+DEBUGGER_SYSTEM_PROMPT = (
+    "You are an expert debugger specializing in test failure analysis.\n"
+    "\n"
+    "Your task is to:\n"
+    "1. Examine test output and implementation to identify failing tests\n"
+    "2. Perform root cause analysis by looking beyond symptoms\n"
+    "3. Generate specific, minimal code changes to fix the issues\n"
+    "\n"
+    "Analysis Guidelines:\n"
+    "- Read error messages and stack traces carefully\n"
+    "- Compare expected vs actual values\n"
+    "- Trace data flow through the implementation\n"
+    "- Look for common root causes: logic errors, type mismatches,\n"
+    "  missing initialization, off-by-one errors, race conditions\n"
+    "\n"
+    "Fix Guidelines:\n"
+    "- Minimal changes only -- fix what is needed, nothing more\n"
+    "- Ensure fixes do not break other functionality\n"
+    "- Fixes must make the failing tests pass\n"
+    "- Follow existing code quality standards\n"
+)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper functions
+# ---------------------------------------------------------------------------
+
+
+def _build_debug_prompt(
+    test_output: str,
+    implementation: str,
+    stack_trace: str | None = None,
+    test_code: str | None = None,
+    context_hints: list[str] | None = None,
+) -> str:
+    """Build comprehensive debug analysis prompt.
+
+    Combines failure analysis, root cause identification, and fix suggestion
+    into a single prompt for the backend to handle in one execution.
+
+    Args:
+        test_output: Test runner output showing failures.
+        implementation: The source code being tested.
+        stack_trace: Optional detailed stack trace.
+        test_code: Optional test source code for context.
+        context_hints: Optional list of hints from context pack.
+
+    Returns:
+        str: Combined prompt for the backend.
+    """
+    sections = [
+        "Analyze the following test failures, identify the root cause,",
+        "and generate specific code changes to fix the issues.",
+        "",
+        "## Test Output",
+        "",
+        "```",
+        test_output,
+        "```",
+        "",
+        "## Implementation Being Tested",
+        "",
+        "```python",
+        implementation,
+        "```",
+    ]
+
+    if stack_trace:
+        sections.extend([
+            "",
+            "## Stack Trace",
+            "",
+            "```",
+            stack_trace,
+            "```",
+        ])
+
+    if test_code:
+        sections.extend([
+            "",
+            "## Test Code",
+            "",
+            "```python",
+            test_code,
+            "```",
+        ])
+
+    if context_hints:
+        sections.extend(["", "## Context Hints", ""])
+        sections.extend(f"- {hint}" for hint in context_hints)
+
+    sections.extend([
+        "",
+        "## Required Output Format",
+        "",
+        "Respond with a JSON object containing:",
+        "```json",
+        "{",
+        '    "failure_id": "unique-failure-id",',
+        '    "root_cause": "Clear description of the root cause",',
+        '    "fix_suggestion": "Description of how to fix the issue",',
+        '    "code_changes": [',
+        "        {",
+        '            "file_path": "path/to/file.py",',
+        '            "original_code": "original code to replace",',
+        '            "new_code": "new code to insert",',
+        '            "description": "what this change does",',
+        '            "line_start": 1,',
+        '            "line_end": 5',
+        "        }",
+        "    ]",
+        "}",
+        "```",
+    ])
+
+    return "\n".join(sections)
+
+
+def _parse_debug_from_result(
+    result: BackendResult,
+    task_id: str,
+) -> DebugAnalysis | None:
+    """Parse a BackendResult into a DebugAnalysis domain object.
+
+    Prefers ``structured_output`` when the backend provides it (e.g. via
+    ``--json-schema`` validation). Falls back to extracting JSON from the
+    raw ``output`` text.
+
+    Args:
+        result: The result from backend execution.
+        task_id: Task identifier used as fallback failure_id.
+
+    Returns:
+        DebugAnalysis or None if parsing fails.
+    """
+    # Prefer structured_output if the backend provided it
+    analysis_data = result.structured_output
+    if not analysis_data:
+        analysis_data = parse_json_from_response(result.output)
+
+    if not analysis_data:
+        logger.warning("Invalid debug analysis response -- no valid JSON found")
+        return None
+
+    # Build code changes
+    code_changes: list[CodeChange] = []
+    for change_data in analysis_data.get("code_changes", []):
+        try:
+            code_change = CodeChange(
+                file_path=change_data.get("file_path", ""),
+                original_code=change_data.get("original_code", ""),
+                new_code=change_data.get("new_code", ""),
+                description=change_data.get("description", ""),
+                line_start=change_data.get("line_start", 0),
+                line_end=change_data.get("line_end", 0),
+            )
+            code_changes.append(code_change)
+        except (ValueError, KeyError) as e:
+            logger.warning(f"Skipping invalid code change: {e}")
+            continue
+
+    return DebugAnalysis(
+        failure_id=analysis_data.get("failure_id", f"{task_id}-failure"),
+        root_cause=analysis_data.get("root_cause", ""),
+        fix_suggestion=analysis_data.get("fix_suggestion", ""),
+        code_changes=code_changes,
+    )
 
 
 class DebuggerAgentError(Exception):
@@ -42,42 +241,34 @@ class DebuggerAgent:
     """Agent that analyzes test failures and generates fix suggestions.
 
     Implements the BaseAgent protocol to be dispatched by the worker pool.
-    Uses RLM to explore the codebase for relevant context before analyzing
-    failures and generating code changes.
-
-    Unlike CodingAgent which only uses RLM on retries, DebuggerAgent
-    ALWAYS uses RLM because deep codebase exploration is essential for
-    effective debugging.
+    Uses an AgentBackend (CLI or LLM API) to perform failure analysis,
+    root cause identification, and fix generation in a single execution.
 
     Example:
         agent = DebuggerAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DevelopmentConfig(),
-            rlm_integration=rlm,
         )
         result = await agent.execute(context, event_metadata)
     """
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DevelopmentConfig,
-        rlm_integration: RLMIntegration | None = None,
     ) -> None:
         """Initialize the Debugger agent.
 
         Args:
-            llm_client: LLM client for analysis.
+            backend: AgentBackend for execution (CLI or LLM API).
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
-            rlm_integration: RLM integration for codebase exploration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
-        self._rlm_integration = rlm_integration
 
     @property
     def agent_type(self) -> str:
@@ -134,31 +325,46 @@ class DebuggerAgent:
             # Build context hints from context pack
             context_hints = self._build_context_hints(context)
 
-            # ALWAYS use RLM for debugging (unlike CodingAgent)
-            used_rlm = True
-            rlm_context = ""
-            rlm_error = None
-
-            if self._rlm_integration:
-                rlm_result = await self._run_rlm_exploration(
-                    test_output=test_output,
-                    implementation=implementation,
-                    context_hints=context_hints,
-                    context=context,
-                )
-                if rlm_result:
-                    rlm_context = rlm_result.get("formatted_output", "")
-                    if rlm_result.get("error"):
-                        rlm_error = rlm_result.get("error")
-
-            # Generate debug analysis using LLM
-            debug_analysis = await self._generate_debug_analysis(
+            # Build combined prompt
+            prompt = _build_debug_prompt(
                 test_output=test_output,
                 implementation=implementation,
                 stack_trace=stack_trace,
                 test_code=test_code,
-                rlm_context=rlm_context,
-                task_id=context.task_id,
+                context_hints=context_hints if context_hints else None,
+            )
+
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.debugger_model,
+                output_schema=DEBUGGER_OUTPUT_SCHEMA,
+                timeout_seconds=self._config.test_timeout_seconds,
+                allowed_tools=["Read", "Glob", "Grep"],
+                system_prompt=DEBUGGER_SYSTEM_PROMPT,
+            )
+
+            # Single backend execution replaces the 3 sequential LLM calls
+            backend_result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not backend_result.success:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message=(
+                        backend_result.error
+                        or "Backend execution failed"
+                    ),
+                    should_retry=True,
+                )
+
+            # Parse the result into a domain object
+            debug_analysis = _parse_debug_from_result(
+                backend_result, context.task_id,
             )
 
             if not debug_analysis:
@@ -182,11 +388,11 @@ class DebuggerAgent:
                 "root_cause": debug_analysis.root_cause,
                 "fix_suggestion": debug_analysis.fix_suggestion,
                 "code_changes": [c.to_dict() for c in debug_analysis.code_changes],
-                "used_rlm": used_rlm,
+                "backend": self._backend.backend_name,
             }
 
-            if rlm_error:
-                metadata["rlm_error"] = rlm_error
+            if backend_result.cost_usd is not None:
+                metadata["cost_usd"] = backend_result.cost_usd
 
             return AgentResult(
                 success=True,
@@ -213,9 +419,9 @@ class DebuggerAgent:
             context: Agent context with optional context pack.
 
         Returns:
-            list[str]: Context hints for RLM exploration.
+            list[str]: Context hints for prompt building.
         """
-        hints = []
+        hints: list[str] = []
 
         if not context.context_pack:
             return hints
@@ -232,193 +438,6 @@ class DebuggerAgent:
 
         return hints
 
-    async def _run_rlm_exploration(
-        self,
-        test_output: str,
-        implementation: str,
-        context_hints: list[str],
-        context: AgentContext,
-    ) -> dict[str, Any] | None:
-        """Run RLM exploration for debugging context.
-
-        Args:
-            test_output: Test failure output.
-            implementation: Implementation code.
-            context_hints: Hints from context pack.
-            context: Agent context.
-
-        Returns:
-            dict | None: RLM exploration results or None.
-        """
-        if not self._rlm_integration:
-            return None
-
-        try:
-            # Build exploration query focused on debugging
-            query = f"""
-Analyze these test failures and find relevant context in the codebase:
-
-Test Output:
-{test_output}
-
-Implementation Being Tested:
-{implementation}
-
-Look for:
-1. Similar implementations that work correctly
-2. Interface definitions that must be satisfied
-3. Test patterns for this type of functionality
-4. Common error handling patterns
-5. Dependencies and their expected behavior
-"""
-
-            result = await self._rlm_integration.explore(
-                query=query,
-                context_hints=context_hints,
-                task_id=context.task_id,
-            )
-
-            return {
-                "formatted_output": result.formatted_output,
-                "error": result.error,
-            }
-
-        except Exception as e:
-            logger.warning(f"RLM exploration failed: {e}")
-            return {
-                "formatted_output": "",
-                "error": str(e),
-            }
-
-    async def _generate_debug_analysis(
-        self,
-        test_output: str,
-        implementation: str,
-        stack_trace: str | None,
-        test_code: str | None,
-        rlm_context: str,
-        task_id: str,
-    ) -> DebugAnalysis | None:
-        """Generate debug analysis from test failures.
-
-        Args:
-            test_output: Test failure output.
-            implementation: Implementation code.
-            stack_trace: Optional stack trace.
-            test_code: Optional test code.
-            rlm_context: Context from RLM exploration.
-            task_id: Task identifier.
-
-        Returns:
-            DebugAnalysis | None: Generated analysis or None if failed.
-        """
-        # Step 1: Failure analysis
-        failure_prompt = format_failure_analysis_prompt(
-            test_output=test_output,
-            implementation=implementation,
-            stack_trace=stack_trace,
-        )
-
-        if rlm_context:
-            failure_prompt = f"{failure_prompt}\n\n## Codebase Context from RLM\n\n{rlm_context}"
-
-        try:
-            failure_response = await self._llm_client.generate(
-                prompt=failure_prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
-            )
-            failure_analysis = failure_response.content
-
-            # Step 2: Root cause analysis
-            root_cause_prompt = format_root_cause_prompt(
-                failure_analysis=failure_analysis,
-                code_context=rlm_context if rlm_context else None,
-                test_context=test_code,
-            )
-
-            root_cause_response = await self._llm_client.generate(
-                prompt=root_cause_prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
-            )
-            root_cause_analysis = root_cause_response.content
-
-            # Step 3: Fix suggestions with structured output
-            test_expectations = self._extract_test_expectations(test_code) if test_code else None
-
-            fix_prompt = format_fix_suggestion_prompt(
-                root_cause=root_cause_analysis,
-                code=implementation,
-                test_expectations=test_expectations,
-            )
-
-            # Add output format instructions
-            fix_prompt = f"""{fix_prompt}
-
-## Output Format
-
-Respond with a JSON object containing:
-```json
-{{
-    "failure_id": "unique-failure-id",
-    "root_cause": "Clear description of the root cause",
-    "fix_suggestion": "Description of how to fix the issue",
-    "code_changes": [
-        {{
-            "file_path": "path/to/file.py",
-            "original_code": "original code to replace",
-            "new_code": "new code to insert",
-            "description": "what this change does",
-            "line_start": 1,
-            "line_end": 5
-        }}
-    ]
-}}
-```
-"""
-
-            fix_response = await self._llm_client.generate(
-                prompt=fix_prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
-            )
-
-            # Parse the response
-            analysis_data = self._parse_json_from_response(fix_response.content)
-
-            if not analysis_data:
-                logger.warning("Invalid debug analysis response - no valid JSON found")
-                return None
-
-            # Build code changes
-            code_changes = []
-            for change_data in analysis_data.get("code_changes", []):
-                try:
-                    code_change = CodeChange(
-                        file_path=change_data.get("file_path", ""),
-                        original_code=change_data.get("original_code", ""),
-                        new_code=change_data.get("new_code", ""),
-                        description=change_data.get("description", ""),
-                        line_start=change_data.get("line_start", 0),
-                        line_end=change_data.get("line_end", 0),
-                    )
-                    code_changes.append(code_change)
-                except (ValueError, KeyError) as e:
-                    logger.warning(f"Skipping invalid code change: {e}")
-                    continue
-
-            return DebugAnalysis(
-                failure_id=analysis_data.get("failure_id", f"{task_id}-failure"),
-                root_cause=analysis_data.get("root_cause", ""),
-                fix_suggestion=analysis_data.get("fix_suggestion", ""),
-                code_changes=code_changes,
-            )
-
-        except Exception as e:
-            logger.error(f"Debug analysis generation failed: {e}")
-            raise
-
     def _extract_test_expectations(self, test_code: str) -> list[str]:
         """Extract test expectations from test code.
 
@@ -428,11 +447,11 @@ Respond with a JSON object containing:
         Returns:
             list[str]: List of test expectations.
         """
-        expectations = []
+        expectations: list[str] = []
 
         # Extract assert statements
         assert_pattern = r'assert\s+(.+?)(?:\s*,\s*["\'](.+?)["\'])?$'
-        for line in test_code.split('\n'):
+        for line in test_code.split("\n"):
             line = line.strip()
             match = re.match(assert_pattern, line)
             if match:
@@ -444,46 +463,6 @@ Respond with a JSON object containing:
                     expectations.append(expectation)
 
         return expectations
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     async def _write_artifacts(
         self,
@@ -501,7 +480,7 @@ Respond with a JSON object containing:
         """
         from src.workers.artifacts.writer import ArtifactType
 
-        paths = []
+        paths: list[str] = []
 
         # Write JSON artifact (structured data)
         json_content = debug_analysis.to_json()

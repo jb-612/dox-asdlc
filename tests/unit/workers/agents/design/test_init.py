@@ -79,7 +79,6 @@ class TestDesignPackageImports:
             ArchitectAgent,
             ArchitectAgentError,
             PlannerAgent,
-            PlannerAgentError,
         )
 
         assert SurveyorAgent is not None
@@ -87,7 +86,6 @@ class TestDesignPackageImports:
         assert ArchitectAgent is not None
         assert ArchitectAgentError is not None
         assert PlannerAgent is not None
-        assert PlannerAgentError is not None
 
     def test_import_coordinator(self) -> None:
         """Test importing coordinator classes."""

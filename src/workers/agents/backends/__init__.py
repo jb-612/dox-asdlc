@@ -10,9 +10,11 @@ from src.workers.agents.backends.base import (
     BackendConfig,
     BackendResult,
 )
+from src.workers.agents.backends.response_parser import parse_json_from_response
 
 __all__ = [
     "AgentBackend",
     "BackendConfig",
     "BackendResult",
+    "parse_json_from_response",
 ]

@@ -44,9 +44,10 @@ class TestDevelopmentAgentFactoryIntegration:
         mock_artifact_writer,
         agent_context,
     ) -> None:
-        """Test that UTestAgent can be created with a factory-provided client."""
+        """Test that UTestAgent can be created with an LLMAgentBackend."""
         from src.workers.agents.development.utest_agent import UTestAgent
         from src.workers.agents.development.config import DevelopmentConfig
+        from src.workers.agents.backends.llm_backend import LLMAgentBackend
         from src.infrastructure.llm.base_client import BaseLLMClient, LLMResponse
 
         # Create a mock client that implements BaseLLMClient interface
@@ -56,12 +57,14 @@ class TestDevelopmentAgentFactoryIntegration:
             model="test-model",
         ))
         mock_client.model = "test-model"
+        mock_client.model_name = "test-model"
 
         config = DevelopmentConfig()
+        backend = LLMAgentBackend(llm_client=mock_client)
 
-        # Agent should work with any client that implements the interface
+        # Agent should work with any backend that implements the protocol
         agent = UTestAgent(
-            llm_client=mock_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -75,6 +78,7 @@ class TestDevelopmentAgentFactoryIntegration:
         agent_context,
     ) -> None:
         """Test that CodingAgent can be created with a factory-provided client."""
+        from src.workers.agents.backends.llm_backend import LLMAgentBackend
         from src.workers.agents.development.coding_agent import CodingAgent
         from src.workers.agents.development.config import DevelopmentConfig
         from src.infrastructure.llm.base_client import BaseLLMClient, LLMResponse
@@ -87,9 +91,10 @@ class TestDevelopmentAgentFactoryIntegration:
         mock_client.model = "test-model"
 
         config = DevelopmentConfig()
+        backend = LLMAgentBackend(llm_client=mock_client)
 
         agent = CodingAgent(
-            llm_client=mock_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -102,10 +107,11 @@ class TestDevelopmentAgentFactoryIntegration:
         mock_artifact_writer,
         agent_context,
     ) -> None:
-        """Test that DebuggerAgent can be created with a factory-provided client."""
+        """Test that DebuggerAgent can be created with an LLMAgentBackend."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
         from src.workers.agents.development.config import DevelopmentConfig
         from src.infrastructure.llm.base_client import BaseLLMClient, LLMResponse
+        from src.workers.agents.backends.llm_backend import LLMAgentBackend
 
         mock_client = MagicMock(spec=BaseLLMClient)
         mock_client.generate = AsyncMock(return_value=LLMResponse(
@@ -113,11 +119,13 @@ class TestDevelopmentAgentFactoryIntegration:
             model="test-model",
         ))
         mock_client.model = "test-model"
+        mock_client.model_name = "test-model"
 
         config = DevelopmentConfig()
+        backend = LLMAgentBackend(llm_client=mock_client)
 
         agent = DebuggerAgent(
-            llm_client=mock_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -141,11 +149,15 @@ class TestDevelopmentAgentFactoryIntegration:
             model="test-model",
         ))
         mock_client.model = "test-model"
+        mock_client.model_name = "test-model"
+
+        from src.workers.agents.backends.llm_backend import LLMAgentBackend
+        backend = LLMAgentBackend(llm_client=mock_client)
 
         config = DevelopmentConfig()
 
         agent = ReviewerAgent(
-            llm_client=mock_client,
+            backend=backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )

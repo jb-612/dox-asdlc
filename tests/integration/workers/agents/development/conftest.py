@@ -556,10 +556,12 @@ def utest_agent(
     config: DevelopmentConfig,
 ):
     """Create a UTest agent instance for direct agent testing."""
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.utest_agent import UTestAgent
 
+    backend = LLMAgentBackend(llm_client=mock_llm_client_for_utest)
     return UTestAgent(
-        llm_client=mock_llm_client_for_utest,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
     )
@@ -570,16 +572,17 @@ def coding_agent(
     mock_llm_client_for_coding: MagicMock,
     artifact_writer: ArtifactWriter,
     config: DevelopmentConfig,
-    mock_rlm_integration: MagicMock,
 ):
     """Create a Coding agent instance for direct agent testing."""
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.coding_agent import CodingAgent
 
+    backend = LLMAgentBackend(llm_client=mock_llm_client_for_coding)
+
     return CodingAgent(
-        llm_client=mock_llm_client_for_coding,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
-        rlm_integration=mock_rlm_integration,
     )
 
 
@@ -608,10 +611,12 @@ def reviewer_agent(
     config: DevelopmentConfig,
 ):
     """Create a Reviewer agent instance for direct agent testing."""
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
+    backend = LLMAgentBackend(llm_client=mock_llm_client_for_reviewer)
     return ReviewerAgent(
-        llm_client=mock_llm_client_for_reviewer,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
     )
