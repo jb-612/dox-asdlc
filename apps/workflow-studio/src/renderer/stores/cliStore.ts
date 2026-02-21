@@ -4,6 +4,9 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels';
 
 // ---------------------------------------------------------------------------
 // Type declarations for the preload bridge (window.electronAPI)
+//
+// Note: The global Window.electronAPI is declared in executionStore.ts.
+// We define a local interface for the CLI-specific subset and cast at usage.
 // ---------------------------------------------------------------------------
 
 interface ElectronCLIAPI {
@@ -13,16 +16,15 @@ interface ElectronCLIAPI {
   write: (sessionId: string, data: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-interface ElectronAPI {
+interface ElectronAPIWithCLI {
   cli: ElectronCLIAPI;
   onEvent: (channel: string, callback: (...args: unknown[]) => void) => void;
   removeListener: (channel: string) => void;
 }
 
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
+/** Get the electron API cast to include CLI methods. */
+function getAPI(): ElectronAPIWithCLI {
+  return window.electronAPI as unknown as ElectronAPIWithCLI;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +141,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
   spawnSession: async (config) => {
     set({ lastError: null });
     try {
-      const result = await window.electronAPI.cli.spawn(config);
+      const result = await getAPI().cli.spawn(config);
       if (result.success && result.sessionId) {
         const session: CLISession = {
           id: result.sessionId,
@@ -162,7 +164,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
   killSession: async (sessionId) => {
     set({ lastError: null });
     try {
-      const result = await window.electronAPI.cli.kill(sessionId);
+      const result = await getAPI().cli.kill(sessionId);
       if (!result.success) {
         set({ lastError: result.error ?? 'Failed to kill session' });
       }
@@ -175,7 +177,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
   writeToSession: async (sessionId, data) => {
     set({ lastError: null });
     try {
-      const result = await window.electronAPI.cli.write(sessionId, data);
+      const result = await getAPI().cli.write(sessionId, data);
       if (!result.success) {
         set({ lastError: result.error ?? 'Failed to write to session' });
       }
@@ -187,7 +189,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
 
   loadSessions: async () => {
     try {
-      const sessions = await window.electronAPI.cli.list();
+      const sessions = await getAPI().cli.list();
       const map = new Map<string, CLISession>();
       for (const s of sessions) {
         map.set(s.id, s);
@@ -206,7 +208,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
     if (get().subscribed) return;
 
     // CLI output from any session
-    window.electronAPI.onEvent(
+    getAPI().onEvent(
       IPC_CHANNELS.CLI_OUTPUT,
       (...args: unknown[]) => {
         const payload = args[0] as { sessionId: string; data: string } | null;
@@ -217,7 +219,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
     );
 
     // CLI session exited
-    window.electronAPI.onEvent(
+    getAPI().onEvent(
       IPC_CHANNELS.CLI_EXIT,
       (...args: unknown[]) => {
         const payload = args[0] as { sessionId: string; exitCode?: number } | null;
@@ -228,7 +230,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
     );
 
     // CLI session error
-    window.electronAPI.onEvent(
+    getAPI().onEvent(
       IPC_CHANNELS.CLI_ERROR,
       (...args: unknown[]) => {
         const payload = args[0] as { sessionId: string; error: string } | null;
@@ -243,9 +245,9 @@ export const useCLIStore = create<CLIState>((set, get) => ({
   },
 
   unsubscribe: () => {
-    window.electronAPI.removeListener(IPC_CHANNELS.CLI_OUTPUT);
-    window.electronAPI.removeListener(IPC_CHANNELS.CLI_EXIT);
-    window.electronAPI.removeListener(IPC_CHANNELS.CLI_ERROR);
+    getAPI().removeListener(IPC_CHANNELS.CLI_OUTPUT);
+    getAPI().removeListener(IPC_CHANNELS.CLI_EXIT);
+    getAPI().removeListener(IPC_CHANNELS.CLI_ERROR);
     set({ subscribed: false });
   },
 }));
