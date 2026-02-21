@@ -1,0 +1,176 @@
+{
+  "id": "1a2b3c4d-5e6f-4a7b-8c9d-e0f1a2b3c4d5",
+  "metadata": {
+    "name": "TDD Cycle",
+    "description": "Test-driven development workflow. Write tests first, implement minimal code, debug failures, then review. Includes a HITL gate after review for approval before merging.",
+    "version": "1.0.0",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "createdBy": "asdlc-templates",
+    "tags": ["tdd", "development", "test-first"]
+  },
+  "nodes": [
+    {
+      "id": "11aa22bb-33cc-4dd4-8ee5-ff66007711aa",
+      "type": "utest",
+      "label": "Unit Test (Red)",
+      "config": {
+        "maxTurns": 20,
+        "timeoutSeconds": 600
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "failing_tests",
+          "type": "output",
+          "dataType": "json",
+          "required": true,
+          "description": "Failing test definitions"
+        }
+      ],
+      "position": { "x": 300, "y": 50 },
+      "description": "Write failing tests first (Red phase)"
+    },
+    {
+      "id": "22bb33cc-44dd-4ee5-8ff6-0077118822bb",
+      "type": "coding",
+      "label": "Coder (Green)",
+      "config": {
+        "maxTurns": 40,
+        "timeoutSeconds": 1200
+      },
+      "inputs": [
+        {
+          "name": "failing_tests",
+          "type": "input",
+          "dataType": "json",
+          "required": true,
+          "description": "Tests to make pass"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "code",
+          "type": "output",
+          "dataType": "patch",
+          "required": true,
+          "description": "Minimal implementation"
+        }
+      ],
+      "position": { "x": 300, "y": 200 },
+      "description": "Write minimal code to pass tests (Green phase)"
+    },
+    {
+      "id": "33cc44dd-55ee-4ff6-8007-11882299aa33",
+      "type": "debugger",
+      "label": "Debugger",
+      "config": {
+        "maxTurns": 25,
+        "timeoutSeconds": 900
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Code with potential failures"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "fixed_code",
+          "type": "output",
+          "dataType": "patch",
+          "required": true,
+          "description": "Debugged code"
+        }
+      ],
+      "position": { "x": 300, "y": 350 },
+      "description": "Debug any remaining test failures"
+    },
+    {
+      "id": "44dd55ee-66ff-4007-8118-2299aa3344dd",
+      "type": "reviewer",
+      "label": "Reviewer",
+      "config": {
+        "maxTurns": 15,
+        "timeoutSeconds": 600
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Code to review"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "review_result",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Review findings"
+        }
+      ],
+      "position": { "x": 300, "y": 500 },
+      "description": "Review code quality and test coverage"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t01-1a2b3c4d-0001-4000-8000-000000000001",
+      "sourceNodeId": "11aa22bb-33cc-4dd4-8ee5-ff66007711aa",
+      "targetNodeId": "22bb33cc-44dd-4ee5-8ff6-0077118822bb",
+      "condition": { "type": "always" },
+      "label": "Tests written"
+    },
+    {
+      "id": "t02-1a2b3c4d-0002-4000-8000-000000000002",
+      "sourceNodeId": "22bb33cc-44dd-4ee5-8ff6-0077118822bb",
+      "targetNodeId": "33cc44dd-55ee-4ff6-8007-11882299aa33",
+      "condition": { "type": "on_failure" },
+      "label": "Tests failing"
+    },
+    {
+      "id": "t03-1a2b3c4d-0003-4000-8000-000000000003",
+      "sourceNodeId": "22bb33cc-44dd-4ee5-8ff6-0077118822bb",
+      "targetNodeId": "44dd55ee-66ff-4007-8118-2299aa3344dd",
+      "condition": { "type": "on_success" },
+      "label": "Tests passing"
+    },
+    {
+      "id": "t04-1a2b3c4d-0004-4000-8000-000000000004",
+      "sourceNodeId": "33cc44dd-55ee-4ff6-8007-11882299aa33",
+      "targetNodeId": "22bb33cc-44dd-4ee5-8ff6-0077118822bb",
+      "condition": { "type": "always" },
+      "label": "Retry after debug"
+    }
+  ],
+  "gates": [
+    {
+      "id": "g01-1a2b3c4d-0001-4000-8000-000000000001",
+      "nodeId": "44dd55ee-66ff-4007-8118-2299aa3344dd",
+      "gateType": "approval",
+      "prompt": "Code review is complete. The reviewer has assessed the TDD implementation.\n\nApprove to proceed with merging?",
+      "options": [
+        { "label": "Approve", "value": "approve", "description": "Code is ready to merge", "isDefault": true },
+        { "label": "Request Changes", "value": "request_changes", "description": "Send back for revisions" },
+        { "label": "Reject", "value": "reject", "description": "Reject this implementation" }
+      ],
+      "timeoutSeconds": 86400,
+      "required": true
+    }
+  ],
+  "variables": [
+    {
+      "name": "test_framework",
+      "type": "string",
+      "defaultValue": "pytest",
+      "description": "Testing framework to use (pytest, vitest, jest)",
+      "required": false
+    }
+  ]
+}

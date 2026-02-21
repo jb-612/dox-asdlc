@@ -1,0 +1,404 @@
+{
+  "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "metadata": {
+    "name": "Full 11-Step aSDLC Workflow",
+    "description": "Complete agentic software development lifecycle workflow with ideation, architecture, planning, implementation, testing, review, orchestration, deployment, and monitoring. Includes HITL gates for design review and deployment approval.",
+    "version": "1.0.0",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "createdBy": "asdlc-templates",
+    "tags": ["asdlc", "full-pipeline", "11-step", "production"]
+  },
+  "nodes": [
+    {
+      "id": "b1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+      "type": "ideation",
+      "label": "Ideation",
+      "config": {
+        "maxTurns": 10,
+        "timeoutSeconds": 300
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prd",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Product requirements document"
+        }
+      ],
+      "position": { "x": 300, "y": 50 },
+      "description": "Generate product ideas and initial requirements"
+    },
+    {
+      "id": "c2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+      "type": "planner",
+      "label": "Planner",
+      "config": {
+        "maxTurns": 15,
+        "timeoutSeconds": 600
+      },
+      "inputs": [
+        {
+          "name": "requirements",
+          "type": "input",
+          "dataType": "document",
+          "required": true,
+          "description": "Requirements from ideation"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "design",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Technical design document"
+        }
+      ],
+      "position": { "x": 300, "y": 200 },
+      "description": "Create technical design and task breakdown"
+    },
+    {
+      "id": "d3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e",
+      "type": "architect",
+      "label": "Architect",
+      "config": {
+        "maxTurns": 20,
+        "timeoutSeconds": 900
+      },
+      "inputs": [
+        {
+          "name": "design",
+          "type": "input",
+          "dataType": "document",
+          "required": true,
+          "description": "Design document from planner"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "architecture",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Architecture diagrams and decisions"
+        }
+      ],
+      "position": { "x": 300, "y": 350 },
+      "description": "Design system architecture and interfaces"
+    },
+    {
+      "id": "e4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+      "type": "reviewer",
+      "label": "Design Reviewer",
+      "config": {
+        "maxTurns": 10,
+        "timeoutSeconds": 300
+      },
+      "inputs": [
+        {
+          "name": "architecture",
+          "type": "input",
+          "dataType": "document",
+          "required": true,
+          "description": "Architecture from architect"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "review_result",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Design review findings"
+        }
+      ],
+      "position": { "x": 300, "y": 500 },
+      "description": "Review design for quality, security, and feasibility"
+    },
+    {
+      "id": "f5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a",
+      "type": "coding",
+      "label": "Coder",
+      "config": {
+        "maxTurns": 50,
+        "timeoutSeconds": 1800
+      },
+      "inputs": [
+        {
+          "name": "design",
+          "type": "input",
+          "dataType": "document",
+          "required": true,
+          "description": "Approved design document"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "code",
+          "type": "output",
+          "dataType": "patch",
+          "required": true,
+          "description": "Implementation code"
+        }
+      ],
+      "position": { "x": 300, "y": 650 },
+      "description": "Implement feature code following TDD"
+    },
+    {
+      "id": "a6f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b",
+      "type": "utest",
+      "label": "Unit Test",
+      "config": {
+        "maxTurns": 30,
+        "timeoutSeconds": 900
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Code from coder"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "test_results",
+          "type": "output",
+          "dataType": "json",
+          "required": true,
+          "description": "Test execution results"
+        }
+      ],
+      "position": { "x": 300, "y": 800 },
+      "description": "Write and run unit tests"
+    },
+    {
+      "id": "b7a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b1c",
+      "type": "reviewer",
+      "label": "Code Reviewer",
+      "config": {
+        "maxTurns": 15,
+        "timeoutSeconds": 600
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Implementation code for review"
+        },
+        {
+          "name": "test_results",
+          "type": "input",
+          "dataType": "json",
+          "required": true,
+          "description": "Test results"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "review_result",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Code review findings"
+        }
+      ],
+      "position": { "x": 300, "y": 950 },
+      "description": "Review implementation code quality"
+    },
+    {
+      "id": "c8b9c0d1-e2f3-4a4b-5c6d-7e8f9a0b1c2d",
+      "type": "orchestrator",
+      "label": "Orchestrator",
+      "config": {
+        "maxTurns": 10,
+        "timeoutSeconds": 300
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Reviewed code to commit"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "commit_sha",
+          "type": "output",
+          "dataType": "string",
+          "required": true,
+          "description": "Committed SHA"
+        }
+      ],
+      "position": { "x": 300, "y": 1100 },
+      "description": "Run E2E tests and commit to main"
+    },
+    {
+      "id": "d9c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e",
+      "type": "deployment",
+      "label": "Deployment",
+      "config": {
+        "maxTurns": 10,
+        "timeoutSeconds": 600
+      },
+      "inputs": [
+        {
+          "name": "commit_sha",
+          "type": "input",
+          "dataType": "string",
+          "required": true,
+          "description": "Commit to deploy"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "deploy_url",
+          "type": "output",
+          "dataType": "string",
+          "required": true,
+          "description": "Deployed endpoint URL"
+        }
+      ],
+      "position": { "x": 300, "y": 1250 },
+      "description": "Deploy to target environment"
+    },
+    {
+      "id": "e0d1e2f3-a4b5-4c6d-7e8f-9a0b1c2d3e4f",
+      "type": "monitor",
+      "label": "Monitor",
+      "config": {
+        "maxTurns": 5,
+        "timeoutSeconds": 300
+      },
+      "inputs": [
+        {
+          "name": "deploy_url",
+          "type": "input",
+          "dataType": "string",
+          "required": true,
+          "description": "Deployed endpoint to monitor"
+        }
+      ],
+      "outputs": [],
+      "position": { "x": 300, "y": 1400 },
+      "description": "Configure monitoring and alerting"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t01-a1b2c3d4-0001-4000-8000-000000000001",
+      "sourceNodeId": "b1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+      "targetNodeId": "c2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+      "condition": { "type": "on_success" },
+      "label": "Requirements ready"
+    },
+    {
+      "id": "t02-a1b2c3d4-0002-4000-8000-000000000002",
+      "sourceNodeId": "c2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+      "targetNodeId": "d3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e",
+      "condition": { "type": "on_success" },
+      "label": "Design complete"
+    },
+    {
+      "id": "t03-a1b2c3d4-0003-4000-8000-000000000003",
+      "sourceNodeId": "d3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e",
+      "targetNodeId": "e4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+      "condition": { "type": "on_success" },
+      "label": "Architecture ready"
+    },
+    {
+      "id": "t04-a1b2c3d4-0004-4000-8000-000000000004",
+      "sourceNodeId": "e4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+      "targetNodeId": "f5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a",
+      "condition": { "type": "on_success" },
+      "label": "Design approved"
+    },
+    {
+      "id": "t05-a1b2c3d4-0005-4000-8000-000000000005",
+      "sourceNodeId": "f5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a",
+      "targetNodeId": "a6f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b",
+      "condition": { "type": "on_success" },
+      "label": "Code implemented"
+    },
+    {
+      "id": "t06-a1b2c3d4-0006-4000-8000-000000000006",
+      "sourceNodeId": "a6f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b",
+      "targetNodeId": "b7a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b1c",
+      "condition": { "type": "on_success" },
+      "label": "Tests passing"
+    },
+    {
+      "id": "t07-a1b2c3d4-0007-4000-8000-000000000007",
+      "sourceNodeId": "b7a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b1c",
+      "targetNodeId": "c8b9c0d1-e2f3-4a4b-5c6d-7e8f9a0b1c2d",
+      "condition": { "type": "on_success" },
+      "label": "Review approved"
+    },
+    {
+      "id": "t08-a1b2c3d4-0008-4000-8000-000000000008",
+      "sourceNodeId": "c8b9c0d1-e2f3-4a4b-5c6d-7e8f9a0b1c2d",
+      "targetNodeId": "d9c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e",
+      "condition": { "type": "on_success" },
+      "label": "Committed to main"
+    },
+    {
+      "id": "t09-a1b2c3d4-0009-4000-8000-000000000009",
+      "sourceNodeId": "d9c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e",
+      "targetNodeId": "e0d1e2f3-a4b5-4c6d-7e8f-9a0b1c2d3e4f",
+      "condition": { "type": "on_success" },
+      "label": "Deployed"
+    }
+  ],
+  "gates": [
+    {
+      "id": "g01-a1b2c3d4-0001-4000-8000-000000000001",
+      "nodeId": "e4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+      "gateType": "review",
+      "prompt": "Design review complete. The reviewer has assessed the architecture.\n\nDo you approve the design to proceed to implementation?",
+      "options": [
+        { "label": "Approve", "value": "approve", "description": "Proceed to implementation", "isDefault": true },
+        { "label": "Request Changes", "value": "request_changes", "description": "Send back for revisions" },
+        { "label": "Reject", "value": "reject", "description": "Abort this feature" }
+      ],
+      "timeoutSeconds": 86400,
+      "required": true
+    },
+    {
+      "id": "g02-a1b2c3d4-0002-4000-8000-000000000002",
+      "nodeId": "d9c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e",
+      "gateType": "approval",
+      "prompt": "Code has been committed to main. Ready to deploy.\n\nApprove deployment to the target environment?",
+      "options": [
+        { "label": "Deploy", "value": "approve", "description": "Proceed with deployment", "isDefault": true },
+        { "label": "Skip", "value": "skip", "description": "Skip deployment for now" },
+        { "label": "Abort", "value": "abort", "description": "Do not deploy" }
+      ],
+      "timeoutSeconds": 86400,
+      "required": true
+    }
+  ],
+  "variables": [
+    {
+      "name": "target_environment",
+      "type": "string",
+      "defaultValue": "local-dev",
+      "description": "Target deployment environment (local-dev, staging, production)",
+      "required": false
+    },
+    {
+      "name": "run_security_scan",
+      "type": "boolean",
+      "defaultValue": true,
+      "description": "Whether to run security scanning during validation",
+      "required": false
+    }
+  ]
+}

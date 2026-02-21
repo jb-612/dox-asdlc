@@ -35,3 +35,9 @@ export type {
   CLISpawnConfig,
   CLISession,
 } from './cli';
+
+export type {
+  AppSettings,
+} from './settings';
+
+export { DEFAULT_SETTINGS } from './settings';

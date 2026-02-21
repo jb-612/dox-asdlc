@@ -3,6 +3,9 @@ import DesignerPage from './pages/DesignerPage';
 import TemplateManagerPage from './pages/TemplateManagerPage';
 import ExecutionPage from './pages/ExecutionPage';
 import ExecutionWalkthroughPage from './pages/ExecutionWalkthroughPage';
+import CLIManagerPage from './pages/CLIManagerPage';
+import SettingsPage from './pages/SettingsPage';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   const base = 'block px-3 py-2 rounded text-sm font-medium transition-colors';
@@ -11,29 +14,10 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
     : `${base} text-gray-300 hover:bg-gray-700 hover:text-white`;
 }
 
-function CliSessionsPage(): JSX.Element {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">CLI Sessions</h2>
-        <p className="text-gray-400">Manage Claude CLI sessions (Phase 5)</p>
-      </div>
-    </div>
-  );
-}
-
-function SettingsPage(): JSX.Element {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Settings</h2>
-        <p className="text-gray-400">Application configuration (Phase 5)</p>
-      </div>
-    </div>
-  );
-}
-
 function App(): JSX.Element {
+  // Register global keyboard shortcuts (Ctrl+S, Ctrl+Z, etc.)
+  useKeyboardShortcuts();
+
   return (
     <BrowserRouter>
       <div className="flex h-screen bg-gray-900 text-gray-100">
@@ -73,7 +57,7 @@ function App(): JSX.Element {
             <Route path="/templates" element={<TemplateManagerPage />} />
             <Route path="/execute" element={<ExecutionPage />} />
             <Route path="/execute/run" element={<ExecutionWalkthroughPage />} />
-            <Route path="/cli" element={<CliSessionsPage />} />
+            <Route path="/cli" element={<CLIManagerPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

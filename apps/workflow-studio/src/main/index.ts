@@ -2,8 +2,15 @@ import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { registerAllHandlers } from './ipc';
+import { CLISpawner } from './services/cli-spawner';
+import { WorkItemService } from './services/workitem-service';
+import { WorkflowFileService } from './services/workflow-file-service';
+import { SettingsService } from './services/settings-service';
 
+// ---------------------------------------------------------------------------
 // Window bounds persistence
+// ---------------------------------------------------------------------------
+
 interface WindowBounds {
   x: number;
   y: number;
@@ -82,7 +89,13 @@ function ensureBoundsVisible(bounds: WindowBounds): WindowBounds {
   return bounds;
 }
 
+// ---------------------------------------------------------------------------
+// Service instances (initialised after app.whenReady)
+// ---------------------------------------------------------------------------
+
 let mainWindow: BrowserWindow | null = null;
+let cliSpawner: CLISpawner | null = null;
+const settingsService = new SettingsService();
 
 function createWindow(): void {
   const savedBounds = loadWindowBounds();
@@ -144,10 +157,30 @@ function createWindow(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
 // App lifecycle
-app.whenReady().then(() => {
-  registerAllHandlers();
+// ---------------------------------------------------------------------------
+
+app.whenReady().then(async () => {
+  // Load persisted settings
+  const settings = await settingsService.load();
+
+  // Create the main window first so services can reference it
   createWindow();
+
+  // Instantiate services that depend on the BrowserWindow
+  cliSpawner = new CLISpawner(mainWindow!);
+
+  const projectRoot = process.env.ASDLC_PROJECT_ROOT || process.cwd();
+  const workItemService = new WorkItemService(projectRoot);
+  const workflowFileService = new WorkflowFileService(settings.workflowDir);
+
+  // Register all IPC handlers with live service instances
+  registerAllHandlers({
+    cliSpawner,
+    workItemService,
+    workflowFileService,
+  });
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked and no windows exist
@@ -158,6 +191,9 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Kill all CLI child processes before quitting
+  cliSpawner?.killAll();
+
   // On macOS, apps typically stay active until Cmd+Q
   if (process.platform !== 'darwin') {
     app.quit();
