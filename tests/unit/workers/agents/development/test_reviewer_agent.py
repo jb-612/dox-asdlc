@@ -1,4 +1,4 @@
-"""Unit tests for ReviewerAgent."""
+"""Unit tests for ReviewerAgent (AgentBackend-based)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.development.config import DevelopmentConfig
 from src.workers.agents.development.models import (
@@ -14,16 +15,16 @@ from src.workers.agents.development.models import (
     IssueSeverity,
     ReviewIssue,
 )
-from src.workers.llm.client import LLMResponse
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    client.model_name = "test-model"
-    return client
+def mock_backend():
+    """Create a mock AgentBackend."""
+    backend = MagicMock()
+    backend.execute = AsyncMock()
+    backend.backend_name = "test-backend"
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -58,12 +59,30 @@ def config():
     return DevelopmentConfig()
 
 
+def _backend_result(review_data: dict) -> BackendResult:
+    """Helper to build a successful BackendResult with JSON output."""
+    return BackendResult(
+        success=True,
+        output=json.dumps(review_data),
+        structured_output=review_data,
+    )
+
+
+def _backend_result_text(text: str) -> BackendResult:
+    """Helper to build a successful BackendResult with plain text output."""
+    return BackendResult(
+        success=True,
+        output=text,
+        structured_output=None,
+    )
+
+
 class TestReviewerAgentProtocol:
     """Tests for ReviewerAgent implementing DomainAgent protocol."""
 
     def test_agent_type_returns_correct_value(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -71,7 +90,7 @@ class TestReviewerAgentProtocol:
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -80,7 +99,7 @@ class TestReviewerAgentProtocol:
 
     def test_agent_implements_base_agent_protocol(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -89,7 +108,7 @@ class TestReviewerAgentProtocol:
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -98,7 +117,7 @@ class TestReviewerAgentProtocol:
 
     def test_agent_uses_opus_model_by_default(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
     ) -> None:
         """Test that ReviewerAgent uses Opus model by default."""
@@ -106,7 +125,7 @@ class TestReviewerAgentProtocol:
 
         config = DevelopmentConfig()
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -121,7 +140,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_no_implementation(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -130,7 +149,7 @@ class TestReviewerAgentExecution:
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -144,7 +163,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_generates_code_review(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -152,7 +171,6 @@ class TestReviewerAgentExecution:
         """Test that execute generates a CodeReview from implementation."""
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
-        # Mock LLM response with review data
         review_response = {
             "passed": True,
             "issues": [],
@@ -160,13 +178,10 @@ class TestReviewerAgentExecution:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -185,7 +200,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_reviews_implementation_quality(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -210,13 +225,10 @@ class TestReviewerAgentExecution:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -235,7 +247,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_checks_security_concerns(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -260,13 +272,10 @@ class TestReviewerAgentExecution:
             "security_concerns": ["Hardcoded credentials found"],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -285,7 +294,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_verifies_style_compliance(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -310,13 +319,10 @@ class TestReviewerAgentExecution:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -335,7 +341,7 @@ class TestReviewerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_generates_review_with_issues(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -369,13 +375,10 @@ class TestReviewerAgentExecution:
             "security_concerns": ["SQL injection risk"],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -392,6 +395,120 @@ class TestReviewerAgentExecution:
         assert result.metadata.get("issue_count") >= 2
         assert result.metadata.get("passed") is False
 
+    @pytest.mark.asyncio
+    async def test_execute_passes_backend_config_with_schema(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test that execute passes BackendConfig with output schema."""
+        from src.workers.agents.development.reviewer_agent import (
+            ReviewerAgent,
+            REVIEWER_OUTPUT_SCHEMA,
+        )
+
+        review_response = {
+            "passed": True,
+            "issues": [],
+            "suggestions": [],
+            "security_concerns": [],
+        }
+        mock_backend.execute.return_value = _backend_result(review_response)
+
+        agent = ReviewerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        await agent.execute(
+            agent_context,
+            {"implementation": "def hello(): pass"},
+        )
+
+        # Verify backend.execute was called with correct config
+        call_kwargs = mock_backend.execute.call_args
+        passed_config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config")
+        assert passed_config is not None
+        assert isinstance(passed_config, BackendConfig)
+        assert passed_config.output_schema == REVIEWER_OUTPUT_SCHEMA
+        assert passed_config.allowed_tools == ["Read", "Glob", "Grep"]
+        assert passed_config.timeout_seconds == 300
+
+    @pytest.mark.asyncio
+    async def test_execute_uses_structured_output_when_available(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test that structured_output is preferred over parsing raw text."""
+        from src.workers.agents.development.reviewer_agent import ReviewerAgent
+
+        structured = {
+            "passed": True,
+            "issues": [],
+            "suggestions": ["from structured"],
+            "security_concerns": [],
+        }
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="junk text that is not json",
+            structured_output=structured,
+        )
+
+        agent = ReviewerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        result = await agent.execute(
+            agent_context,
+            {"implementation": "def hello(): pass"},
+        )
+
+        assert result.success is True
+        assert result.metadata["suggestions"] == ["from structured"]
+
+    @pytest.mark.asyncio
+    async def test_execute_falls_back_to_text_parsing(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test fallback to parse_json_from_response when no structured_output."""
+        from src.workers.agents.development.reviewer_agent import ReviewerAgent
+
+        review_data = {
+            "passed": True,
+            "issues": [],
+            "suggestions": ["parsed from text"],
+            "security_concerns": [],
+        }
+        mock_backend.execute.return_value = _backend_result_text(
+            json.dumps(review_data),
+        )
+
+        agent = ReviewerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        result = await agent.execute(
+            agent_context,
+            {"implementation": "def hello(): pass"},
+        )
+
+        assert result.success is True
+        assert result.metadata["suggestions"] == ["parsed from text"]
+
 
 class TestReviewerAgentIssueHandling:
     """Tests for ReviewerAgent issue severity and categorization."""
@@ -399,7 +516,7 @@ class TestReviewerAgentIssueHandling:
     @pytest.mark.asyncio
     async def test_categorizes_issues_by_severity(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -451,13 +568,10 @@ class TestReviewerAgentIssueHandling:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -478,7 +592,7 @@ class TestReviewerAgentIssueHandling:
     @pytest.mark.asyncio
     async def test_critical_issues_fail_review(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -503,13 +617,10 @@ class TestReviewerAgentIssueHandling:
             "security_concerns": ["Critical vulnerability found"],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -528,7 +639,7 @@ class TestReviewerAgentValidation:
 
     def test_validate_context_returns_true_for_valid_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -537,7 +648,7 @@ class TestReviewerAgentValidation:
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -546,7 +657,7 @@ class TestReviewerAgentValidation:
 
     def test_validate_context_returns_false_for_missing_session_id(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -561,7 +672,7 @@ class TestReviewerAgentValidation:
         )
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -570,7 +681,7 @@ class TestReviewerAgentValidation:
 
     def test_validate_context_returns_false_for_missing_task_id(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -585,7 +696,7 @@ class TestReviewerAgentValidation:
         )
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -597,20 +708,20 @@ class TestReviewerAgentErrorHandling:
     """Tests for ReviewerAgent error handling."""
 
     @pytest.mark.asyncio
-    async def test_execute_handles_llm_exception(
+    async def test_execute_handles_backend_exception(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
-        """Test that execute handles LLM exceptions gracefully."""
+        """Test that execute handles backend exceptions gracefully."""
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -622,12 +733,12 @@ class TestReviewerAgentErrorHandling:
 
         assert result.success is False
         assert result.should_retry is True
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
 
     @pytest.mark.asyncio
     async def test_execute_handles_invalid_json_response(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -635,13 +746,12 @@ class TestReviewerAgentErrorHandling:
         """Test that execute handles invalid JSON response."""
         from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content="This is not valid JSON",
-            model="test-model",
+        mock_backend.execute.return_value = _backend_result_text(
+            "This is not valid JSON",
         )
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -657,7 +767,7 @@ class TestReviewerAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_execute_handles_response_in_code_block(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -672,14 +782,13 @@ class TestReviewerAgentErrorHandling:
             "security_concerns": [],
         }
 
-        # Wrap response in code block
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=f"```json\n{json.dumps(review_response)}\n```",
-            model="test-model",
+        # Return as text wrapped in code block, no structured output
+        mock_backend.execute.return_value = _backend_result_text(
+            f"```json\n{json.dumps(review_response)}\n```",
         )
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -691,6 +800,37 @@ class TestReviewerAgentErrorHandling:
 
         assert result.success is True
 
+    @pytest.mark.asyncio
+    async def test_execute_handles_backend_failure_result(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test that a BackendResult with success=False is handled."""
+        from src.workers.agents.development.reviewer_agent import ReviewerAgent
+
+        mock_backend.execute.return_value = BackendResult(
+            success=False,
+            output="",
+            error="Model refused the request",
+        )
+
+        agent = ReviewerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        result = await agent.execute(
+            agent_context,
+            {"implementation": "def hello(): pass"},
+        )
+
+        assert result.success is False
+        assert result.should_retry is True
+
 
 class TestReviewerAgentOutputFormats:
     """Tests for ReviewerAgent output formats."""
@@ -698,7 +838,7 @@ class TestReviewerAgentOutputFormats:
     @pytest.mark.asyncio
     async def test_writes_review_as_json_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -713,13 +853,10 @@ class TestReviewerAgentOutputFormats:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -741,7 +878,7 @@ class TestReviewerAgentOutputFormats:
     @pytest.mark.asyncio
     async def test_writes_review_as_markdown_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -756,13 +893,10 @@ class TestReviewerAgentOutputFormats:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -788,7 +922,7 @@ class TestReviewerAgentWithTestSuite:
     @pytest.mark.asyncio
     async def test_execute_includes_test_suite_in_review(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -803,13 +937,10 @@ class TestReviewerAgentWithTestSuite:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -824,14 +955,14 @@ class TestReviewerAgentWithTestSuite:
 
         assert result.success is True
         # Verify prompt included test suite
-        call_kwargs = mock_llm_client.generate.call_args[1]
-        prompt = call_kwargs.get("prompt", "")
+        call_kwargs = mock_backend.execute.call_args
+        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs[0][0]
         assert "test" in prompt.lower()
 
     @pytest.mark.asyncio
     async def test_execute_includes_test_results_in_review(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -846,13 +977,10 @@ class TestReviewerAgentWithTestSuite:
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -867,305 +995,18 @@ class TestReviewerAgentWithTestSuite:
 
         assert result.success is True
         # Verify prompt included test results
-        call_kwargs = mock_llm_client.generate.call_args[1]
-        prompt = call_kwargs.get("prompt", "")
+        call_kwargs = mock_backend.execute.call_args
+        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs[0][0]
         assert "passed" in prompt.lower() or "coverage" in prompt.lower()
 
 
-class TestSecurityScanner:
-    """Tests for security scanner functionality in ReviewerAgent."""
-
-    def test_scan_secrets_detects_api_key_patterns(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects API key patterns."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        code_with_api_key = '''
-API_KEY = "sk-1234567890abcdef"
-api_key = "AKIAIOSFODNN7EXAMPLE"
-'''
-        findings = agent.scan_for_secrets(code_with_api_key)
-
-        assert len(findings) >= 1
-        assert any("api" in f.description.lower() or "key" in f.description.lower() for f in findings)
-        assert all(f.severity.value in ("high", "critical") for f in findings)
-
-    def test_scan_secrets_detects_password_patterns(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects password patterns."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        code_with_password = '''
-password = "secret123"
-PASSWORD = "admin"
-db_password = "hunter2"
-'''
-        findings = agent.scan_for_secrets(code_with_password)
-
-        assert len(findings) >= 1
-        assert any("password" in f.description.lower() for f in findings)
-
-    def test_scan_secrets_detects_token_patterns(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects token patterns."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        code_with_token = '''
-token = "ghp_xxxxxxxxxxxxxxxxxxxx"
-AUTH_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIs..."
-access_token = "ya29.a0ARrdaM..."
-'''
-        findings = agent.scan_for_secrets(code_with_token)
-
-        assert len(findings) >= 1
-        assert any("token" in f.description.lower() for f in findings)
-
-    def test_scan_secrets_ignores_safe_patterns(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner ignores safe patterns."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        safe_code = '''
-# API_KEY should be loaded from environment
-api_key = os.environ.get("API_KEY")
-password = os.getenv("PASSWORD")
-token = config.get("token")
-'''
-        findings = agent.scan_for_secrets(safe_code)
-
-        # Should find no hardcoded secrets
-        assert len(findings) == 0
-
-    def test_scan_injection_detects_sql_injection(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects SQL injection vulnerabilities."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        sql_injection_code = '''
-def get_user(user_id):
-    query = f"SELECT * FROM users WHERE id = {user_id}"
-    return execute(query)
-'''
-        findings = agent.scan_for_injection_vulnerabilities(sql_injection_code)
-
-        assert len(findings) >= 1
-        assert any("sql" in f.description.lower() for f in findings)
-        assert all(f.severity.value in ("high", "critical") for f in findings)
-
-    def test_scan_injection_detects_command_injection(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects command injection vulnerabilities."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        command_injection_code = '''
-def run_command(user_input):
-    os.system(f"ls {user_input}")
-    subprocess.call("rm " + user_input, shell=True)
-'''
-        findings = agent.scan_for_injection_vulnerabilities(command_injection_code)
-
-        assert len(findings) >= 1
-        assert any("command" in f.description.lower() or "shell" in f.description.lower() for f in findings)
-
-    def test_scan_injection_detects_xss_patterns(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects XSS patterns."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        xss_code = '''
-def render_html(user_input):
-    return f"<div>{user_input}</div>"
-'''
-        findings = agent.scan_for_injection_vulnerabilities(xss_code)
-
-        assert len(findings) >= 1
-        assert any("xss" in f.description.lower() or "html" in f.description.lower() for f in findings)
-
-    def test_scan_owasp_detects_insecure_deserialization(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects insecure deserialization."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        deserialization_code = '''
-import pickle
-
-def load_data(user_data):
-    return pickle.loads(user_data)
-'''
-        findings = agent.scan_for_owasp_vulnerabilities(deserialization_code)
-
-        assert len(findings) >= 1
-        assert any("deserialization" in f.description.lower() or "pickle" in f.description.lower() for f in findings)
-
-    def test_scan_owasp_detects_path_traversal(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects path traversal vulnerabilities."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        path_traversal_code = '''
-def read_file(filename):
-    path = "/data/" + filename
-    with open(path) as f:
-        return f.read()
-'''
-        findings = agent.scan_for_owasp_vulnerabilities(path_traversal_code)
-
-        assert len(findings) >= 1
-        assert any("path" in f.description.lower() or "traversal" in f.description.lower() for f in findings)
-
-    def test_scan_owasp_detects_eval_usage(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that security scanner detects eval usage."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        eval_code = '''
-def calculate(user_expression):
-    return eval(user_expression)
-'''
-        findings = agent.scan_for_owasp_vulnerabilities(eval_code)
-
-        assert len(findings) >= 1
-        assert any("eval" in f.description.lower() for f in findings)
-
-    def test_run_security_scan_combines_all_scans(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
-        """Test that run_security_scan combines all scan types."""
-        from src.workers.agents.development.reviewer_agent import ReviewerAgent
-
-        agent = ReviewerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
-
-        vulnerable_code = '''
-API_KEY = "sk-secret123"
-password = "admin"
-
-def query(user_input):
-    return f"SELECT * FROM users WHERE name = '{user_input}'"
-
-def process(data):
-    return pickle.loads(data)
-'''
-        findings = agent.run_security_scan(vulnerable_code)
-
-        # Should detect secrets, injection, and OWASP issues
-        assert len(findings) >= 3
-        categories = set()
-        for f in findings:
-            if "metadata" in dir(f) and f.metadata:
-                categories.add(f.metadata.get("category", ""))
-        assert "security" in categories or len(findings) >= 3
+class TestReviewerAgentSecurityIntegration:
+    """Tests that ReviewerAgent integrates with security_scanner module."""
 
     @pytest.mark.asyncio
     async def test_execute_includes_security_scan_results(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -1180,21 +1021,16 @@ def process(data):
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
 
         # Code with hardcoded secret
-        vulnerable_code = '''
-API_KEY = "sk-secret123"
-'''
+        vulnerable_code = '\nAPI_KEY = "sk-secret123"\n'
 
         result = await agent.execute(
             agent_context,
@@ -1203,12 +1039,15 @@ API_KEY = "sk-secret123"
 
         assert result.success is True
         # Security scan should flag the issue even if LLM didn't
-        assert result.metadata.get("security_scan_findings", 0) >= 1 or result.metadata.get("issue_count", 0) >= 1
+        assert (
+            result.metadata.get("security_scan_findings", 0) >= 1
+            or result.metadata.get("issue_count", 0) >= 1
+        )
 
     @pytest.mark.asyncio
     async def test_execute_security_findings_affect_passed_status(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -1224,13 +1063,10 @@ API_KEY = "sk-secret123"
             "security_concerns": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(review_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _backend_result(review_response)
 
         agent = ReviewerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -1250,3 +1086,22 @@ def get_user(user_id):
         assert result.success is True  # Agent execution succeeded
         # Review should fail due to critical security findings
         assert result.metadata.get("passed") is False
+
+
+class TestReviewerOutputSchema:
+    """Tests for REVIEWER_OUTPUT_SCHEMA constant."""
+
+    def test_schema_has_required_fields(self) -> None:
+        """Test that the output schema includes the required top-level fields."""
+        from src.workers.agents.development.reviewer_agent import REVIEWER_OUTPUT_SCHEMA
+
+        assert REVIEWER_OUTPUT_SCHEMA["required"] == ["passed", "issues"]
+
+    def test_schema_issues_item_properties(self) -> None:
+        """Test that the schema defines expected issue properties."""
+        from src.workers.agents.development.reviewer_agent import REVIEWER_OUTPUT_SCHEMA
+
+        issue_props = REVIEWER_OUTPUT_SCHEMA["properties"]["issues"]["items"]["properties"]
+        assert "id" in issue_props
+        assert "severity" in issue_props
+        assert issue_props["severity"]["enum"] == ["low", "medium", "high", "critical"]

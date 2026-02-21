@@ -36,11 +36,19 @@ from src.workers.agents.design.coordinator import (
 
 
 @pytest.fixture
-def mock_llm_client() -> MagicMock:
-    """Create mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend() -> AsyncMock:
+    """Create mock agent backend."""
+    from src.workers.agents.backends.base import BackendResult
+
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output="{}",
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -211,13 +219,13 @@ class TestDesignCoordinatorInit:
 
     def test_init_creates_agents(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test that coordinator creates all agents."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -228,13 +236,13 @@ class TestDesignCoordinatorInit:
 
     def test_get_agent_statuses(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test getting agent statuses."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -252,7 +260,7 @@ class TestDesignCoordinatorRun:
     @pytest.mark.asyncio
     async def test_run_success_skip_hitl(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
@@ -262,7 +270,7 @@ class TestDesignCoordinatorRun:
     ) -> None:
         """Test successful run with HITL skipped."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -325,14 +333,14 @@ class TestDesignCoordinatorRun:
     @pytest.mark.asyncio
     async def test_run_surveyor_failure(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test run fails when surveyor fails."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -360,7 +368,7 @@ class TestDesignCoordinatorRun:
     @pytest.mark.asyncio
     async def test_run_with_hitl2_submission(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         mock_hitl_dispatcher: MagicMock,
         default_config: DesignConfig,
@@ -370,7 +378,7 @@ class TestDesignCoordinatorRun:
     ) -> None:
         """Test run submits to HITL-2 and returns pending."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
             hitl_dispatcher=mock_hitl_dispatcher,
@@ -426,7 +434,7 @@ class TestDesignCoordinatorEvidenceBundles:
 
     def test_create_hitl2_bundle(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         sample_tech_survey: TechSurvey,
@@ -434,7 +442,7 @@ class TestDesignCoordinatorEvidenceBundles:
     ) -> None:
         """Test HITL-2 evidence bundle creation."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -453,14 +461,14 @@ class TestDesignCoordinatorEvidenceBundles:
 
     def test_create_hitl3_bundle(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         sample_implementation_plan: ImplementationPlan,
     ) -> None:
         """Test HITL-3 evidence bundle creation."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -483,7 +491,7 @@ class TestDesignCoordinatorResume:
     @pytest.mark.asyncio
     async def test_run_from_hitl2_approval(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
@@ -493,7 +501,7 @@ class TestDesignCoordinatorResume:
     ) -> None:
         """Test resuming workflow after HITL-2 approval."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -533,14 +541,14 @@ class TestDesignCoordinatorRejection:
     @pytest.mark.asyncio
     async def test_handle_rejection(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: MagicMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test handling HITL rejection."""
         coordinator = DesignCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )

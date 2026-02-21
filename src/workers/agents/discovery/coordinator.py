@@ -24,9 +24,8 @@ from src.workers.agents.discovery.prd_agent import PRDAgent
 from src.workers.agents.discovery.acceptance_agent import AcceptanceAgent
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.rlm.integration import RLMIntegration
     from src.orchestrator.hitl_dispatcher import HITLDispatcher
     from src.orchestrator.evidence_bundle import EvidenceBundle, EvidenceItem
 
@@ -67,7 +66,7 @@ class DiscoveryCoordinator:
 
     Example:
         coordinator = DiscoveryCoordinator(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             hitl_dispatcher=dispatcher,
             config=DiscoveryConfig(),
@@ -82,20 +81,18 @@ class DiscoveryCoordinator:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         hitl_dispatcher: HITLDispatcher | None = None,
         config: DiscoveryConfig | None = None,
-        rlm_integration: RLMIntegration | None = None,
     ) -> None:
         """Initialize the Discovery Coordinator.
 
         Args:
-            llm_client: LLM client for agent text generation.
+            backend: Agent backend for text generation.
             artifact_writer: Writer for persisting artifacts.
             hitl_dispatcher: Dispatcher for HITL gate requests.
             config: Configuration for discovery agents.
-            rlm_integration: Optional RLM integration for exploration.
         """
         self._config = config or DiscoveryConfig()
         self._artifact_writer = artifact_writer
@@ -103,14 +100,13 @@ class DiscoveryCoordinator:
 
         # Initialize agents
         self._prd_agent = PRDAgent(
-            llm_client=llm_client,
+            backend=backend,
             artifact_writer=artifact_writer,
             config=self._config,
-            rlm_integration=rlm_integration,
         )
 
         self._acceptance_agent = AcceptanceAgent(
-            llm_client=llm_client,
+            backend=backend,
             artifact_writer=artifact_writer,
             config=self._config,
         )
@@ -468,7 +464,7 @@ async def run_discovery_workflow(
     session_id: str,
     task_id: str,
     workspace_path: str,
-    llm_client: LLMClient,
+    backend: AgentBackend,
     artifact_writer: ArtifactWriter,
     hitl_dispatcher: HITLDispatcher | None = None,
     config: DiscoveryConfig | None = None,
@@ -484,7 +480,7 @@ async def run_discovery_workflow(
         session_id: Session identifier.
         task_id: Task identifier.
         workspace_path: Path to workspace directory.
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         hitl_dispatcher: Optional HITL dispatcher.
         config: Optional configuration.
@@ -496,7 +492,7 @@ async def run_discovery_workflow(
         DiscoveryResult: Result of the discovery workflow.
     """
     coordinator = DiscoveryCoordinator(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         hitl_dispatcher=hitl_dispatcher,
         config=config,

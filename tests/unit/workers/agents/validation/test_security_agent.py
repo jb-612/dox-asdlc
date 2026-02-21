@@ -10,6 +10,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.validation.config import ValidationConfig
 from src.workers.agents.validation.models import (
@@ -27,11 +28,15 @@ from src.workers.agents.validation.security_agent import (
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True, output="{}", structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -163,13 +168,13 @@ class TestSecurityAgentInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
     ):
         """Test that agent can be created with required arguments."""
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -179,13 +184,13 @@ class TestSecurityAgentInit:
 
     def test_agent_type_is_security_agent(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
     ):
         """Test that agent_type property returns correct value."""
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -199,14 +204,14 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_implementation(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
     ):
         """Test that execute returns failure when no implementation provided."""
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -223,7 +228,7 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_passes_clean_code(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -231,8 +236,7 @@ class TestSecurityAgentExecute:
     ):
         """Test that agent passes code with no security issues."""
         # Mock LLM response for compliance analysis
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": true,
@@ -240,11 +244,10 @@ class TestSecurityAgentExecute:
                     "SOC2": true
                 },
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -267,7 +270,7 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_fails_vulnerable_code(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -275,19 +278,17 @@ class TestSecurityAgentExecute:
     ):
         """Test that agent fails code with security vulnerabilities."""
         # Mock LLM response for compliance analysis
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": false,
                     "PCI_DSS": false
                 },
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -310,23 +311,21 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_detects_hardcoded_secrets(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         secrets_exposure_implementation,
     ):
         """Test that agent detects hardcoded secrets."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -353,15 +352,14 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_generates_security_report(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent generates a proper security report."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": true,
@@ -369,11 +367,10 @@ class TestSecurityAgentExecute:
                     "SOC2": true
                 },
                 "scan_coverage": 98.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -398,23 +395,21 @@ class TestSecurityAgentExecute:
     @pytest.mark.asyncio
     async def test_writes_artifacts(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent writes artifacts correctly."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": true},
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -438,7 +433,7 @@ class TestSecurityAgentVulnerabilityScanning:
     @pytest.mark.asyncio
     async def test_detects_sql_injection(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -457,16 +452,14 @@ def get_user(user_input):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -486,7 +479,7 @@ def get_user(user_input):
     @pytest.mark.asyncio
     async def test_detects_command_injection(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -505,16 +498,14 @@ def run_command(user_input):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -534,7 +525,7 @@ def run_command(user_input):
     @pytest.mark.asyncio
     async def test_detects_xss_vulnerability(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -552,16 +543,14 @@ def render_html(user_content):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -581,7 +570,7 @@ def render_html(user_content):
     @pytest.mark.asyncio
     async def test_detects_insecure_deserialization(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -600,16 +589,14 @@ def load_data(data):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -631,7 +618,7 @@ def load_data(data):
     @pytest.mark.asyncio
     async def test_detects_dangerous_eval(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -649,16 +636,14 @@ def dangerous_eval(code):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -682,7 +667,7 @@ class TestSecurityAgentSecretsDetection:
     @pytest.mark.asyncio
     async def test_detects_api_keys(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -699,16 +684,14 @@ api_key = "sk-1234567890abcdefghijklmnop"
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -726,7 +709,7 @@ api_key = "sk-1234567890abcdefghijklmnop"
     @pytest.mark.asyncio
     async def test_detects_aws_access_keys(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -743,16 +726,14 @@ aws_access_key = "AKIA1234567890ABCDEF"
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -772,7 +753,7 @@ aws_access_key = "AKIA1234567890ABCDEF"
     @pytest.mark.asyncio
     async def test_detects_database_passwords(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -789,16 +770,14 @@ db_password = "super_secret_db_pass"
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": false},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -819,7 +798,7 @@ db_password = "super_secret_db_pass"
     @pytest.mark.asyncio
     async def test_ignores_safe_patterns(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -839,16 +818,14 @@ secret = config.get("SECRET")
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": true},
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -868,25 +845,23 @@ class TestSecurityAgentComplianceChecking:
     @pytest.mark.asyncio
     async def test_checks_owasp_compliance(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent checks OWASP compliance."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": true
                 },
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -907,15 +882,14 @@ class TestSecurityAgentComplianceChecking:
     @pytest.mark.asyncio
     async def test_checks_multiple_compliance_frameworks(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent checks multiple compliance frameworks."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": true,
@@ -923,11 +897,10 @@ class TestSecurityAgentComplianceChecking:
                     "SOC2": true
                 },
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -951,7 +924,7 @@ class TestSecurityAgentScanLevels:
     @pytest.mark.asyncio
     async def test_minimal_scan_level(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         clean_code_implementation,
@@ -959,16 +932,14 @@ class TestSecurityAgentScanLevels:
         """Test that minimal scan level performs basic checks."""
         config = ValidationConfig(security_scan_level="minimal")
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {},
                 "scan_coverage": 70.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -985,7 +956,7 @@ class TestSecurityAgentScanLevels:
     @pytest.mark.asyncio
     async def test_thorough_scan_level(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         clean_code_implementation,
@@ -993,8 +964,7 @@ class TestSecurityAgentScanLevels:
         """Test that thorough scan level performs comprehensive checks."""
         config = ValidationConfig(security_scan_level="thorough")
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {
                     "OWASP_TOP_10": true,
@@ -1003,11 +973,10 @@ class TestSecurityAgentScanLevels:
                     "HIPAA": true
                 },
                 "scan_coverage": 99.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -1027,14 +996,14 @@ class TestSecurityAgentValidateContext:
 
     def test_validates_complete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
     ):
         """Test that complete context passes validation."""
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1043,13 +1012,13 @@ class TestSecurityAgentValidateContext:
 
     def test_rejects_incomplete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
     ):
         """Test that incomplete context fails validation."""
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1070,17 +1039,17 @@ class TestSecurityAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_llm_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent handles LLM errors gracefully."""
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("LLM service unavailable")
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1097,24 +1066,22 @@ class TestSecurityAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_artifact_write_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that agent handles artifact write errors gracefully."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {},
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
         mock_artifact_writer.write_artifact.side_effect = Exception("Disk full")
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1135,23 +1102,21 @@ class TestSecurityReportGeneration:
     @pytest.mark.asyncio
     async def test_report_contains_all_fields(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         clean_code_implementation,
     ):
         """Test that security report contains all required fields."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": true},
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1177,23 +1142,21 @@ class TestSecurityReportGeneration:
     @pytest.mark.asyncio
     async def test_report_passed_false_with_blocking_findings(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
         vulnerable_code_implementation,
     ):
         """Test that report.passed is False when critical/high findings exist."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {},
                 "scan_coverage": 90.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )
@@ -1218,7 +1181,7 @@ class TestSecurityReportGeneration:
     @pytest.mark.asyncio
     async def test_report_passed_true_only_with_low_findings(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         validation_config,
         agent_context,
@@ -1239,16 +1202,14 @@ def checksum(data):
             ]
         }
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(success=True, output="""{
                 "findings": [],
                 "compliance_status": {"OWASP_TOP_10": true},
                 "scan_coverage": 95.0
-            }"""
-        )
+            }""", structured_output=None)
 
         agent = SecurityAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=validation_config,
         )

@@ -1,17 +1,19 @@
 """Surveyor Agent for technology analysis and recommendations.
 
-Analyzes PRD documents to identify technology needs, performs research
-using RLM exploration when needed, and generates technology surveys
-with recommendations.
+Analyzes PRD documents to identify technology needs and generates
+technology surveys with recommendations. Delegates work to a
+pluggable AgentBackend (Claude Code CLI, Codex CLI, or direct
+LLM API calls).
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any, TYPE_CHECKING
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.protocols import AgentContext, AgentResult, BaseAgent
 from src.workers.agents.design.config import DesignConfig
 from src.workers.agents.design.models import (
@@ -21,20 +23,167 @@ from src.workers.agents.design.models import (
     TechSurvey,
 )
 from src.workers.agents.design.prompts.surveyor_prompts import (
-    SURVEYOR_SYSTEM_PROMPT,
-    format_technology_analysis_prompt,
-    format_research_synthesis_prompt,
-    format_recommendation_prompt,
-    format_rlm_trigger_prompt,
+    SURVEYOR_SYSTEM_PROMPT as _SURVEYOR_SYSTEM_PROMPT,
 )
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.rlm.integration import RLMIntegration
-    from src.workers.repo_mapper import RepoMapper, ContextPack
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+SURVEYOR_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "technologies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string"},
+                    "selected": {"type": "string"},
+                    "alternatives": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "rationale": {"type": "string"},
+                    "constraints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["category", "selected"],
+            },
+        },
+        "constraints_analysis": {"type": "object"},
+        "risk_assessment": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "description": {"type": "string"},
+                    "level": {"type": "string"},
+                    "mitigation": {"type": "string"},
+                    "impact": {"type": "string"},
+                },
+            },
+        },
+        "recommendations": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["technologies"],
+}
+
+# System prompt for the surveyor backend
+SURVEYOR_SYSTEM_PROMPT = _SURVEYOR_SYSTEM_PROMPT
+
+
+def _build_surveyor_prompt(
+    prd_content: str,
+    prd_reference: str,
+    context_pack_summary: str = "",
+    existing_patterns: str = "",
+    additional_context: str = "",
+) -> str:
+    """Build the complete prompt for the surveyor backend.
+
+    Combines PRD content, context pack summary, existing patterns,
+    and additional context into a single prompt requesting a
+    complete technology survey.
+
+    Args:
+        prd_content: PRD document content (JSON or markdown).
+        prd_reference: Reference identifier for the source PRD.
+        context_pack_summary: Summary from repo mapper context pack.
+        existing_patterns: Description of existing technology patterns.
+        additional_context: Extra context information.
+
+    Returns:
+        str: Complete prompt for the backend.
+    """
+    context_section = ""
+    if context_pack_summary:
+        context_section = f"""
+## Existing Codebase Context
+{context_pack_summary}
+"""
+
+    patterns_section = ""
+    if existing_patterns:
+        patterns_section = f"""
+## Existing Technology Patterns
+{existing_patterns}
+"""
+
+    additional_section = ""
+    if additional_context:
+        additional_section = f"""
+## Additional Context
+{additional_context}
+"""
+
+    return f"""Analyze the following PRD and produce a complete technology survey with recommendations.
+
+## PRD Reference
+{prd_reference}
+
+## PRD Document
+{prd_content}
+{context_section}{patterns_section}{additional_section}
+## Task
+Perform a comprehensive technology analysis:
+1. Identify all technology requirements from the PRD (language, framework, database, infrastructure, etc.)
+2. Evaluate options for each category considering compatibility, maturity, performance, and learning curve
+3. Make clear recommendations with rationale
+4. Assess technical risks and propose mitigations
+
+Consider:
+- Compatibility with any existing decisions or constraints from the PRD
+- Maturity and community support of each option
+- Performance characteristics relevant to the requirements
+- Long-term maintenance burden
+
+Respond with a single JSON object containing:
+- "technologies": array of technology choices, each with "category", "selected" (chosen technology), "alternatives" (array of other options considered), "rationale" (explanation), "constraints" (array of constraints affecting this choice)
+- "constraints_analysis": object mapping constraint names to analysis of how each is addressed
+- "risk_assessment": array of risk objects, each with "id" (e.g. RISK-001), "description", "level" (low|medium|high|critical), "mitigation", "impact"
+- "recommendations": array of final recommendation strings and next steps
+"""
+
+
+def _parse_survey_from_result(
+    result: BackendResult,
+) -> dict[str, Any] | None:
+    """Parse technology survey data from backend result.
+
+    Handles structured output (from --json-schema), direct JSON,
+    and JSON embedded in text/code blocks.
+
+    Args:
+        result: Backend execution result.
+
+    Returns:
+        dict | None: Parsed survey data, or None if parsing fails.
+    """
+    data = None
+
+    # Prefer structured output from --json-schema backends
+    if result.structured_output and "technologies" in result.structured_output:
+        data = result.structured_output
+    else:
+        content = result.output
+        if content:
+            data = parse_json_from_response(content)
+
+    if not data or "technologies" not in data:
+        return None
+
+    return data
 
 
 class SurveyorAgentError(Exception):
@@ -46,13 +195,14 @@ class SurveyorAgentError(Exception):
 class SurveyorAgent:
     """Agent that analyzes requirements and recommends technology choices.
 
-    Implements the BaseAgent protocol for worker pool dispatch. Uses LLM
-    to analyze PRD documents, optionally triggers RLM for deep research,
-    and generates comprehensive technology surveys.
+    Delegates the actual technology analysis to a pluggable AgentBackend
+    (Claude Code CLI, Codex CLI, or direct LLM API).
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = SurveyorAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DesignConfig(),
         )
@@ -61,26 +211,20 @@ class SurveyorAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DesignConfig,
-        rlm_integration: RLMIntegration | None = None,
-        repo_mapper: RepoMapper | None = None,
     ) -> None:
         """Initialize the Surveyor agent.
 
         Args:
-            llm_client: LLM client for text generation.
+            backend: Agent backend for technology analysis.
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
-            rlm_integration: Optional RLM integration for deep research.
-            repo_mapper: Optional repo mapper for context pack generation.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
-        self._rlm_integration = rlm_integration
-        self._repo_mapper = repo_mapper
 
     @property
     def agent_type(self) -> str:
@@ -105,7 +249,10 @@ class SurveyorAgent:
         Returns:
             AgentResult: Result with artifact paths on success.
         """
-        logger.info(f"Surveyor Agent starting for task {context.task_id}")
+        logger.info(
+            f"Surveyor Agent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Extract PRD content from metadata
@@ -119,66 +266,74 @@ class SurveyorAgent:
                     should_retry=False,
                 )
 
-            prd_reference = event_metadata.get("prd_reference", f"PRD-{context.task_id}")
+            prd_reference = event_metadata.get(
+                "prd_reference", f"PRD-{context.task_id}"
+            )
             additional_context = event_metadata.get("additional_context", "")
 
-            # Step 1: Get context pack if available
+            # Get context pack summary if available
             context_pack_summary = ""
             existing_patterns = ""
             if context.context_pack:
-                context_pack_summary = self._summarize_context_pack(context.context_pack)
-                existing_patterns = self._extract_existing_patterns(context.context_pack)
-            elif self._repo_mapper and self._config.context_pack_required:
-                # Generate context pack if repo mapper available
-                try:
-                    pack = await self._generate_context_pack(context)
-                    if pack:
-                        context_pack_summary = self._summarize_context_pack(pack)
-                        existing_patterns = self._extract_existing_patterns(pack)
-                except Exception as e:
-                    logger.warning(f"Failed to generate context pack: {e}")
+                context_pack_summary = self._summarize_context_pack(
+                    context.context_pack
+                )
+                existing_patterns = self._extract_existing_patterns(
+                    context.context_pack
+                )
 
-            # Step 2: Analyze technology needs from PRD
-            tech_needs = await self._analyze_technology_needs(
-                prd_content, context_pack_summary, existing_patterns
+            # Build combined prompt
+            prompt = _build_surveyor_prompt(
+                prd_content=prd_content,
+                prd_reference=prd_reference,
+                context_pack_summary=context_pack_summary,
+                existing_patterns=existing_patterns,
+                additional_context=additional_context,
             )
 
-            if not tech_needs:
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.surveyor_model,
+                output_schema=SURVEYOR_OUTPUT_SCHEMA,
+                system_prompt=SURVEYOR_SYSTEM_PROMPT,
+                timeout_seconds=300,
+                allowed_tools=["Read", "Glob", "Grep"],
+            )
+
+            # Execute via backend (single call for entire survey)
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not result.success:
                 return AgentResult(
                     success=False,
                     agent_type=self.agent_type,
                     task_id=context.task_id,
-                    error_message="Failed to analyze technology needs from PRD",
+                    error_message=result.error or "Backend execution failed",
                     should_retry=True,
                 )
 
-            # Step 3: Check if RLM exploration is needed
-            rlm_findings = ""
-            if self._config.enable_rlm and self._rlm_integration:
-                rlm_findings = await self._explore_with_rlm(
-                    tech_needs, context, additional_context
-                )
+            # Parse survey from result
+            survey_data = _parse_survey_from_result(result)
 
-            # Step 4: Synthesize research and generate evaluations
-            evaluations = await self._synthesize_research(
-                tech_needs, rlm_findings, additional_context
-            )
-
-            if not evaluations:
+            if not survey_data:
                 return AgentResult(
                     success=False,
                     agent_type=self.agent_type,
                     task_id=context.task_id,
-                    error_message="Failed to synthesize technology research",
+                    error_message=(
+                        "Failed to analyze technology needs from PRD"
+                    ),
                     should_retry=True,
                 )
 
-            # Step 5: Generate final recommendations
-            tech_survey = await self._generate_recommendations(
-                evaluations, prd_reference, tech_needs
-            )
+            # Build TechSurvey model from parsed data
+            tech_survey = self._build_tech_survey(survey_data, prd_reference)
 
-            # Step 6: Write artifact
+            # Write artifact
             artifact_path = await self._write_artifact(context, tech_survey)
 
             logger.info(
@@ -195,7 +350,10 @@ class SurveyorAgent:
                     "technology_count": len(tech_survey.technologies),
                     "risk_count": len(tech_survey.risk_assessment),
                     "prd_reference": prd_reference,
-                    "used_rlm": bool(rlm_findings),
+                    "backend": self._backend.backend_name,
+                    "cost_usd": result.cost_usd,
+                    "turns": result.turns,
+                    "session_id": result.session_id,
                 },
             )
 
@@ -208,215 +366,6 @@ class SurveyorAgent:
                 error_message=str(e),
                 should_retry=True,
             )
-
-    async def _analyze_technology_needs(
-        self,
-        prd_content: str,
-        context_pack_summary: str,
-        existing_patterns: str,
-    ) -> dict[str, Any] | None:
-        """Analyze PRD to identify technology needs.
-
-        Args:
-            prd_content: PRD document content.
-            context_pack_summary: Summary from context pack.
-            existing_patterns: Description of existing patterns.
-
-        Returns:
-            dict: Technology needs analysis or None on failure.
-        """
-        prompt = format_technology_analysis_prompt(
-            prd_content, context_pack_summary, existing_patterns
-        )
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=SURVEYOR_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                analysis = self._parse_json_from_response(response.content)
-
-                if analysis and "technology_needs" in analysis:
-                    return analysis
-
-                logger.warning(f"Invalid analysis response on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"Technology analysis attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        return None
-
-    async def _explore_with_rlm(
-        self,
-        tech_needs: dict[str, Any],
-        context: AgentContext,
-        additional_context: str,
-    ) -> str:
-        """Use RLM to explore technology needs requiring deep research.
-
-        Args:
-            tech_needs: Technology needs analysis.
-            context: Agent context.
-            additional_context: Additional context.
-
-        Returns:
-            str: RLM findings or empty string.
-        """
-        if not self._rlm_integration:
-            return ""
-
-        try:
-            # Check if research is needed
-            research_topics = tech_needs.get("research_topics", [])
-            if not research_topics:
-                return ""
-
-            # Format trigger check prompt
-            trigger_prompt = format_rlm_trigger_prompt(
-                json.dumps(tech_needs), research_topics
-            )
-
-            trigger_response = await self._llm_client.generate(
-                prompt=trigger_prompt,
-                system=SURVEYOR_SYSTEM_PROMPT,
-                max_tokens=1000,
-                temperature=0.2,
-            )
-
-            trigger_data = self._parse_json_from_response(trigger_response.content)
-
-            if not trigger_data or not trigger_data.get("needs_research", False):
-                return ""
-
-            # Execute RLM exploration
-            research_queries = trigger_data.get("research_queries", research_topics)
-            combined_query = (
-                f"Research the following technology topics for design decisions:\n"
-                + "\n".join(f"- {q}" for q in research_queries)
-            )
-
-            logger.info(f"Surveyor Agent triggering RLM exploration for task {context.task_id}")
-
-            rlm_result = await self._rlm_integration.explore(
-                query=combined_query,
-                context_hints=["docs/", "requirements.txt", "pyproject.toml", "package.json"],
-                task_id=context.task_id,
-            )
-
-            if rlm_result.error:
-                logger.warning(f"RLM exploration failed: {rlm_result.error}")
-                return ""
-
-            return rlm_result.formatted_output
-
-        except Exception as e:
-            logger.warning(f"RLM exploration failed: {e}")
-            return ""
-
-    async def _synthesize_research(
-        self,
-        tech_needs: dict[str, Any],
-        rlm_findings: str,
-        additional_context: str,
-    ) -> dict[str, Any] | None:
-        """Synthesize research into technology evaluations.
-
-        Args:
-            tech_needs: Technology needs analysis.
-            rlm_findings: Findings from RLM exploration.
-            additional_context: Additional context.
-
-        Returns:
-            dict: Technology evaluations or None on failure.
-        """
-        prompt = format_research_synthesis_prompt(
-            json.dumps(tech_needs), rlm_findings, additional_context
-        )
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=SURVEYOR_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                evaluations = self._parse_json_from_response(response.content)
-
-                if evaluations and "evaluations" in evaluations:
-                    return evaluations
-
-                logger.warning(f"Invalid evaluations response on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"Research synthesis attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        return None
-
-    async def _generate_recommendations(
-        self,
-        evaluations: dict[str, Any],
-        prd_reference: str,
-        tech_needs: dict[str, Any],
-    ) -> TechSurvey:
-        """Generate final technology recommendations.
-
-        Args:
-            evaluations: Technology evaluations.
-            prd_reference: Reference to source PRD.
-            tech_needs: Original technology needs.
-
-        Returns:
-            TechSurvey: Generated technology survey.
-        """
-        # Extract constraints summary
-        constraints = []
-        for need in tech_needs.get("technology_needs", []):
-            constraints.extend(need.get("constraints", []))
-        constraints_summary = "\n".join(f"- {c}" for c in set(constraints))
-
-        prompt = format_recommendation_prompt(
-            json.dumps(evaluations), prd_reference, constraints_summary
-        )
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=SURVEYOR_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                rec_data = self._parse_json_from_response(response.content)
-
-                if rec_data and "technologies" in rec_data:
-                    return self._build_tech_survey(rec_data, prd_reference)
-
-                logger.warning(f"Invalid recommendations response on attempt {attempt + 1}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-            except Exception as e:
-                logger.warning(f"Recommendation generation attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        # Fallback: create minimal survey from evaluations
-        return self._create_fallback_survey(evaluations, prd_reference)
 
     def _build_tech_survey(
         self,
@@ -465,44 +414,6 @@ class SurveyorAgent:
             recommendations=rec_data.get("recommendations", []),
         )
 
-    def _create_fallback_survey(
-        self,
-        evaluations: dict[str, Any],
-        prd_reference: str,
-    ) -> TechSurvey:
-        """Create minimal survey as fallback when generation fails.
-
-        Args:
-            evaluations: Technology evaluations.
-            prd_reference: Reference to source PRD.
-
-        Returns:
-            TechSurvey: Minimal survey document.
-        """
-        technologies = []
-        for eval_data in evaluations.get("evaluations", []):
-            recommendation = eval_data.get("recommendation", "")
-            if recommendation:
-                # Get the recommended option's details
-                options = eval_data.get("options", [])
-                option_names = [opt.get("name", "") for opt in options]
-                alternatives = [n for n in option_names if n != recommendation]
-
-                technologies.append(TechnologyChoice(
-                    category=eval_data.get("category", ""),
-                    selected=recommendation,
-                    alternatives=alternatives[:3],  # Limit to 3 alternatives
-                    rationale=f"Recommended based on evaluation (confidence: {eval_data.get('confidence', 'medium')})",
-                    constraints=eval_data.get("constraints_met", []),
-                ))
-
-        return TechSurvey.create(
-            prd_reference=prd_reference,
-            technologies=technologies,
-            risk_assessment=[],
-            recommendations=["Review and validate technology choices"],
-        )
-
     async def _write_artifact(
         self,
         context: AgentContext,
@@ -543,32 +454,6 @@ class SurveyorAgent:
 
         return json_path
 
-    async def _generate_context_pack(
-        self,
-        context: AgentContext,
-    ) -> dict[str, Any] | None:
-        """Generate context pack using repo mapper.
-
-        Args:
-            context: Agent context.
-
-        Returns:
-            dict: Context pack or None.
-        """
-        if not self._repo_mapper:
-            return None
-
-        try:
-            pack = await self._repo_mapper.generate(
-                workspace_path=context.workspace_path,
-                focus_paths=["src/", "requirements.txt", "pyproject.toml", "package.json"],
-                include_structure=True,
-            )
-            return pack.to_dict() if pack else None
-        except Exception as e:
-            logger.warning(f"Context pack generation failed: {e}")
-            return None
-
     def _summarize_context_pack(self, context_pack: dict[str, Any]) -> str:
         """Summarize context pack for prompt inclusion.
 
@@ -578,7 +463,7 @@ class SurveyorAgent:
         Returns:
             str: Summary of context pack.
         """
-        lines = []
+        lines: list[str] = []
 
         # Project structure
         if "structure" in context_pack:
@@ -616,12 +501,12 @@ class SurveyorAgent:
         Returns:
             str: Description of existing patterns.
         """
-        patterns = []
+        patterns: list[str] = []
 
         # Check for language indicators
         if "files" in context_pack:
             files = context_pack["files"]
-            extensions = {}
+            extensions: dict[str, int] = {}
             for f in files:
                 ext = f.rsplit(".", 1)[-1] if "." in f else ""
                 extensions[ext] = extensions.get(ext, 0) + 1
@@ -646,48 +531,6 @@ class SurveyorAgent:
                 patterns.append(f"- {item}")
 
         return "\n".join(patterns) if patterns else ""
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        import re
-
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     def validate_context(self, context: AgentContext) -> bool:
         """Validate that context is suitable for execution.

@@ -6,6 +6,12 @@ disable-model-invocation: true
 
 Complete and validate feature $ARGUMENTS:
 
+## Available Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `check-completion.sh` | Validate feature completion | `./scripts/check-completion.sh P01-F02-name` |
+
 ## Step 1: Verify Tasks Complete
 
 Open `.workitems/$ARGUMENTS/tasks.md` and confirm:
@@ -135,3 +141,9 @@ Update tasks.md:
 - [x] Orchestrator validated
 - [x] Committed to main
 ```
+
+## Cross-References
+
+- `@testing` — Run quality gates (test, lint, SAST, SCA, E2E)
+- `@tdd-execution` — Finish remaining tasks if incomplete
+- `@code-review` — Review before completion

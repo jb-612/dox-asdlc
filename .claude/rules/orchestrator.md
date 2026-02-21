@@ -38,12 +38,8 @@ At session start:
 
 ## Contract Workflow
 
-1. Receive `CONTRACT_CHANGE_PROPOSED`
-2. Review in `contracts/proposed/`
-3. Notify consumer with `CONTRACT_REVIEW_NEEDED`
-4. Wait for `CONTRACT_FEEDBACK`
-5. If approved: move to `contracts/versions/`, update symlinks, publish `CONTRACT_APPROVED`
-6. If rejected: publish `CONTRACT_REJECTED`
+See `@contract-update` skill for the full contract change procedure.
+Orchestrator receives `CONTRACT_CHANGE_PROPOSED` and follows the skill's step-by-step process.
 
 ## Git Identity
 

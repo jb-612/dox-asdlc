@@ -2,14 +2,18 @@
 
 Tests the release management agent that generates release manifests,
 creates changelogs from commits, and documents rollback plans.
+
+Uses mock_backend (AgentBackend) instead of mock_llm_client.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.deployment.config import DeploymentConfig
 from src.workers.agents.deployment.models import (
@@ -29,19 +33,44 @@ from src.workers.agents.validation.models import (
 from src.workers.agents.development.models import TestResult, TestRunResult
 
 
-# Import the module under test (will be created)
+# Import the module under test
 from src.workers.agents.deployment.release_agent import (
     ReleaseAgent,
     ReleaseAgentError,
 )
 
 
+def _make_backend_result(content_dict: dict) -> BackendResult:
+    """Create a BackendResult from a dict, simulating JSON output."""
+    json_str = json.dumps(content_dict)
+    return BackendResult(
+        success=True,
+        output=json_str,
+        structured_output=content_dict,
+    )
+
+
+def _make_failed_backend_result(error: str) -> BackendResult:
+    """Create a failed BackendResult."""
+    return BackendResult(
+        success=False,
+        output="",
+        error=error,
+    )
+
+
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{"key": "value"}',
+        structured_output={"key": "value"},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -159,13 +188,13 @@ class TestReleaseAgentInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent can be created with required arguments."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -175,13 +204,13 @@ class TestReleaseAgentInit:
 
     def test_agent_type_is_release_agent(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent_type property returns correct value."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -195,14 +224,14 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_validation_report(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that execute returns failure when no validation report provided."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -219,7 +248,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_security_report(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -227,7 +256,7 @@ class TestReleaseAgentExecute:
     ):
         """Test that execute returns failure when no security report provided."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -247,7 +276,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_generates_release_manifest_successfully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -256,26 +285,24 @@ class TestReleaseAgentExecute:
         commit_messages,
     ):
         """Test that agent generates a release manifest successfully."""
-        # Mock LLM response for release manifest generation
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": ["P04-F04"],
-                "changelog": "## Version 1.0.0\\n\\n- feat(P04-F04): Add validation agent\\n- fix(P04-F04): Fix validation timeout\\n- test(P04-F04): Add integration tests",
-                "artifacts": [
-                    {
-                        "name": "dox-asdlc",
-                        "artifact_type": "docker_image",
-                        "location": "registry.io/dox-asdlc:1.0.0",
-                        "checksum": "sha256:abc123"
-                    }
-                ],
-                "rollback_plan": "1. Identify the issue\\n2. Run: kubectl rollout undo deployment/dox-asdlc\\n3. Verify service health"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": ["P04-F04"],
+            "changelog": "## Version 1.0.0\n\n- feat(P04-F04): Add validation agent\n- fix(P04-F04): Fix validation timeout\n- test(P04-F04): Add integration tests",
+            "artifacts": [
+                {
+                    "name": "dox-asdlc",
+                    "artifact_type": "docker_image",
+                    "location": "registry.io/dox-asdlc:1.0.0",
+                    "checksum": "sha256:abc123",
+                },
+            ],
+            "rollback_plan": "1. Identify the issue\n2. Run: kubectl rollout undo deployment/dox-asdlc\n3. Verify service health",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -298,7 +325,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_creates_changelog_from_commits(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -307,18 +334,17 @@ class TestReleaseAgentExecute:
         commit_messages,
     ):
         """Test that agent creates changelog from commit messages."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": ["P04-F04"],
-                "changelog": "## Version 1.0.0\\n\\n### Features\\n- Add validation agent\\n\\n### Bug Fixes\\n- Fix validation timeout\\n\\n### Testing\\n- Add integration tests",
-                "artifacts": [],
-                "rollback_plan": "Rollback steps here"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": ["P04-F04"],
+            "changelog": "## Version 1.0.0\n\n### Features\n- Add validation agent\n\n### Bug Fixes\n- Fix validation timeout\n\n### Testing\n- Add integration tests",
+            "artifacts": [],
+            "rollback_plan": "Rollback steps here",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -341,7 +367,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_documents_rollback_plan(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -349,18 +375,17 @@ class TestReleaseAgentExecute:
         passing_security_report,
     ):
         """Test that agent documents a rollback plan."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": ["P04-F04"],
-                "changelog": "Changes here",
-                "artifacts": [],
-                "rollback_plan": "## Rollback Procedure\\n\\n1. Identify affected services\\n2. Run: kubectl rollout undo deployment/dox-asdlc\\n3. Verify database migrations (if any) are backward compatible\\n4. Monitor service health for 15 minutes\\n5. Notify stakeholders of rollback"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": ["P04-F04"],
+            "changelog": "Changes here",
+            "artifacts": [],
+            "rollback_plan": "## Rollback Procedure\n\n1. Identify affected services\n2. Run: kubectl rollout undo deployment/dox-asdlc\n3. Verify database migrations (if any) are backward compatible\n4. Monitor service health for 15 minutes\n5. Notify stakeholders of rollback",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -382,7 +407,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_includes_artifact_references(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -390,31 +415,30 @@ class TestReleaseAgentExecute:
         passing_security_report,
     ):
         """Test that agent includes artifact references in manifest."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": ["P04-F04"],
-                "changelog": "Changes",
-                "artifacts": [
-                    {
-                        "name": "orchestrator",
-                        "artifact_type": "docker_image",
-                        "location": "registry.io/orchestrator:1.0.0",
-                        "checksum": "sha256:abc123"
-                    },
-                    {
-                        "name": "dox-asdlc-chart",
-                        "artifact_type": "helm_chart",
-                        "location": "charts/dox-asdlc-1.0.0.tgz",
-                        "checksum": "sha256:def456"
-                    }
-                ],
-                "rollback_plan": "Rollback steps"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": ["P04-F04"],
+            "changelog": "Changes",
+            "artifacts": [
+                {
+                    "name": "orchestrator",
+                    "artifact_type": "docker_image",
+                    "location": "registry.io/orchestrator:1.0.0",
+                    "checksum": "sha256:abc123",
+                },
+                {
+                    "name": "dox-asdlc-chart",
+                    "artifact_type": "helm_chart",
+                    "location": "charts/dox-asdlc-1.0.0.tgz",
+                    "checksum": "sha256:def456",
+                },
+            ],
+            "rollback_plan": "Rollback steps",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -437,7 +461,7 @@ class TestReleaseAgentExecute:
     @pytest.mark.asyncio
     async def test_sets_next_agent_to_deployment(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -445,18 +469,17 @@ class TestReleaseAgentExecute:
         passing_security_report,
     ):
         """Test that next_agent is set to deployment_agent on success."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": ""
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -480,7 +503,7 @@ class TestReleaseAgentArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_json_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -488,18 +511,17 @@ class TestReleaseAgentArtifactWriting:
         passing_security_report,
     ):
         """Test that agent writes JSON artifact."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": ""
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -520,7 +542,7 @@ class TestReleaseAgentArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_markdown_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -541,18 +563,17 @@ class TestReleaseAgentArtifactWriting:
 
         mock_artifact_writer.write_artifact.side_effect = track_calls
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": ["P04-F04"],
-                "changelog": "Changes",
-                "artifacts": [],
-                "rollback_plan": "Steps"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": ["P04-F04"],
+            "changelog": "Changes",
+            "artifacts": [],
+            "rollback_plan": "Steps",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -577,7 +598,7 @@ class TestReleaseAgentVersioning:
     @pytest.mark.asyncio
     async def test_uses_provided_version(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -585,18 +606,17 @@ class TestReleaseAgentVersioning:
         passing_security_report,
     ):
         """Test that agent uses the version provided in metadata."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "2.5.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": ""
-            }"""
-        )
+        response_data = {
+            "version": "2.5.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -617,7 +637,7 @@ class TestReleaseAgentVersioning:
     @pytest.mark.asyncio
     async def test_generates_version_when_not_provided(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -625,18 +645,17 @@ class TestReleaseAgentVersioning:
         passing_security_report,
     ):
         """Test that agent generates a version when not provided."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "0.1.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": ""
-            }"""
-        )
+        response_data = {
+            "version": "0.1.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -661,20 +680,20 @@ class TestReleaseAgentErrorHandling:
     """Tests for error handling."""
 
     @pytest.mark.asyncio
-    async def test_handles_llm_error_gracefully(
+    async def test_handles_backend_error_gracefully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         passing_validation_report,
         passing_security_report,
     ):
-        """Test that agent handles LLM errors gracefully."""
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        """Test that agent handles backend errors gracefully."""
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -689,26 +708,28 @@ class TestReleaseAgentErrorHandling:
         )
 
         assert result.success is False
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_llm_response(
+    async def test_handles_invalid_backend_response(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         passing_validation_report,
         passing_security_report,
     ):
-        """Test that agent handles invalid LLM response."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="This is not valid JSON"
+        """Test that agent handles invalid backend response."""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="This is not valid JSON",
+            structured_output=None,
         )
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -728,7 +749,7 @@ class TestReleaseAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_artifact_writer_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -736,19 +757,18 @@ class TestReleaseAgentErrorHandling:
         passing_security_report,
     ):
         """Test that agent handles artifact writer errors."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": ""
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
         mock_artifact_writer.write_artifact.side_effect = Exception("Write failed")
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -772,14 +792,14 @@ class TestReleaseAgentValidateContext:
 
     def test_validates_complete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that complete context passes validation."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -788,13 +808,13 @@ class TestReleaseAgentValidateContext:
 
     def test_rejects_incomplete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that incomplete context fails validation."""
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -815,7 +835,7 @@ class TestReleaseAgentRollbackPlan:
     @pytest.mark.asyncio
     async def test_rollback_plan_includes_service_identification(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -823,18 +843,17 @@ class TestReleaseAgentRollbackPlan:
         passing_security_report,
     ):
         """Test that rollback plan includes service identification steps."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": "1. Identify affected services: orchestrator, workers\\n2. Roll back using kubectl rollout undo\\n3. Verify health"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "1. Identify affected services: orchestrator, workers\n2. Roll back using kubectl rollout undo\n3. Verify health",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -856,7 +875,7 @@ class TestReleaseAgentRollbackPlan:
     @pytest.mark.asyncio
     async def test_rollback_plan_config_respected(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         passing_validation_report,
@@ -865,18 +884,17 @@ class TestReleaseAgentRollbackPlan:
         """Test that rollback_enabled config is respected."""
         config = DeploymentConfig(rollback_enabled=True)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "version": "1.0.0",
-                "features": [],
-                "changelog": "",
-                "artifacts": [],
-                "rollback_plan": "Rollback is enabled and documented"
-            }"""
-        )
+        response_data = {
+            "version": "1.0.0",
+            "features": [],
+            "changelog": "",
+            "artifacts": [],
+            "rollback_plan": "Rollback is enabled and documented",
+        }
+        mock_backend.execute.return_value = _make_backend_result(response_data)
 
         agent = ReleaseAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )

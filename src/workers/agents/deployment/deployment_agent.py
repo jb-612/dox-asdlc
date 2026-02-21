@@ -3,15 +3,18 @@
 Deployment planning agent that generates deployment plans based on release
 manifests, configures health checks, defines rollback triggers, and supports
 multiple deployment strategies (rolling, blue-green, canary).
+
+Delegates work to a pluggable AgentBackend (Claude Code CLI,
+Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.deployment.config import DeploymentConfig, DeploymentStrategy
 from src.workers.agents.deployment.models import (
     DeploymentPlan,
@@ -24,10 +27,61 @@ from src.workers.agents.deployment.models import (
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+DEPLOYMENT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "release_version": {"type": "string"},
+        "target_environment": {"type": "string"},
+        "strategy": {"type": "string"},
+        "steps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "order": {"type": "integer"},
+                    "name": {"type": "string"},
+                    "step_type": {"type": "string"},
+                    "command": {"type": "string"},
+                    "timeout_seconds": {"type": "integer"},
+                    "rollback_command": {"type": ["string", "null"]},
+                },
+                "required": ["order", "name", "step_type", "command"],
+            },
+        },
+        "rollback_triggers": {"type": "array", "items": {"type": "string"}},
+        "health_checks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "check_type": {"type": "string"},
+                    "target": {"type": "string"},
+                    "interval_seconds": {"type": "integer"},
+                    "timeout_seconds": {"type": "integer"},
+                    "success_threshold": {"type": "integer"},
+                    "failure_threshold": {"type": "integer"},
+                },
+                "required": ["name", "check_type", "target"],
+            },
+        },
+    },
+    "required": ["release_version", "target_environment", "strategy", "steps"],
+}
+
+# System prompt for the deployment backend
+DEPLOYMENT_SYSTEM_PROMPT = (
+    "You are a deployment planning agent. Generate deployment plans with "
+    "health checks, rollback triggers, and strategy-specific steps. "
+    "Always respond with valid JSON matching the requested schema."
+)
 
 
 class DeploymentAgentError(Exception):
@@ -49,8 +103,10 @@ class DeploymentAgent:
     - canary: Gradual traffic shift to new version
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = DeploymentAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DeploymentConfig(),
         )
@@ -59,18 +115,18 @@ class DeploymentAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DeploymentConfig,
     ) -> None:
         """Initialize the DeploymentAgent.
 
         Args:
-            llm_client: LLM client for deployment plan generation.
+            backend: Agent backend for deployment plan generation.
             artifact_writer: Writer for persisting artifacts.
             config: Deployment configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -97,7 +153,10 @@ class DeploymentAgent:
         Returns:
             AgentResult: Result with deployment plan artifacts and hitl_gate="HITL-6".
         """
-        logger.info(f"DeploymentAgent starting for task {context.task_id}")
+        logger.info(
+            f"DeploymentAgent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Validate required inputs
@@ -127,7 +186,7 @@ class DeploymentAgent:
             else:
                 strategy = self._config.deployment_strategy
 
-            # Generate deployment plan using LLM
+            # Generate deployment plan using backend
             deployment_plan = await self._generate_deployment_plan(
                 release_manifest=release_manifest,
                 target_environment=target_environment,
@@ -159,6 +218,7 @@ class DeploymentAgent:
                 metadata={
                     "deployment_plan": deployment_plan.to_dict(),
                     "hitl_gate": "HITL-6",
+                    "backend": self._backend.backend_name,
                 },
             )
 
@@ -178,7 +238,7 @@ class DeploymentAgent:
         target_environment: str,
         strategy: DeploymentStrategy,
     ) -> DeploymentPlan | None:
-        """Generate deployment plan using LLM.
+        """Generate deployment plan using backend.
 
         Args:
             release_manifest: Release manifest from release agent.
@@ -196,14 +256,33 @@ class DeploymentAgent:
         )
 
         try:
-            response = await self._llm_client.generate(
-                prompt=prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.deployment_model,
+                output_schema=DEPLOYMENT_OUTPUT_SCHEMA,
+                system_prompt=DEPLOYMENT_SYSTEM_PROMPT,
+                timeout_seconds=300,
             )
 
-            # Parse response
-            plan_data = self._parse_json_from_response(response.content)
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path="",
+                config=backend_config,
+            )
+
+            if not result.success:
+                logger.warning(
+                    "Deployment plan generation failed: %s", result.error
+                )
+                return None
+
+            # Parse response - try structured output first, then text
+            plan_data = None
+            if result.structured_output:
+                plan_data = result.structured_output
+            else:
+                plan_data = parse_json_from_response(result.output)
 
             if not plan_data:
                 logger.warning("Invalid deployment plan response - no valid JSON")
@@ -426,46 +505,6 @@ Canary Deployment Strategy:
 """
         else:
             return "Use default rolling update strategy."
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     async def _write_artifacts(
         self,

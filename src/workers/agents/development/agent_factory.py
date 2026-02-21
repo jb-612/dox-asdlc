@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from src.workers.agents.development.reviewer_agent import ReviewerAgent
     from src.workers.agents.development.utest_agent import UTestAgent
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.rlm.integration import RLMIntegration
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,9 @@ async def create_utest_agent(
 ) -> "UTestAgent":
     """Create a UTestAgent with a factory-provided LLM client.
 
+    Wraps the LLMClient in an LLMAgentBackend adapter to satisfy
+    the AgentBackend protocol expected by UTestAgent.
+
     Args:
         artifact_writer: Writer for persisting artifacts.
         config: Optional development configuration.
@@ -54,15 +56,17 @@ async def create_utest_agent(
     Raises:
         LLMClientError: If factory fails and fallback_to_stub is False.
     """
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.utest_agent import UTestAgent
 
     if config is None:
         config = DevelopmentConfig()
 
     llm_client = await _get_llm_client("utest", factory, fallback_to_stub)
+    backend = LLMAgentBackend(llm_client=llm_client)
 
     return UTestAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
     )
@@ -72,16 +76,17 @@ async def create_coding_agent(
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
     factory: "LLMClientFactory | None" = None,
-    rlm_integration: "RLMIntegration | None" = None,
     fallback_to_stub: bool = False,
 ) -> "CodingAgent":
     """Create a CodingAgent with a factory-provided LLM client.
+
+    Wraps the LLMClient in an LLMAgentBackend adapter to satisfy
+    the AgentBackend protocol expected by CodingAgent.
 
     Args:
         artifact_writer: Writer for persisting artifacts.
         config: Optional development configuration.
         factory: Optional LLMClientFactory instance. Uses global if not provided.
-        rlm_integration: Optional RLM integration for complex tasks.
         fallback_to_stub: If True, use stub client on factory error.
 
     Returns:
@@ -90,18 +95,19 @@ async def create_coding_agent(
     Raises:
         LLMClientError: If factory fails and fallback_to_stub is False.
     """
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.coding_agent import CodingAgent
 
     if config is None:
         config = DevelopmentConfig()
 
     llm_client = await _get_llm_client("coding", factory, fallback_to_stub)
+    backend = LLMAgentBackend(llm_client=llm_client)
 
     return CodingAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
-        rlm_integration=rlm_integration,
     )
 
 
@@ -109,16 +115,17 @@ async def create_debugger_agent(
     artifact_writer: "ArtifactWriter",
     config: DevelopmentConfig | None = None,
     factory: "LLMClientFactory | None" = None,
-    rlm_integration: "RLMIntegration | None" = None,
     fallback_to_stub: bool = False,
 ) -> "DebuggerAgent":
     """Create a DebuggerAgent with a factory-provided LLM client.
+
+    Wraps the LLMClient in an LLMAgentBackend adapter to satisfy
+    the AgentBackend protocol expected by DebuggerAgent.
 
     Args:
         artifact_writer: Writer for persisting artifacts.
         config: Optional development configuration.
         factory: Optional LLMClientFactory instance. Uses global if not provided.
-        rlm_integration: Optional RLM integration for codebase exploration.
         fallback_to_stub: If True, use stub client on factory error.
 
     Returns:
@@ -127,18 +134,19 @@ async def create_debugger_agent(
     Raises:
         LLMClientError: If factory fails and fallback_to_stub is False.
     """
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.debugger_agent import DebuggerAgent
 
     if config is None:
         config = DevelopmentConfig()
 
     llm_client = await _get_llm_client("debugger", factory, fallback_to_stub)
+    backend = LLMAgentBackend(llm_client=llm_client)
 
     return DebuggerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
-        rlm_integration=rlm_integration,
     )
 
 
@@ -149,6 +157,9 @@ async def create_reviewer_agent(
     fallback_to_stub: bool = False,
 ) -> "ReviewerAgent":
     """Create a ReviewerAgent with a factory-provided LLM client.
+
+    Wraps the LLMClient in an LLMAgentBackend adapter to satisfy
+    the AgentBackend protocol expected by ReviewerAgent.
 
     Args:
         artifact_writer: Writer for persisting artifacts.
@@ -162,15 +173,17 @@ async def create_reviewer_agent(
     Raises:
         LLMClientError: If factory fails and fallback_to_stub is False.
     """
+    from src.workers.agents.backends.llm_backend import LLMAgentBackend
     from src.workers.agents.development.reviewer_agent import ReviewerAgent
 
     if config is None:
         config = DevelopmentConfig()
 
     llm_client = await _get_llm_client("reviewer", factory, fallback_to_stub)
+    backend = LLMAgentBackend(llm_client=llm_client)
 
     return ReviewerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config,
     )

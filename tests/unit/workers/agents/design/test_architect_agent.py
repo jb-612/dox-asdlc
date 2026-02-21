@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.design.config import DesignConfig
 from src.workers.agents.design.models import (
@@ -19,22 +19,28 @@ from src.workers.agents.design.models import (
     DiagramReference,
     DiagramType,
 )
-from src.workers.agents.design.architect_agent import ArchitectAgent, ArchitectAgentError
-
-
-@dataclass
-class MockLLMResponse:
-    """Mock LLM response."""
-
-    content: str
+from src.workers.agents.design.architect_agent import (
+    ArchitectAgent,
+    ArchitectAgentError,
+    _build_architect_prompt,
+    _parse_design_from_result,
+    ARCHITECT_OUTPUT_SCHEMA,
+    ARCHITECT_SYSTEM_PROMPT,
+)
 
 
 @pytest.fixture
-def mock_llm_client() -> MagicMock:
-    """Create mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend() -> AsyncMock:
+    """Create mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{"key": "value"}',
+        structured_output={"key": "value"},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -66,9 +72,9 @@ def agent_context() -> AgentContext:
 
 
 @pytest.fixture
-def sample_component_design_response() -> str:
-    """Sample component design response."""
-    return json.dumps({
+def sample_combined_design() -> dict[str, Any]:
+    """Sample combined design response with components and diagrams."""
+    return {
         "architecture_style": "modular_monolith",
         "style_rationale": "Allows rapid development with clear boundaries",
         "components": [
@@ -113,13 +119,6 @@ def sample_component_design_response() -> str:
             }
         ],
         "deployment_model": "Container-based with horizontal scaling",
-    })
-
-
-@pytest.fixture
-def sample_diagrams_response() -> str:
-    """Sample diagrams response."""
-    return json.dumps({
         "diagrams": [
             {
                 "diagram_type": "component",
@@ -133,14 +132,15 @@ def sample_diagrams_response() -> str:
                 "description": "Sequence of user request handling",
                 "mermaid_code": "sequenceDiagram\n    Client->>API: Request\n    API->>User: GetUser\n    User-->>API: User\n    API-->>Client: Response",
             },
-        ]
-    })
+        ],
+    }
 
 
 @pytest.fixture
-def sample_nfr_validation_response() -> str:
-    """Sample NFR validation response."""
-    return json.dumps({
+def sample_design_with_nfr(sample_combined_design: dict[str, Any]) -> dict[str, Any]:
+    """Sample design response that includes NFR evaluation."""
+    return {
+        **sample_combined_design,
         "nfr_evaluation": [
             {
                 "requirement": "Handle 1000 concurrent users",
@@ -163,12 +163,7 @@ def sample_nfr_validation_response() -> str:
             "Implement JWT authentication",
             "Use HTTPS for all endpoints",
         ],
-        "overall_assessment": {
-            "score": 4,
-            "summary": "Good architecture with minor gaps",
-            "critical_gaps": [],
-        },
-    })
+    }
 
 
 class TestArchitectAgentInit:
@@ -176,13 +171,13 @@ class TestArchitectAgentInit:
 
     def test_agent_type(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test agent type property."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -195,21 +190,21 @@ class TestArchitectAgentExecute:
     @pytest.mark.asyncio
     async def test_execute_success(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_component_design_response: str,
-        sample_diagrams_response: str,
+        sample_combined_design: dict[str, Any],
     ) -> None:
         """Test successful execution."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_component_design_response),
-            MockLLMResponse(content=sample_diagrams_response),
-        ]
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(sample_combined_design),
+            structured_output=sample_combined_design,
+        )
 
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -230,27 +225,28 @@ class TestArchitectAgentExecute:
         assert result.metadata["component_count"] == 2
         assert result.metadata["diagram_count"] == 2
         assert result.metadata["architecture_style"] == "modular_monolith"
+        assert result.metadata["backend"] == "mock"
+        # Single backend call for the combined design
+        mock_backend.execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_with_nfr_validation(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_component_design_response: str,
-        sample_diagrams_response: str,
-        sample_nfr_validation_response: str,
+        sample_design_with_nfr: dict[str, Any],
     ) -> None:
-        """Test execution with NFR validation."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_component_design_response),
-            MockLLMResponse(content=sample_diagrams_response),
-            MockLLMResponse(content=sample_nfr_validation_response),
-        ]
+        """Test execution with NFR validation in combined response."""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(sample_design_with_nfr),
+            structured_output=sample_design_with_nfr,
+        )
 
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -265,20 +261,20 @@ class TestArchitectAgentExecute:
         )
 
         assert result.success is True
-        # Should have called generate 3 times (design, diagrams, NFR)
-        assert mock_llm_client.generate.call_count == 3
+        # Single backend call includes NFR validation
+        mock_backend.execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_missing_tech_survey(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test execution fails without tech survey."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -297,14 +293,14 @@ class TestArchitectAgentExecute:
     @pytest.mark.asyncio
     async def test_execute_missing_prd_content(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test execution fails without PRD content."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -321,20 +317,22 @@ class TestArchitectAgentExecute:
         assert result.should_retry is False
 
     @pytest.mark.asyncio
-    async def test_execute_design_failure(
+    async def test_execute_design_failure_unparseable(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
-        """Test execution handles design failure."""
-        mock_llm_client.generate.return_value = MockLLMResponse(
-            content="not valid json"
+        """Test execution handles unparseable backend output."""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="not valid json at all",
+            structured_output=None,
         )
 
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -352,22 +350,59 @@ class TestArchitectAgentExecute:
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_execute_diagram_failure_continues(
+    async def test_execute_backend_failure(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
-        sample_component_design_response: str,
     ) -> None:
-        """Test execution continues if diagram generation fails."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_component_design_response),
-            MockLLMResponse(content="invalid diagram response"),  # Diagram fails
-        ]
+        """Test execution handles backend failure."""
+        mock_backend.execute.return_value = BackendResult(
+            success=False,
+            output="",
+            error="Backend timed out",
+        )
 
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=default_config,
+        )
+
+        result = await agent.execute(
+            context=agent_context,
+            event_metadata={
+                "tech_survey": '{}',
+                "prd_content": "PRD",
+            },
+        )
+
+        assert result.success is False
+        assert "Backend timed out" in result.error_message
+        assert result.should_retry is True
+
+    @pytest.mark.asyncio
+    async def test_execute_no_diagrams_still_succeeds(
+        self,
+        mock_backend: AsyncMock,
+        mock_artifact_writer: MagicMock,
+        default_config: DesignConfig,
+        agent_context: AgentContext,
+        sample_combined_design: dict[str, Any],
+    ) -> None:
+        """Test execution succeeds when response has no diagrams."""
+        design_no_diagrams = {**sample_combined_design}
+        design_no_diagrams.pop("diagrams", None)
+
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(design_no_diagrams),
+            structured_output=design_no_diagrams,
+        )
+
+        agent = ArchitectAgent(
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -387,17 +422,17 @@ class TestArchitectAgentExecute:
     @pytest.mark.asyncio
     async def test_execute_with_context_pack(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
-        sample_component_design_response: str,
-        sample_diagrams_response: str,
+        sample_combined_design: dict[str, Any],
     ) -> None:
         """Test execution with context pack."""
-        mock_llm_client.generate.side_effect = [
-            MockLLMResponse(content=sample_component_design_response),
-            MockLLMResponse(content=sample_diagrams_response),
-        ]
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=json.dumps(sample_combined_design),
+            structured_output=sample_combined_design,
+        )
 
         context = AgentContext(
             session_id="test-session",
@@ -412,7 +447,7 @@ class TestArchitectAgentExecute:
         )
 
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -433,13 +468,13 @@ class TestArchitectAgentBuilding:
 
     def test_build_architecture(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test building Architecture from design data."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -504,13 +539,13 @@ class TestArchitectAgentBuilding:
 
     def test_build_architecture_invalid_style_fallback(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test fallback for invalid architecture style."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -534,13 +569,13 @@ class TestArchitectAgentBuilding:
 
     def test_build_architecture_invalid_diagram_type_fallback(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test fallback for invalid diagram type."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -578,13 +613,13 @@ class TestArchitectAgentHelpers:
 
     def test_extract_nfr_considerations(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test NFR considerations extraction."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -611,13 +646,13 @@ class TestArchitectAgentHelpers:
 
     def test_summarize_context_pack(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test context pack summarization."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -636,13 +671,13 @@ class TestArchitectAgentHelpers:
 
     def test_summarize_empty_context_pack(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test summarizing empty context pack."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -652,14 +687,14 @@ class TestArchitectAgentHelpers:
 
     def test_validate_context_valid(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
         agent_context: AgentContext,
     ) -> None:
         """Test context validation with valid context."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -668,13 +703,13 @@ class TestArchitectAgentHelpers:
 
     def test_validate_context_invalid(
         self,
-        mock_llm_client: MagicMock,
+        mock_backend: AsyncMock,
         mock_artifact_writer: MagicMock,
         default_config: DesignConfig,
     ) -> None:
         """Test context validation with invalid context."""
         agent = ArchitectAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=default_config,
         )
@@ -689,63 +724,100 @@ class TestArchitectAgentHelpers:
         assert agent.validate_context(invalid_context) is False
 
 
-class TestArchitectAgentJsonParsing:
-    """Tests for JSON parsing in Architect Agent."""
+class TestArchitectModuleFunctions:
+    """Tests for module-level functions and constants."""
 
-    def test_parse_direct_json(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing direct JSON response."""
-        agent = ArchitectAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
+    def test_output_schema_has_required_keys(self) -> None:
+        """Test that the output schema has the required structure."""
+        assert "type" in ARCHITECT_OUTPUT_SCHEMA
+        assert ARCHITECT_OUTPUT_SCHEMA["type"] == "object"
+        props = ARCHITECT_OUTPUT_SCHEMA["properties"]
+        assert "components" in props
+        assert "diagrams" in props
+        assert "data_flows" in props
+        assert "nfr_evaluation" in props
+
+    def test_system_prompt_is_nonempty(self) -> None:
+        """Test that the system prompt is defined."""
+        assert ARCHITECT_SYSTEM_PROMPT
+        assert "Solution Architect" in ARCHITECT_SYSTEM_PROMPT
+
+    def test_build_architect_prompt_basic(self) -> None:
+        """Test building a basic architect prompt."""
+        prompt = _build_architect_prompt(
+            tech_survey='{"technologies": []}',
+            prd_content="Build a user API",
         )
 
-        content = '{"components": []}'
-        result = agent._parse_json_from_response(content)
+        assert "Technology Survey" in prompt
+        assert "PRD Document" in prompt
+        assert "Build a user API" in prompt
 
-        assert result == {"components": []}
-
-    def test_parse_json_in_code_block(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing JSON from code block."""
-        agent = ArchitectAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
+    def test_build_architect_prompt_with_nfr(self) -> None:
+        """Test building prompt with NFR requirements."""
+        prompt = _build_architect_prompt(
+            tech_survey='{}',
+            prd_content="PRD",
+            nfr_requirements="Must handle 1000 concurrent users",
         )
 
-        content = """Here's the architecture:
-```json
-{"components": [{"name": "API"}]}
-```
-"""
-        result = agent._parse_json_from_response(content)
+        assert "Non-Functional Requirements" in prompt
+        assert "1000 concurrent users" in prompt
+        assert "nfr_evaluation" in prompt
 
-        assert result == {"components": [{"name": "API"}]}
-
-    def test_parse_invalid_json(
-        self,
-        mock_llm_client: MagicMock,
-        mock_artifact_writer: MagicMock,
-        default_config: DesignConfig,
-    ) -> None:
-        """Test parsing invalid JSON returns None."""
-        agent = ArchitectAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=default_config,
+    def test_build_architect_prompt_with_context(self) -> None:
+        """Test building prompt with context pack summary."""
+        prompt = _build_architect_prompt(
+            tech_survey='{}',
+            prd_content="PRD",
+            context_pack_summary="### Existing Components\n- UserService",
         )
 
-        content = "this is not json"
-        result = agent._parse_json_from_response(content)
+        assert "Existing Codebase Context" in prompt
+        assert "UserService" in prompt
 
-        assert result is None
+    def test_parse_design_from_result_structured_output(self) -> None:
+        """Test parsing from structured output."""
+        result = BackendResult(
+            success=True,
+            output="",
+            structured_output={"components": [{"name": "API"}]},
+        )
+
+        data = _parse_design_from_result(result)
+        assert data is not None
+        assert "components" in data
+
+    def test_parse_design_from_result_text_output(self) -> None:
+        """Test parsing from text output."""
+        result = BackendResult(
+            success=True,
+            output='{"components": [{"name": "API"}]}',
+            structured_output=None,
+        )
+
+        data = _parse_design_from_result(result)
+        assert data is not None
+        assert data["components"][0]["name"] == "API"
+
+    def test_parse_design_from_result_invalid(self) -> None:
+        """Test parsing returns None for invalid output."""
+        result = BackendResult(
+            success=True,
+            output="not json at all",
+            structured_output=None,
+        )
+
+        data = _parse_design_from_result(result)
+        assert data is None
+
+    def test_parse_design_from_result_missing_components(self) -> None:
+        """Test parsing returns None when components key is missing."""
+        result = BackendResult(
+            success=True,
+            output='{"diagrams": []}',
+            structured_output={"diagrams": []},
+        )
+
+        data = _parse_design_from_result(result)
+        assert data is None

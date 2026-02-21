@@ -1,0 +1,154 @@
+{
+  "id": "f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a0b",
+  "metadata": {
+    "name": "Quick Fix",
+    "description": "Minimal 4-node workflow for rapid bug fixes and small changes. Skips design and planning phases -- goes straight to coding, testing, review, and commit.",
+    "version": "1.0.0",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "createdBy": "asdlc-templates",
+    "tags": ["quick-fix", "minimal", "hotfix"]
+  },
+  "nodes": [
+    {
+      "id": "aa11bb22-cc33-4dd4-8ee5-ff6600771188",
+      "type": "coding",
+      "label": "Coder",
+      "config": {
+        "maxTurns": 30,
+        "timeoutSeconds": 900
+      },
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "code",
+          "type": "output",
+          "dataType": "patch",
+          "required": true,
+          "description": "Bug fix code"
+        }
+      ],
+      "position": { "x": 300, "y": 50 },
+      "description": "Implement the fix"
+    },
+    {
+      "id": "bb22cc33-dd44-4ee5-8ff6-007711882299",
+      "type": "utest",
+      "label": "Unit Test",
+      "config": {
+        "maxTurns": 20,
+        "timeoutSeconds": 600
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Code to test"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "test_results",
+          "type": "output",
+          "dataType": "json",
+          "required": true,
+          "description": "Test results"
+        }
+      ],
+      "position": { "x": 300, "y": 200 },
+      "description": "Verify the fix with tests"
+    },
+    {
+      "id": "cc33dd44-ee55-4ff6-8007-118822993300",
+      "type": "reviewer",
+      "label": "Reviewer",
+      "config": {
+        "maxTurns": 10,
+        "timeoutSeconds": 300
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Code to review"
+        },
+        {
+          "name": "test_results",
+          "type": "input",
+          "dataType": "json",
+          "required": true,
+          "description": "Test results"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "review_result",
+          "type": "output",
+          "dataType": "document",
+          "required": true,
+          "description": "Review findings"
+        }
+      ],
+      "position": { "x": 300, "y": 350 },
+      "description": "Quick code review"
+    },
+    {
+      "id": "dd44ee55-ff66-4007-8118-229933004411",
+      "type": "orchestrator",
+      "label": "Orchestrator",
+      "config": {
+        "maxTurns": 5,
+        "timeoutSeconds": 120
+      },
+      "inputs": [
+        {
+          "name": "code",
+          "type": "input",
+          "dataType": "patch",
+          "required": true,
+          "description": "Reviewed code"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "commit_sha",
+          "type": "output",
+          "dataType": "string",
+          "required": true,
+          "description": "Committed SHA"
+        }
+      ],
+      "position": { "x": 300, "y": 500 },
+      "description": "Commit fix to main"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t01-f1e2d3c4-0001-4000-8000-000000000001",
+      "sourceNodeId": "aa11bb22-cc33-4dd4-8ee5-ff6600771188",
+      "targetNodeId": "bb22cc33-dd44-4ee5-8ff6-007711882299",
+      "condition": { "type": "always" },
+      "label": "Code to tests"
+    },
+    {
+      "id": "t02-f1e2d3c4-0002-4000-8000-000000000002",
+      "sourceNodeId": "bb22cc33-dd44-4ee5-8ff6-007711882299",
+      "targetNodeId": "cc33dd44-ee55-4ff6-8007-118822993300",
+      "condition": { "type": "always" },
+      "label": "Tests to review"
+    },
+    {
+      "id": "t03-f1e2d3c4-0003-4000-8000-000000000003",
+      "sourceNodeId": "cc33dd44-ee55-4ff6-8007-118822993300",
+      "targetNodeId": "dd44ee55-ff66-4007-8118-229933004411",
+      "condition": { "type": "always" },
+      "label": "Review to commit"
+    }
+  ],
+  "gates": [],
+  "variables": []
+}

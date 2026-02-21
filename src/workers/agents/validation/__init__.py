@@ -18,19 +18,28 @@ Example:
 
     # Create agents
     validation = create_validation_agent(
-        llm_client=client,
+        backend=backend,
         artifact_writer=writer,
         test_runner=runner,
     )
 
     security = create_security_agent(
-        llm_client=client,
+        backend=backend,
         artifact_writer=writer,
     )
 
     # Execute validation
     result = await validation.execute(context, event_metadata)
 """
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
+    from src.workers.artifacts.writer import ArtifactWriter
+    from src.workers.agents.development.test_runner import TestRunner
 
 from src.workers.agents.validation.config import (
     ValidationConfig,
@@ -87,7 +96,7 @@ AGENT_METADATA = {
         "phase": "validation",
         "inputs": ["implementation", "acceptance_criteria", "feature_id"],
         "outputs": ["validation_report.json", "validation_report.md"],
-        "capabilities": ["e2e_testing", "integration_validation", "rlm_exploration"],
+        "capabilities": ["e2e_testing", "integration_validation"],
     },
     "security_agent": {
         "class": SecurityAgent,
@@ -126,42 +135,39 @@ def register_validation_agents(dispatcher: "AgentDispatcher") -> None:
 
 
 def create_validation_agent(
-    llm_client: "LLMClient",
-    artifact_writer: "ArtifactWriter",
-    test_runner: "TestRunner",
+    backend: AgentBackend,
+    artifact_writer: ArtifactWriter,
+    test_runner: TestRunner,
     config: ValidationConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
 ) -> ValidationAgent:
     """Factory function to create a Validation agent.
 
     Args:
-        llm_client: LLM client for validation analysis.
+        backend: Agent backend for validation analysis.
         artifact_writer: Writer for artifacts.
         test_runner: Test runner for E2E tests.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration for complex scenarios.
 
     Returns:
         ValidationAgent: Configured Validation agent instance.
     """
     return ValidationAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         test_runner=test_runner,
         config=config or ValidationConfig(),
-        rlm_integration=rlm_integration,
     )
 
 
 def create_security_agent(
-    llm_client: "LLMClient",
-    artifact_writer: "ArtifactWriter",
+    backend: AgentBackend,
+    artifact_writer: ArtifactWriter,
     config: ValidationConfig | None = None,
 ) -> SecurityAgent:
     """Factory function to create a Security agent.
 
     Args:
-        llm_client: LLM client for compliance analysis.
+        backend: Agent backend for compliance analysis.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -169,7 +175,7 @@ def create_security_agent(
         SecurityAgent: Configured Security agent instance.
     """
     return SecurityAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or ValidationConfig(),
     )

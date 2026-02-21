@@ -7,10 +7,12 @@ multiple deployment strategies (rolling, blue-green, canary).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.deployment.config import DeploymentConfig, DeploymentStrategy
 from src.workers.agents.deployment.models import (
@@ -32,11 +34,17 @@ from src.workers.agents.deployment.deployment_agent import (
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{}',
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -99,13 +107,13 @@ class TestDeploymentAgentInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent can be created with required arguments."""
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -115,13 +123,13 @@ class TestDeploymentAgentInit:
 
     def test_agent_type_is_deployment_agent(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that agent_type property returns correct value."""
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -135,14 +143,14 @@ class TestDeploymentAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_release_manifest(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that execute returns failure when no release manifest provided."""
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -159,16 +167,15 @@ class TestDeploymentAgentExecute:
     @pytest.mark.asyncio
     async def test_generates_deployment_plan_successfully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that agent generates a deployment plan successfully."""
-        # Mock LLM response for deployment plan generation
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        # Mock backend response for deployment plan generation
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -215,10 +222,14 @@ class TestDeploymentAgentExecute:
                     }
                 ]
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -239,15 +250,14 @@ class TestDeploymentAgentExecute:
     @pytest.mark.asyncio
     async def test_sets_hitl_gate_to_hitl6(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that hitl_gate is set to HITL-6 on success."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -255,10 +265,14 @@ class TestDeploymentAgentExecute:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -280,7 +294,7 @@ class TestDeploymentStrategySupport:
     @pytest.mark.asyncio
     async def test_rolling_strategy(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         release_manifest,
@@ -288,8 +302,7 @@ class TestDeploymentStrategySupport:
         """Test deployment with rolling strategy."""
         config = DeploymentConfig(deployment_strategy=DeploymentStrategy.ROLLING)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -306,10 +319,14 @@ class TestDeploymentStrategySupport:
                 "rollback_triggers": ["Error rate > 5%"],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -329,7 +346,7 @@ class TestDeploymentStrategySupport:
     @pytest.mark.asyncio
     async def test_blue_green_strategy(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         release_manifest,
@@ -337,8 +354,7 @@ class TestDeploymentStrategySupport:
         """Test deployment with blue-green strategy."""
         config = DeploymentConfig(deployment_strategy=DeploymentStrategy.BLUE_GREEN)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "production",
                 "strategy": "blue-green",
@@ -371,10 +387,14 @@ class TestDeploymentStrategySupport:
                 "rollback_triggers": ["Error rate > 1%", "Response time > 2s"],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -398,7 +418,7 @@ class TestDeploymentStrategySupport:
     @pytest.mark.asyncio
     async def test_canary_strategy(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         release_manifest,
@@ -409,8 +429,7 @@ class TestDeploymentStrategySupport:
             canary_percentage=10,
         )
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "production",
                 "strategy": "canary",
@@ -443,10 +462,14 @@ class TestDeploymentStrategySupport:
                 "rollback_triggers": ["Canary error rate > baseline + 5%", "Canary latency > baseline * 1.5"],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -467,7 +490,7 @@ class TestDeploymentStrategySupport:
     @pytest.mark.asyncio
     async def test_uses_strategy_from_event_metadata(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -477,8 +500,7 @@ class TestDeploymentStrategySupport:
         # Config says rolling, but metadata says canary
         config = DeploymentConfig(deployment_strategy=DeploymentStrategy.ROLLING)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "canary",
@@ -486,10 +508,14 @@ class TestDeploymentStrategySupport:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -513,15 +539,14 @@ class TestHealthCheckConfiguration:
     @pytest.mark.asyncio
     async def test_configures_http_health_check(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that HTTP health checks are configured."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -539,10 +564,14 @@ class TestHealthCheckConfiguration:
                     }
                 ]
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -564,15 +593,14 @@ class TestHealthCheckConfiguration:
     @pytest.mark.asyncio
     async def test_configures_tcp_health_check(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that TCP health checks are configured."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -590,10 +618,14 @@ class TestHealthCheckConfiguration:
                     }
                 ]
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -613,7 +645,7 @@ class TestHealthCheckConfiguration:
     @pytest.mark.asyncio
     async def test_uses_health_check_interval_from_config(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         release_manifest,
@@ -621,8 +653,7 @@ class TestHealthCheckConfiguration:
         """Test that health check interval from config is used."""
         config = DeploymentConfig(health_check_interval=60)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -640,10 +671,14 @@ class TestHealthCheckConfiguration:
                     }
                 ]
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -657,7 +692,7 @@ class TestHealthCheckConfiguration:
 
         assert result.success is True
         # Verify the prompt included the config interval
-        call_args = mock_llm_client.generate.call_args
+        call_args = mock_backend.execute.call_args
         prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
         assert "60" in prompt
 
@@ -668,15 +703,14 @@ class TestRollbackTriggers:
     @pytest.mark.asyncio
     async def test_defines_rollback_triggers(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that rollback triggers are defined."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -689,10 +723,14 @@ class TestRollbackTriggers:
                 ],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -714,7 +752,7 @@ class TestRollbackTriggers:
     @pytest.mark.asyncio
     async def test_rollback_disabled_reduces_triggers(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         release_manifest,
@@ -722,8 +760,7 @@ class TestRollbackTriggers:
         """Test that disabled rollback reduces trigger definitions."""
         config = DeploymentConfig(rollback_enabled=False)
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -731,10 +768,14 @@ class TestRollbackTriggers:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -748,7 +789,7 @@ class TestRollbackTriggers:
 
         assert result.success is True
         # Verify the prompt mentioned rollback is disabled
-        call_args = mock_llm_client.generate.call_args
+        call_args = mock_backend.execute.call_args
         prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
         assert "rollback" in prompt.lower() and "disabled" in prompt.lower()
 
@@ -759,15 +800,14 @@ class TestDeploymentSteps:
     @pytest.mark.asyncio
     async def test_generates_ordered_steps(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that deployment steps are properly ordered."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -800,10 +840,14 @@ class TestDeploymentSteps:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -825,15 +869,14 @@ class TestDeploymentSteps:
     @pytest.mark.asyncio
     async def test_steps_include_rollback_commands(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that deployment steps include rollback commands."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -850,10 +893,14 @@ class TestDeploymentSteps:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -878,15 +925,14 @@ class TestEnvironmentHandling:
     @pytest.mark.asyncio
     async def test_uses_provided_target_environment(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that provided target environment is used."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "production",
                 "strategy": "rolling",
@@ -894,10 +940,14 @@ class TestEnvironmentHandling:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -917,15 +967,14 @@ class TestEnvironmentHandling:
     @pytest.mark.asyncio
     async def test_defaults_to_staging_environment(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that environment defaults to staging when not provided."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -933,10 +982,14 @@ class TestEnvironmentHandling:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -960,15 +1013,14 @@ class TestArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_json_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that agent writes JSON artifact."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -976,10 +1028,14 @@ class TestArtifactWriting:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -998,7 +1054,7 @@ class TestArtifactWriting:
     @pytest.mark.asyncio
     async def test_writes_markdown_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
@@ -1017,8 +1073,7 @@ class TestArtifactWriting:
 
         mock_artifact_writer.write_artifact.side_effect = track_calls
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -1026,10 +1081,14 @@ class TestArtifactWriting:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1050,19 +1109,19 @@ class TestErrorHandling:
     """Tests for error handling."""
 
     @pytest.mark.asyncio
-    async def test_handles_llm_error_gracefully(
+    async def test_handles_backend_error_gracefully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
-        """Test that agent handles LLM errors gracefully."""
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        """Test that agent handles backend errors gracefully."""
+        mock_backend.execute.side_effect = Exception("LLM service unavailable")
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1079,21 +1138,23 @@ class TestErrorHandling:
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_llm_response(
+    async def test_handles_invalid_backend_response(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
-        """Test that agent handles invalid LLM response."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="This is not valid JSON"
+        """Test that agent handles invalid backend response."""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="This is not valid JSON",
+            structured_output=None,
         )
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1111,15 +1172,14 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_artifact_writer_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
         release_manifest,
     ):
         """Test that agent handles artifact writer errors."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        _content = """{
                 "release_version": "1.0.0",
                 "target_environment": "staging",
                 "strategy": "rolling",
@@ -1127,11 +1187,15 @@ class TestErrorHandling:
                 "rollback_triggers": [],
                 "health_checks": []
             }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=_content,
+            structured_output=json.loads(_content),
         )
         mock_artifact_writer.write_artifact.side_effect = Exception("Write failed")
 
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1153,14 +1217,14 @@ class TestValidateContext:
 
     def test_validates_complete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
         agent_context,
     ):
         """Test that complete context passes validation."""
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )
@@ -1169,13 +1233,13 @@ class TestValidateContext:
 
     def test_rejects_incomplete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         deployment_config,
     ):
         """Test that incomplete context fails validation."""
         agent = DeploymentAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=deployment_config,
         )

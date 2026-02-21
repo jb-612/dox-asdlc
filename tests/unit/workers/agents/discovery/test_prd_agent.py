@@ -10,16 +10,21 @@ import pytest
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.discovery.config import DiscoveryConfig
 from src.workers.agents.discovery.prd_agent import PRDAgent
-from src.workers.llm.client import LLMResponse
+from src.workers.agents.backends.base import BackendResult
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    client.model_name = "test-model"
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{}',
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -59,13 +64,13 @@ class TestPRDAgent:
 
     def test_agent_type_returns_correct_value(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
         """Test that agent_type returns 'prd_agent'."""
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -75,14 +80,14 @@ class TestPRDAgent:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_no_requirements(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
         """Test that execute returns error when no raw_requirements provided."""
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -96,7 +101,7 @@ class TestPRDAgent:
     @pytest.mark.asyncio
     async def test_execute_extracts_requirements_and_generates_prd(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -142,19 +147,21 @@ class TestPRDAgent:
             ],
         }
 
-        mock_llm_client.generate.side_effect = [
-            LLMResponse(
-                content=json.dumps(extraction_response),
-                model="test-model",
+        mock_backend.execute.side_effect = [
+            BackendResult(
+                success=True,
+                output=json.dumps(extraction_response),
+                structured_output=extraction_response,
             ),
-            LLMResponse(
-                content=json.dumps(prd_response),
-                model="test-model",
+            BackendResult(
+                success=True,
+                output=json.dumps(prd_response),
+                structured_output=prd_response,
             ),
         ]
 
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -172,20 +179,21 @@ class TestPRDAgent:
     @pytest.mark.asyncio
     async def test_execute_handles_extraction_failure(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
         """Test that execute handles extraction failure gracefully."""
         # Mock invalid response
-        mock_llm_client.generate.return_value = LLMResponse(
-            content="Invalid JSON",
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="Invalid JSON",
+            structured_output=None,
         )
 
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -201,7 +209,7 @@ class TestPRDAgent:
     @pytest.mark.asyncio
     async def test_execute_parses_json_from_code_blocks(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
@@ -228,19 +236,21 @@ class TestPRDAgent:
         }
 
         # Wrap in code blocks
-        mock_llm_client.generate.side_effect = [
-            LLMResponse(
-                content=f"```json\n{json.dumps(extraction_response)}\n```",
-                model="test-model",
+        mock_backend.execute.side_effect = [
+            BackendResult(
+                success=True,
+                output=f"```json\n{json.dumps(extraction_response)}\n```",
+                structured_output=extraction_response,
             ),
-            LLMResponse(
-                content=f"Here is the PRD:\n```json\n{json.dumps(prd_response)}\n```",
-                model="test-model",
+            BackendResult(
+                success=True,
+                output=f"Here is the PRD:\n```json\n{json.dumps(prd_response)}\n```",
+                structured_output=prd_response,
             ),
         ]
 
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -258,14 +268,14 @@ class TestPRDAgentValidation:
 
     def test_validate_context_returns_true_for_valid_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         agent_context,
         config,
     ) -> None:
         """Test that validate_context returns True for valid context."""
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -274,7 +284,7 @@ class TestPRDAgentValidation:
 
     def test_validate_context_returns_false_for_missing_session_id(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -287,7 +297,7 @@ class TestPRDAgentValidation:
         )
 
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -296,7 +306,7 @@ class TestPRDAgentValidation:
 
     def test_validate_context_returns_false_for_missing_workspace(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         config,
     ) -> None:
@@ -309,7 +319,7 @@ class TestPRDAgentValidation:
         )
 
         agent = PRDAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
         )
@@ -318,92 +328,47 @@ class TestPRDAgentValidation:
 
 
 class TestPRDAgentJSONParsing:
-    """Tests for PRDAgent JSON parsing."""
+    """Tests for PRDAgent JSON parsing via response_parser."""
 
-    def test_parse_json_from_response_handles_direct_json(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_from_response_handles_direct_json(self) -> None:
         """Test that JSON is parsed from direct JSON content."""
-        agent = PRDAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
-        result = agent._parse_json_from_response('{"key": "value"}')
+        result = parse_json_from_response('{"key": "value"}')
 
         assert result == {"key": "value"}
 
-    def test_parse_json_from_response_handles_json_code_block(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_from_response_handles_json_code_block(self) -> None:
         """Test that JSON is parsed from code blocks."""
-        agent = PRDAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
         content = '```json\n{"key": "value"}\n```'
-        result = agent._parse_json_from_response(content)
+        result = parse_json_from_response(content)
 
         assert result == {"key": "value"}
 
-    def test_parse_json_from_response_handles_plain_code_block(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_from_response_handles_plain_code_block(self) -> None:
         """Test that JSON is parsed from plain code blocks."""
-        agent = PRDAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
         content = '```\n{"key": "value"}\n```'
-        result = agent._parse_json_from_response(content)
+        result = parse_json_from_response(content)
 
         assert result == {"key": "value"}
 
-    def test_parse_json_from_response_handles_embedded_json(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_from_response_handles_embedded_json(self) -> None:
         """Test that JSON is found in mixed content."""
-        agent = PRDAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
         content = 'Here is the result: {"key": "value"} - that is all'
-        result = agent._parse_json_from_response(content)
+        result = parse_json_from_response(content)
 
         assert result == {"key": "value"}
 
-    def test_parse_json_from_response_returns_none_for_invalid_json(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        config,
-    ) -> None:
+    def test_parse_json_from_response_returns_none_for_invalid_json(self) -> None:
         """Test that None is returned for invalid JSON."""
-        agent = PRDAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-        )
+        from src.workers.agents.backends.response_parser import parse_json_from_response
 
-        result = agent._parse_json_from_response("not valid json at all")
+        result = parse_json_from_response("not valid json at all")
 
         assert result is None

@@ -8,7 +8,7 @@ Agents:
     - AcceptanceAgent: Generates Given-When-Then acceptance criteria from PRD
 
 Coordinator:
-    - DiscoveryCoordinator: Orchestrates PRD → Acceptance → HITL-1 workflow
+    - DiscoveryCoordinator: Orchestrates PRD -> Acceptance -> HITL-1 workflow
 
 Example:
     from src.workers.agents.discovery import (
@@ -18,7 +18,7 @@ Example:
     )
 
     coordinator = DiscoveryCoordinator(
-        llm_client=client,
+        backend=backend,
         artifact_writer=writer,
         hitl_dispatcher=dispatcher,
         config=DiscoveryConfig(),
@@ -89,7 +89,7 @@ AGENT_METADATA = {
         "phase": "discovery",
         "inputs": ["raw_requirements", "project_context"],
         "outputs": ["prd.json", "prd.md"],
-        "capabilities": ["requirements_extraction", "prd_generation", "rlm_exploration"],
+        "capabilities": ["requirements_extraction", "prd_generation"],
     },
     "acceptance_agent": {
         "class": AcceptanceAgent,
@@ -107,7 +107,7 @@ def register_discovery_agents(dispatcher: "AgentDispatcher") -> None:
 
     Note: This function is called from workers/main.py with proper
     dependency injection. The actual instantiation requires dependencies
-    (llm_client, artifact_writer, etc.) that must be provided at runtime.
+    (backend, artifact_writer, etc.) that must be provided at runtime.
 
     Args:
         dispatcher: The agent dispatcher to register with.
@@ -128,39 +128,36 @@ def register_discovery_agents(dispatcher: "AgentDispatcher") -> None:
 
 
 def create_prd_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DiscoveryConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
 ) -> PRDAgent:
     """Factory function to create a PRD agent.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for PRD generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration.
 
     Returns:
         PRDAgent: Configured PRD agent instance.
     """
     return PRDAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DiscoveryConfig(),
-        rlm_integration=rlm_integration,
     )
 
 
 def create_acceptance_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DiscoveryConfig | None = None,
 ) -> AcceptanceAgent:
     """Factory function to create an Acceptance agent.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for criteria generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -168,35 +165,32 @@ def create_acceptance_agent(
         AcceptanceAgent: Configured Acceptance agent instance.
     """
     return AcceptanceAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DiscoveryConfig(),
     )
 
 
 def create_discovery_coordinator(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     hitl_dispatcher: "HITLDispatcher | None" = None,
     config: DiscoveryConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
 ) -> DiscoveryCoordinator:
     """Factory function to create a Discovery coordinator.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         hitl_dispatcher: Optional HITL dispatcher.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration.
 
     Returns:
         DiscoveryCoordinator: Configured coordinator instance.
     """
     return DiscoveryCoordinator(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         hitl_dispatcher=hitl_dispatcher,
         config=config or DiscoveryConfig(),
-        rlm_integration=rlm_integration,
     )

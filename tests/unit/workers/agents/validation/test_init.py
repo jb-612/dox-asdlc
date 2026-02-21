@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from src.workers.agents.backends.base import BackendResult
 
 
 class TestValidationPackageImports:
@@ -81,6 +83,7 @@ class TestAgentMetadata:
         assert "outputs" in metadata
         assert "capabilities" in metadata
         assert "e2e_testing" in metadata["capabilities"]
+        assert "rlm_exploration" not in metadata["capabilities"]
 
     def test_security_agent_metadata(self) -> None:
         """Test SecurityAgent metadata."""
@@ -128,12 +131,16 @@ class TestFactoryFunctions:
         """Test creating ValidationAgent via factory."""
         from src.workers.agents.validation import create_validation_agent, ValidationAgent
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
+        mock_backend.execute = AsyncMock(return_value=BackendResult(
+            success=True, output="{}", structured_output={},
+        ))
         mock_writer = MagicMock()
         mock_runner = MagicMock()
 
         agent = create_validation_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             test_runner=mock_runner,
         )
@@ -148,40 +155,17 @@ class TestFactoryFunctions:
             ValidationConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
         mock_runner = MagicMock()
         config = ValidationConfig()
 
         agent = create_validation_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             test_runner=mock_runner,
             config=config,
-        )
-
-        assert isinstance(agent, ValidationAgent)
-
-    def test_create_validation_agent_with_rlm(self) -> None:
-        """Test creating ValidationAgent with RLM integration."""
-        from src.workers.agents.validation import (
-            create_validation_agent,
-            ValidationAgent,
-            ValidationConfig,
-        )
-
-        mock_llm = MagicMock()
-        mock_writer = MagicMock()
-        mock_runner = MagicMock()
-        mock_rlm = MagicMock()
-        config = ValidationConfig()
-
-        agent = create_validation_agent(
-            llm_client=mock_llm,
-            artifact_writer=mock_writer,
-            test_runner=mock_runner,
-            config=config,
-            rlm_integration=mock_rlm,
         )
 
         assert isinstance(agent, ValidationAgent)
@@ -190,11 +174,12 @@ class TestFactoryFunctions:
         """Test creating SecurityAgent via factory."""
         from src.workers.agents.validation import create_security_agent, SecurityAgent
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         agent = create_security_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -208,12 +193,13 @@ class TestFactoryFunctions:
             ValidationConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = AsyncMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
         config = ValidationConfig()
 
         agent = create_security_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )

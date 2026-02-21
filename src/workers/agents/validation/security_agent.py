@@ -2,17 +2,21 @@
 
 Implements the security scanning agent that scans for vulnerabilities,
 checks secrets exposure, verifies compliance requirements, and generates
-security reports. Uses pattern-based detection combined with LLM analysis
-for comprehensive security assessment.
+security reports. Uses pattern-based detection combined with AgentBackend
+analysis for comprehensive security assessment.
+
+Delegates compliance analysis to a pluggable AgentBackend (Claude Code CLI,
+Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.validation.config import ValidationConfig
 from src.workers.agents.validation.models import (
@@ -23,8 +27,8 @@ from src.workers.agents.validation.models import (
 )
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +114,67 @@ OWASP_PATTERNS = [
 ]
 
 
+# JSON Schema for structured output validation (CLI backends)
+SECURITY_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "findings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "high", "medium", "low", "info"],
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "injection", "xss", "secrets", "auth",
+                            "crypto", "configuration", "other",
+                        ],
+                    },
+                    "location": {"type": "string"},
+                    "description": {"type": "string"},
+                    "remediation": {"type": "string"},
+                },
+                "required": ["id", "severity", "category", "description"],
+            },
+        },
+        "compliance_status": {
+            "type": "object",
+            "additionalProperties": {"type": "boolean"},
+        },
+        "scan_coverage": {"type": "number"},
+    },
+    "required": ["findings", "compliance_status", "scan_coverage"],
+}
+
+# System prompt for the security backend
+SECURITY_SYSTEM_PROMPT = (
+    "You are a security analyst reviewing code for compliance and "
+    "vulnerabilities. Analyze the provided code for compliance with "
+    "specified security frameworks, identify additional security "
+    "vulnerabilities not covered by pattern scanning, and assess the "
+    "overall security posture. Respond with structured JSON containing "
+    "findings, compliance status, and scan coverage."
+)
+
+
 class SecurityAgent:
     """Agent that scans for security vulnerabilities and checks compliance.
 
     Implements the BaseAgent protocol to be dispatched by the worker pool.
-    Uses pattern-based detection combined with LLM analysis for comprehensive
-    security assessment including vulnerability scanning, secrets detection,
-    and compliance verification.
+    Uses pattern-based detection combined with AgentBackend analysis for
+    comprehensive security assessment including vulnerability scanning,
+    secrets detection, and compliance verification.
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = SecurityAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=ValidationConfig(),
         )
@@ -129,18 +183,18 @@ class SecurityAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: ValidationConfig,
     ) -> None:
         """Initialize the SecurityAgent.
 
         Args:
-            llm_client: LLM client for compliance analysis.
+            backend: Agent backend for compliance analysis.
             artifact_writer: Writer for persisting artifacts.
             config: Validation configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -167,7 +221,10 @@ class SecurityAgent:
         Returns:
             AgentResult: Result with security report artifacts on success.
         """
-        logger.info(f"SecurityAgent starting for task {context.task_id}")
+        logger.info(
+            f"SecurityAgent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Validate required inputs
@@ -193,10 +250,11 @@ class SecurityAgent:
             # Run pattern-based security scans
             pattern_findings = self._run_security_scans(code_content)
 
-            # Run LLM-based compliance analysis
+            # Run backend-based compliance analysis
             llm_analysis = await self._run_compliance_analysis(
                 code_content=code_content,
                 compliance_frameworks=compliance_frameworks,
+                context=context,
             )
 
             # Merge findings
@@ -210,7 +268,7 @@ class SecurityAgent:
             )
             passed = not has_blocking_findings
 
-            # Get compliance status from LLM analysis
+            # Get compliance status from backend analysis
             compliance_status = llm_analysis.get("compliance_status", {})
             scan_coverage = llm_analysis.get("scan_coverage", 85.0)
 
@@ -233,6 +291,7 @@ class SecurityAgent:
 
             metadata: dict[str, Any] = {
                 "security_report": security_report.to_dict(),
+                "backend": self._backend.backend_name,
             }
 
             # Set HITL gate if passed
@@ -455,41 +514,62 @@ class SecurityAgent:
         self,
         code_content: str,
         compliance_frameworks: list[str],
+        context: AgentContext,
     ) -> dict[str, Any]:
-        """Run LLM-based compliance analysis.
+        """Run backend-based compliance analysis.
 
         Args:
             code_content: Code to analyze.
             compliance_frameworks: Frameworks to check against.
+            context: Agent context.
 
         Returns:
             dict: Compliance analysis results.
         """
         prompt = self._format_compliance_prompt(code_content, compliance_frameworks)
 
-        try:
-            response = await self._llm_client.generate(
-                prompt=prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
+        # Configure the backend
+        backend_config = BackendConfig(
+            model=self._config.security_model,
+            output_schema=SECURITY_OUTPUT_SCHEMA,
+            system_prompt=SECURITY_SYSTEM_PROMPT,
+            timeout_seconds=300,
+            allowed_tools=["Read", "Glob", "Grep"],
+        )
+
+        # Execute via backend
+        result = await self._backend.execute(
+            prompt=prompt,
+            workspace_path=context.workspace_path,
+            config=backend_config,
+        )
+
+        if not result.success:
+            logger.warning(
+                f"Backend compliance analysis failed: {result.error or 'unknown error'}"
             )
+            return {
+                "findings": [],
+                "compliance_status": {},
+                "scan_coverage": 80.0,
+            }
 
-            # Parse response
-            analysis = self._parse_json_from_response(response.content)
+        # Parse response - prefer structured_output, fall back to text parsing
+        analysis = None
+        if result.structured_output and "compliance_status" in result.structured_output:
+            analysis = result.structured_output
+        else:
+            analysis = parse_json_from_response(result.output)
 
-            if not analysis:
-                logger.warning("Invalid compliance analysis response - no valid JSON")
-                return {
-                    "findings": [],
-                    "compliance_status": {},
-                    "scan_coverage": 80.0,
-                }
+        if not analysis:
+            logger.warning("Invalid compliance analysis response - no valid JSON")
+            return {
+                "findings": [],
+                "compliance_status": {},
+                "scan_coverage": 80.0,
+            }
 
-            return analysis
-
-        except Exception as e:
-            logger.error(f"Compliance analysis failed: {e}")
-            raise
+        return analysis
 
     def _format_compliance_prompt(
         self,
@@ -512,7 +592,7 @@ class SecurityAgent:
         if len(code_content) > max_code_length:
             code_content = code_content[:max_code_length] + "\n... (truncated)"
 
-        return f"""You are a security analyst reviewing code for compliance and vulnerabilities.
+        return f"""Analyze the following code for security compliance and vulnerabilities.
 
 ## Code to Analyze
 
@@ -535,85 +615,45 @@ Analyze the code for:
 
 Respond with a JSON object:
 ```json
-{{
+{{{{
     "findings": [
-        {{
+        {{{{
             "id": "LLM-001",
             "severity": "critical|high|medium|low|info",
             "category": "injection|xss|secrets|auth|crypto|configuration|other",
             "location": "description of location",
             "description": "What was found",
             "remediation": "How to fix it"
-        }}
+        }}}}
     ],
-    "compliance_status": {{
+    "compliance_status": {{{{
         "FRAMEWORK_NAME": true/false
-    }},
+    }}}},
     "scan_coverage": 95.0
-}}
+}}}}
 ```
 
 Set compliance status to true if the code meets the framework requirements, false otherwise.
 Only include findings not covered by standard pattern detection.
 """
 
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
-
     def _merge_findings(
         self,
         pattern_findings: list[SecurityFinding],
         llm_analysis: dict[str, Any],
     ) -> list[SecurityFinding]:
-        """Merge pattern-based and LLM-based findings.
+        """Merge pattern-based and backend-based findings.
 
         Args:
             pattern_findings: Findings from pattern scanning.
-            llm_analysis: Analysis from LLM.
+            llm_analysis: Analysis from backend.
 
         Returns:
             list[SecurityFinding]: Merged findings.
         """
         all_findings = list(pattern_findings)
 
-        # Add LLM findings
+        # Add backend findings
         llm_findings = llm_analysis.get("findings", [])
         for finding_data in llm_findings:
             try:
@@ -653,7 +693,7 @@ Only include findings not covered by standard pattern detection.
                 all_findings.append(finding)
 
             except (ValueError, KeyError) as e:
-                logger.warning(f"Skipping invalid LLM finding: {e}")
+                logger.warning(f"Skipping invalid backend finding: {e}")
                 continue
 
         return all_findings

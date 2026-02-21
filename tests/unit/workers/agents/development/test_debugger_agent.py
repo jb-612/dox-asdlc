@@ -1,25 +1,30 @@
-"""Unit tests for DebuggerAgent."""
+"""Unit tests for DebuggerAgent (AgentBackend refactor)."""
 
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.development.config import DevelopmentConfig
 from src.workers.agents.protocols import AgentContext
-from src.workers.llm.client import LLMResponse
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = MagicMock()
-    client.generate = AsyncMock()
-    client.model_name = "test-model"
-    client.count_tokens = AsyncMock(return_value=1000)
-    return client
+def mock_backend():
+    """Create a mock AgentBackend."""
+    backend = MagicMock()
+    type(backend).backend_name = PropertyMock(return_value="test-backend")
+    backend.execute = AsyncMock()
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -35,22 +40,6 @@ def mock_artifact_writer(tmp_path):
 
     writer.write_artifact = AsyncMock(side_effect=write_artifact)
     return writer
-
-
-@pytest.fixture
-def mock_rlm_integration():
-    """Create a mock RLM integration."""
-    from src.workers.rlm.integration import RLMIntegrationResult
-
-    rlm = MagicMock()
-    rlm.should_use_rlm = MagicMock(return_value=MagicMock(should_trigger=True))
-    rlm.explore = AsyncMock(return_value=RLMIntegrationResult(
-        used_rlm=True,
-        trigger_result=None,
-        rlm_result=None,
-        formatted_output="## RLM Exploration\nFound relevant patterns in similar code.",
-    ))
-    return rlm
 
 
 @pytest.fixture
@@ -70,33 +59,45 @@ def config():
     return DevelopmentConfig()
 
 
+def _make_backend_result(analysis_response: dict, **kwargs) -> BackendResult:
+    """Helper to create a successful BackendResult from a dict."""
+    return BackendResult(
+        success=True,
+        output=json.dumps(analysis_response),
+        structured_output=analysis_response,
+        **kwargs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Protocol / construction tests
+# ---------------------------------------------------------------------------
+
+
 class TestDebuggerAgentProtocol:
     """Tests for DebuggerAgent implementing BaseAgent protocol."""
 
     def test_agent_type_returns_correct_value(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         config,
     ) -> None:
         """Test that agent_type returns 'debugger'."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         assert agent.agent_type == "debugger"
 
     def test_agent_implements_base_agent_protocol(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         config,
     ) -> None:
         """Test that DebuggerAgent implements BaseAgent protocol."""
@@ -104,13 +105,17 @@ class TestDebuggerAgentProtocol:
         from src.workers.agents.protocols import BaseAgent
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         assert isinstance(agent, BaseAgent)
+
+
+# ---------------------------------------------------------------------------
+# Execution tests
+# ---------------------------------------------------------------------------
 
 
 class TestDebuggerAgentExecution:
@@ -119,9 +124,8 @@ class TestDebuggerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_no_test_output(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -129,10 +133,9 @@ class TestDebuggerAgentExecution:
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(agent_context, {})
@@ -144,9 +147,8 @@ class TestDebuggerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_returns_error_when_no_implementation(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -154,10 +156,9 @@ class TestDebuggerAgentExecution:
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -172,16 +173,14 @@ class TestDebuggerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_generates_debug_analysis(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
         """Test that execute generates debug analysis from test failures."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
-        # Mock LLM responses for the multi-step debugging process
         analysis_response = {
             "failure_id": "test-failure-001",
             "root_cause": "The function returns None instead of the expected value",
@@ -198,16 +197,12 @@ class TestDebuggerAgentExecution:
             ],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -226,9 +221,8 @@ class TestDebuggerAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_returns_code_changes(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -251,16 +245,12 @@ class TestDebuggerAgentExecution:
             ],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -276,19 +266,71 @@ class TestDebuggerAgentExecution:
         assert len(result.metadata["code_changes"]) >= 1
 
 
-class TestDebuggerAgentRLMIntegration:
-    """Tests for DebuggerAgent RLM integration (always uses RLM)."""
+# ---------------------------------------------------------------------------
+# Backend integration tests (replaces RLM integration tests)
+# ---------------------------------------------------------------------------
+
+
+class TestDebuggerAgentBackendIntegration:
+    """Tests for DebuggerAgent backend integration."""
 
     @pytest.mark.asyncio
-    async def test_execute_always_uses_rlm(
+    async def test_execute_calls_backend_with_correct_config(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
-        """Test that debugger ALWAYS uses RLM for analysis."""
+        """Test that backend.execute is called with proper BackendConfig."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+            DEBUGGER_SYSTEM_PROMPT,
+            DebuggerAgent,
+        )
+
+        analysis_response = {
+            "failure_id": "test-failure-001",
+            "root_cause": "Logic error",
+            "fix_suggestion": "Fix the logic",
+            "code_changes": [],
+        }
+
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
+
+        agent = DebuggerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        await agent.execute(
+            agent_context,
+            {
+                "test_output": "FAILED test_feature - AssertionError",
+                "implementation": "def feature(): pass",
+            },
+        )
+
+        mock_backend.execute.assert_called_once()
+        call_kwargs = mock_backend.execute.call_args[1]
+        backend_config = call_kwargs["config"]
+
+        assert backend_config.model == config.debugger_model
+        assert backend_config.output_schema == DEBUGGER_OUTPUT_SCHEMA
+        assert backend_config.timeout_seconds == config.test_timeout_seconds
+        assert backend_config.allowed_tools == ["Read", "Glob", "Grep"]
+        assert backend_config.system_prompt == DEBUGGER_SYSTEM_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_execute_reports_backend_name_in_metadata(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test that metadata includes the backend name."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         analysis_response = {
@@ -298,16 +340,12 @@ class TestDebuggerAgentRLMIntegration:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -319,26 +357,53 @@ class TestDebuggerAgentRLMIntegration:
         )
 
         assert result.success is True
-        assert result.metadata.get("used_rlm") is True
-        # Verify RLM explore was called
-        mock_rlm_integration.explore.assert_called()
+        assert result.metadata.get("backend") == "test-backend"
 
     @pytest.mark.asyncio
-    async def test_execute_uses_rlm_even_when_enable_rlm_is_false(
+    async def test_execute_handles_backend_failure_gracefully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
+        config,
     ) -> None:
-        """Test that debugger uses RLM even when config.enable_rlm is False.
-
-        Unlike CodingAgent which only uses RLM on retries, DebuggerAgent
-        ALWAYS uses RLM because it needs deep codebase exploration.
-        """
+        """Test that execute handles backend failure gracefully."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
-        config = DevelopmentConfig(enable_rlm=False)
+        mock_backend.execute.return_value = BackendResult(
+            success=False,
+            output="",
+            error="Backend execution timed out",
+        )
+
+        agent = DebuggerAgent(
+            backend=mock_backend,
+            artifact_writer=mock_artifact_writer,
+            config=config,
+        )
+
+        result = await agent.execute(
+            agent_context,
+            {
+                "test_output": "FAILED test_feature - AssertionError",
+                "implementation": "def feature(): pass",
+            },
+        )
+
+        assert result.success is False
+        assert result.should_retry is True
+        assert "timed out" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_execute_includes_cost_when_available(
+        self,
+        mock_backend,
+        mock_artifact_writer,
+        agent_context,
+        config,
+    ) -> None:
+        """Test that cost metadata is included when the backend reports it."""
+        from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         analysis_response = {
             "failure_id": "test-failure-001",
@@ -347,16 +412,14 @@ class TestDebuggerAgentRLMIntegration:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
+        mock_backend.execute.return_value = _make_backend_result(
+            analysis_response, cost_usd=0.05,
         )
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -368,64 +431,12 @@ class TestDebuggerAgentRLMIntegration:
         )
 
         assert result.success is True
-        # Debugger ALWAYS uses RLM, regardless of config
-        assert result.metadata.get("used_rlm") is True
-        mock_rlm_integration.explore.assert_called()
+        assert result.metadata.get("cost_usd") == 0.05
 
-    @pytest.mark.asyncio
-    async def test_execute_handles_rlm_failure_gracefully(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        agent_context,
-        config,
-    ) -> None:
-        """Test that execute handles RLM failure gracefully."""
-        from src.workers.agents.development.debugger_agent import DebuggerAgent
-        from src.workers.rlm.integration import RLMIntegrationResult
 
-        # Create RLM integration that fails
-        rlm = MagicMock()
-        rlm.explore = AsyncMock(return_value=RLMIntegrationResult(
-            used_rlm=True,
-            trigger_result=None,
-            rlm_result=None,
-            formatted_output="",
-            error="RLM exploration failed",
-        ))
-
-        analysis_response = {
-            "failure_id": "test-failure-001",
-            "root_cause": "Logic error without RLM context",
-            "fix_suggestion": "Fix the logic",
-            "code_changes": [],
-        }
-
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
-
-        agent = DebuggerAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            config=config,
-            rlm_integration=rlm,
-        )
-
-        # Should still succeed even if RLM fails
-        result = await agent.execute(
-            agent_context,
-            {
-                "test_output": "FAILED test_feature - AssertionError",
-                "implementation": "def feature(): pass",
-            },
-        )
-
-        assert result.success is True
-        # RLM was attempted but failed
-        assert result.metadata.get("used_rlm") is True
-        assert result.metadata.get("rlm_error") is not None
+# ---------------------------------------------------------------------------
+# Root cause analysis tests
+# ---------------------------------------------------------------------------
 
 
 class TestDebuggerAgentRootCauseAnalysis:
@@ -434,9 +445,8 @@ class TestDebuggerAgentRootCauseAnalysis:
     @pytest.mark.asyncio
     async def test_execute_identifies_root_cause(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -459,16 +469,12 @@ class TestDebuggerAgentRootCauseAnalysis:
             ],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -485,13 +491,12 @@ class TestDebuggerAgentRootCauseAnalysis:
     @pytest.mark.asyncio
     async def test_execute_uses_stack_trace_when_provided(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
-        """Test that execute uses stack trace for better analysis."""
+        """Test that execute includes stack trace in the prompt."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         analysis_response = {
@@ -501,16 +506,12 @@ class TestDebuggerAgentRootCauseAnalysis:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -528,16 +529,16 @@ ZeroDivisionError: division by zero""",
         )
 
         assert result.success is True
-        # Verify stack trace was used in one of the prompts
-        # The debugger makes 3 LLM calls: failure analysis, root cause, fix suggestion
-        # Stack trace should be in the first call (failure analysis)
-        all_calls = mock_llm_client.generate.call_args_list
-        all_prompts = [call[1].get("prompt", "") for call in all_calls]
-        any_prompt_has_stack = any(
-            "ZeroDivisionError" in p or "stack" in p.lower() or "Traceback" in p
-            for p in all_prompts
-        )
-        assert any_prompt_has_stack, f"Stack trace not found in any prompt. Prompts: {all_prompts[:500]}"
+        # Verify the stack trace was included in the prompt sent to the backend
+        call_kwargs = mock_backend.execute.call_args[1]
+        prompt = call_kwargs["prompt"]
+        assert "ZeroDivisionError" in prompt
+        assert "Traceback" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Validation tests
+# ---------------------------------------------------------------------------
 
 
 class TestDebuggerAgentValidation:
@@ -545,9 +546,8 @@ class TestDebuggerAgentValidation:
 
     def test_validate_context_returns_true_for_valid_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -555,19 +555,17 @@ class TestDebuggerAgentValidation:
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         assert agent.validate_context(agent_context) is True
 
     def test_validate_context_returns_false_for_missing_session_id(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         config,
     ) -> None:
         """Test that validate_context returns False for missing session_id."""
@@ -581,19 +579,17 @@ class TestDebuggerAgentValidation:
         )
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         assert agent.validate_context(context) is False
 
     def test_validate_context_returns_false_for_missing_task_id(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         config,
     ) -> None:
         """Test that validate_context returns False for missing task_id."""
@@ -607,37 +603,39 @@ class TestDebuggerAgentValidation:
         )
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         assert agent.validate_context(context) is False
+
+
+# ---------------------------------------------------------------------------
+# Error handling tests
+# ---------------------------------------------------------------------------
 
 
 class TestDebuggerAgentErrorHandling:
     """Tests for DebuggerAgent error handling."""
 
     @pytest.mark.asyncio
-    async def test_execute_handles_llm_exception(
+    async def test_execute_handles_backend_exception(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
-        """Test that execute handles LLM exceptions gracefully."""
+        """Test that execute handles backend exceptions gracefully."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -650,30 +648,28 @@ class TestDebuggerAgentErrorHandling:
 
         assert result.success is False
         assert result.should_retry is True
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
 
     @pytest.mark.asyncio
     async def test_execute_handles_invalid_json_response(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
         """Test that execute handles invalid JSON response."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content="This is not valid JSON",
-            model="test-model",
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output="This is not valid JSON",
         )
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -690,9 +686,8 @@ class TestDebuggerAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_execute_handles_response_in_code_block(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -706,16 +701,16 @@ class TestDebuggerAgentErrorHandling:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=f"```json\n{json.dumps(analysis_response)}\n```",
-            model="test-model",
+        # Return output as text in code block (no structured_output)
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output=f"```json\n{json.dumps(analysis_response)}\n```",
         )
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -729,15 +724,19 @@ class TestDebuggerAgentErrorHandling:
         assert result.success is True
 
 
+# ---------------------------------------------------------------------------
+# Output format tests
+# ---------------------------------------------------------------------------
+
+
 class TestDebuggerAgentOutputFormats:
     """Tests for DebuggerAgent output formats."""
 
     @pytest.mark.asyncio
     async def test_writes_debug_analysis_as_json_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -751,16 +750,12 @@ class TestDebuggerAgentOutputFormats:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -783,9 +778,8 @@ class TestDebuggerAgentOutputFormats:
     @pytest.mark.asyncio
     async def test_writes_debug_analysis_as_markdown_artifact(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
@@ -808,16 +802,12 @@ class TestDebuggerAgentOutputFormats:
             ],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -838,18 +828,22 @@ class TestDebuggerAgentOutputFormats:
         assert len(md_calls) >= 1
 
 
+# ---------------------------------------------------------------------------
+# Context usage tests
+# ---------------------------------------------------------------------------
+
+
 class TestDebuggerAgentContextUsage:
     """Tests for DebuggerAgent context pack usage."""
 
     @pytest.mark.asyncio
     async def test_execute_uses_context_pack_when_provided(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         config,
     ) -> None:
-        """Test that execute uses context pack for better debugging."""
+        """Test that execute includes context pack hints in the prompt."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         context = AgentContext(
@@ -875,16 +869,12 @@ class TestDebuggerAgentContextUsage:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -896,11 +886,16 @@ class TestDebuggerAgentContextUsage:
         )
 
         assert result.success is True
-        # Verify context was passed to RLM
-        call_kwargs = mock_rlm_integration.explore.call_args[1]
-        context_hints = call_kwargs.get("context_hints", [])
-        # Context hints should include User or files from context pack
-        assert len(context_hints) > 0 or "User" in str(call_kwargs)
+        # Verify context hints were included in the prompt
+        call_kwargs = mock_backend.execute.call_args[1]
+        prompt = call_kwargs["prompt"]
+        assert "src/models/user.py" in prompt
+        assert "User" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Test context handling tests
+# ---------------------------------------------------------------------------
 
 
 class TestDebuggerAgentTestContextUsage:
@@ -909,13 +904,12 @@ class TestDebuggerAgentTestContextUsage:
     @pytest.mark.asyncio
     async def test_execute_uses_test_code_when_provided(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
-        mock_rlm_integration,
         agent_context,
         config,
     ) -> None:
-        """Test that execute uses test code for better analysis."""
+        """Test that execute includes test code in the prompt."""
         from src.workers.agents.development.debugger_agent import DebuggerAgent
 
         analysis_response = {
@@ -925,16 +919,12 @@ class TestDebuggerAgentTestContextUsage:
             "code_changes": [],
         }
 
-        mock_llm_client.generate.return_value = LLMResponse(
-            content=json.dumps(analysis_response),
-            model="test-model",
-        )
+        mock_backend.execute.return_value = _make_backend_result(analysis_response)
 
         agent = DebuggerAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             config=config,
-            rlm_integration=mock_rlm_integration,
         )
 
         result = await agent.execute(
@@ -949,14 +939,203 @@ class TestDebuggerAgentTestContextUsage:
         )
 
         assert result.success is True
-        # Verify test code was used in one of the prompts
-        # The debugger makes 3 LLM calls: failure analysis, root cause, fix suggestion
-        # Test expectations extracted from test code should be in the fix suggestion prompt
-        all_calls = mock_llm_client.generate.call_args_list
-        all_prompts = [call[1].get("prompt", "") for call in all_calls]
-        # Test expectations are extracted as "add(2, 3) == 5"
-        any_prompt_has_test_info = any(
-            "test_add" in p or "add(2, 3)" in p or "assert" in p.lower()
-            for p in all_prompts
+        # Verify test code was included in the prompt
+        call_kwargs = mock_backend.execute.call_args[1]
+        prompt = call_kwargs["prompt"]
+        assert "test_add" in prompt
+        assert "add(2, 3)" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Module-level function tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuildDebugPrompt:
+    """Tests for _build_debug_prompt module-level function."""
+
+    def test_basic_prompt_includes_test_output_and_implementation(self) -> None:
+        """Test that the basic prompt includes required sections."""
+        from src.workers.agents.development.debugger_agent import _build_debug_prompt
+
+        prompt = _build_debug_prompt(
+            test_output="FAILED test_x",
+            implementation="def x(): pass",
         )
-        assert any_prompt_has_test_info, "Test info not found in any prompt"
+
+        assert "## Test Output" in prompt
+        assert "FAILED test_x" in prompt
+        assert "## Implementation Being Tested" in prompt
+        assert "def x(): pass" in prompt
+        assert "## Required Output Format" in prompt
+
+    def test_prompt_includes_stack_trace_when_provided(self) -> None:
+        """Test that stack trace section is added when provided."""
+        from src.workers.agents.development.debugger_agent import _build_debug_prompt
+
+        prompt = _build_debug_prompt(
+            test_output="FAILED",
+            implementation="pass",
+            stack_trace="Traceback: line 5",
+        )
+
+        assert "## Stack Trace" in prompt
+        assert "Traceback: line 5" in prompt
+
+    def test_prompt_includes_test_code_when_provided(self) -> None:
+        """Test that test code section is added when provided."""
+        from src.workers.agents.development.debugger_agent import _build_debug_prompt
+
+        prompt = _build_debug_prompt(
+            test_output="FAILED",
+            implementation="pass",
+            test_code="def test_foo(): assert True",
+        )
+
+        assert "## Test Code" in prompt
+        assert "def test_foo()" in prompt
+
+    def test_prompt_includes_context_hints_when_provided(self) -> None:
+        """Test that context hints section is added when provided."""
+        from src.workers.agents.development.debugger_agent import _build_debug_prompt
+
+        prompt = _build_debug_prompt(
+            test_output="FAILED",
+            implementation="pass",
+            context_hints=["Related file: src/foo.py", "Relevant interfaces: Bar"],
+        )
+
+        assert "## Context Hints" in prompt
+        assert "- Related file: src/foo.py" in prompt
+        assert "- Relevant interfaces: Bar" in prompt
+
+    def test_prompt_omits_optional_sections_when_none(self) -> None:
+        """Test that optional sections are omitted when not provided."""
+        from src.workers.agents.development.debugger_agent import _build_debug_prompt
+
+        prompt = _build_debug_prompt(
+            test_output="FAILED",
+            implementation="pass",
+        )
+
+        assert "## Stack Trace" not in prompt
+        assert "## Test Code" not in prompt
+        assert "## Context Hints" not in prompt
+
+
+class TestParseDebugFromResult:
+    """Tests for _parse_debug_from_result module-level function."""
+
+    def test_parses_structured_output(self) -> None:
+        """Test parsing from structured_output field."""
+        from src.workers.agents.development.debugger_agent import (
+            _parse_debug_from_result,
+        )
+
+        result = BackendResult(
+            success=True,
+            output="",
+            structured_output={
+                "failure_id": "f-001",
+                "root_cause": "bad logic",
+                "fix_suggestion": "fix it",
+                "code_changes": [
+                    {
+                        "file_path": "a.py",
+                        "new_code": "x = 1",
+                        "description": "set x",
+                    }
+                ],
+            },
+        )
+
+        analysis = _parse_debug_from_result(result, task_id="t1")
+
+        assert analysis is not None
+        assert analysis.failure_id == "f-001"
+        assert analysis.root_cause == "bad logic"
+        assert len(analysis.code_changes) == 1
+
+    def test_falls_back_to_text_output_parsing(self) -> None:
+        """Test falling back to parsing JSON from text output."""
+        from src.workers.agents.development.debugger_agent import (
+            _parse_debug_from_result,
+        )
+
+        data = {
+            "root_cause": "missing return",
+            "fix_suggestion": "add return",
+            "code_changes": [],
+        }
+
+        result = BackendResult(
+            success=True,
+            output=json.dumps(data),
+        )
+
+        analysis = _parse_debug_from_result(result, task_id="t2")
+
+        assert analysis is not None
+        assert analysis.root_cause == "missing return"
+        assert analysis.failure_id == "t2-failure"  # fallback
+
+    def test_returns_none_for_unparseable_output(self) -> None:
+        """Test that None is returned when output cannot be parsed."""
+        from src.workers.agents.development.debugger_agent import (
+            _parse_debug_from_result,
+        )
+
+        result = BackendResult(
+            success=True,
+            output="totally not json",
+        )
+
+        analysis = _parse_debug_from_result(result, task_id="t3")
+
+        assert analysis is None
+
+
+class TestDebuggerOutputSchema:
+    """Tests for DEBUGGER_OUTPUT_SCHEMA constant."""
+
+    def test_schema_requires_root_cause(self) -> None:
+        """Test that schema requires root_cause field."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+        )
+
+        assert "root_cause" in DEBUGGER_OUTPUT_SCHEMA["required"]
+
+    def test_schema_requires_fix_suggestion(self) -> None:
+        """Test that schema requires fix_suggestion field."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+        )
+
+        assert "fix_suggestion" in DEBUGGER_OUTPUT_SCHEMA["required"]
+
+    def test_schema_requires_code_changes(self) -> None:
+        """Test that schema requires code_changes field."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+        )
+
+        assert "code_changes" in DEBUGGER_OUTPUT_SCHEMA["required"]
+
+    def test_code_change_items_require_file_path(self) -> None:
+        """Test that code_change items require file_path."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+        )
+
+        items_schema = DEBUGGER_OUTPUT_SCHEMA["properties"]["code_changes"]["items"]
+        assert "file_path" in items_schema["required"]
+
+    def test_code_change_items_require_new_code(self) -> None:
+        """Test that code_change items require new_code."""
+        from src.workers.agents.development.debugger_agent import (
+            DEBUGGER_OUTPUT_SCHEMA,
+        )
+
+        items_schema = DEBUGGER_OUTPUT_SCHEMA["properties"]["code_changes"]["items"]
+        assert "new_code" in items_schema["required"]

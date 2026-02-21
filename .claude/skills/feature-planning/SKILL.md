@@ -85,6 +85,13 @@ Break work into atomic tasks (each < 2 hours):
 - [ ] Notes: {implementation hints}
 ```
 
+## Available Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `new-feature.sh` | Create work item with templates | `./scripts/new-feature.sh P01 F02 "name"` |
+| `check-planning.sh` | Validate planning completeness | `./scripts/check-planning.sh P01-F02-name` |
+
 ## Validation Checklist
 
 Before implementation begins, verify:
@@ -93,3 +100,8 @@ Before implementation begins, verify:
 - [ ] Interfaces defined with signatures
 - [ ] Each task is < 2 hours and testable
 - [ ] Progress section initialized
+
+## Cross-References
+
+- `@tdd-execution` — Implement tasks after planning
+- `@diagram-builder` — Create architecture diagrams during planning

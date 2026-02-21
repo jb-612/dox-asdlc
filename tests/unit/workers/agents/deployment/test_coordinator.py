@@ -15,6 +15,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.deployment.config import DeploymentConfig
 from src.workers.agents.deployment.models import (
@@ -51,11 +52,19 @@ from src.workers.agents.deployment.coordinator import (
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    from src.workers.agents.backends.base import BackendResult
+
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output="{}",
+        structured_output={},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -327,7 +336,7 @@ class TestValidationDeploymentCoordinatorInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -335,7 +344,7 @@ class TestValidationDeploymentCoordinatorInit:
     ):
         """Test that coordinator can be created with required arguments."""
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -346,7 +355,7 @@ class TestValidationDeploymentCoordinatorInit:
 
     def test_creates_with_hitl_dispatcher(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -355,7 +364,7 @@ class TestValidationDeploymentCoordinatorInit:
     ):
         """Test that coordinator can be created with HITL dispatcher."""
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -373,7 +382,7 @@ class TestRunValidation:
     @pytest.mark.asyncio
     async def test_runs_validation_agent_first(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -383,18 +392,15 @@ class TestRunValidation:
         acceptance_criteria,
     ):
         """Test that validation agent runs first in the workflow."""
-        # Mock LLM response for validation
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [
-                    {"name": "E2E Tests", "category": "functional", "passed": true, "details": "All passed", "evidence": null}
-                ],
-                "recommendations": []
-            }"""
+        # Mock backend response for validation
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{"checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "All passed", "evidence": null}], "recommendations": []}',
+            structured_output=None,
         )
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -413,7 +419,7 @@ class TestRunValidation:
     @pytest.mark.asyncio
     async def test_runs_security_agent_after_validation(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -424,26 +430,15 @@ class TestRunValidation:
     ):
         """Test that security agent runs after validation passes."""
         # Mock LLM responses for validation and security
-        mock_llm_client.generate.side_effect = [
+        mock_backend.execute.side_effect = [
             # Validation response
-            MagicMock(
-                content="""{
-                    "checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}],
-                    "recommendations": []
-                }"""
-            ),
+            BackendResult(success=True, output='{"checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}], "recommendations": []}', structured_output=None),
             # Security response
-            MagicMock(
-                content="""{
-                    "findings": [],
-                    "compliance_status": {"OWASP": true},
-                    "scan_coverage": 95.0
-                }"""
-            ),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}', structured_output=None),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -457,12 +452,12 @@ class TestRunValidation:
         )
 
         # Both agents should have been called
-        assert mock_llm_client.generate.call_count >= 2
+        assert mock_backend.execute.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_returns_failed_when_validation_fails(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -489,15 +484,14 @@ class TestRunValidation:
             coverage=50.0,
         )
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [{"name": "E2E Tests", "category": "functional", "passed": false, "details": "Failed", "evidence": null}],
-                "recommendations": ["Fix failing tests"]
-            }"""
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{"checks": [{"name": "E2E Tests", "category": "functional", "passed": false, "details": "Failed", "evidence": null}], "recommendations": ["Fix failing tests"]}',
+            structured_output=None,
         )
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -516,7 +510,7 @@ class TestRunValidation:
     @pytest.mark.asyncio
     async def test_returns_failed_when_security_fails(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -527,26 +521,13 @@ class TestRunValidation:
     ):
         """Test that workflow stops and returns failed when security fails."""
         # Mock passing validation, failing security
-        mock_llm_client.generate.side_effect = [
-            MagicMock(
-                content="""{
-                    "checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}],
-                    "recommendations": []
-                }"""
-            ),
-            MagicMock(
-                content="""{
-                    "findings": [
-                        {"id": "SEC-001", "severity": "critical", "category": "secrets", "location": "line 10", "description": "Hardcoded secret", "remediation": "Use env var"}
-                    ],
-                    "compliance_status": {"OWASP": false},
-                    "scan_coverage": 95.0
-                }"""
-            ),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}], "recommendations": []}', structured_output=None),
+            BackendResult(success=True, output='{"findings": [{"id": "SEC-001", "severity": "critical", "category": "secrets", "location": "line 10", "description": "Hardcoded secret", "remediation": "Use env var"}], "compliance_status": {"OWASP": false}, "scan_coverage": 95.0}', structured_output=None),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -565,7 +546,7 @@ class TestRunValidation:
     @pytest.mark.asyncio
     async def test_submits_to_hitl5_on_success(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -576,24 +557,13 @@ class TestRunValidation:
         acceptance_criteria,
     ):
         """Test that HITL-5 is submitted when validation and security pass."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(
-                content="""{
-                    "checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}],
-                    "recommendations": []
-                }"""
-            ),
-            MagicMock(
-                content="""{
-                    "findings": [],
-                    "compliance_status": {"OWASP": true},
-                    "scan_coverage": 95.0
-                }"""
-            ),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"checks": [{"name": "E2E Tests", "category": "functional", "passed": true, "details": "Passed", "evidence": null}], "recommendations": []}', structured_output=None),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}', structured_output=None),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -615,7 +585,7 @@ class TestRunValidation:
     @pytest.mark.asyncio
     async def test_returns_pending_approval_status(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -626,13 +596,13 @@ class TestRunValidation:
         acceptance_criteria,
     ):
         """Test that result indicates pending approval when HITL-5 submitted."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
-            MagicMock(content='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -655,7 +625,7 @@ class TestRunDeployment:
     @pytest.mark.asyncio
     async def test_runs_release_agent_first(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -666,17 +636,17 @@ class TestRunDeployment:
         passing_security_report,
     ):
         """Test that release agent runs first in deployment workflow."""
-        mock_llm_client.generate.side_effect = [
+        mock_backend.execute.side_effect = [
             # Release response
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
             # Deployment response
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
             # Monitor response
-            MagicMock(content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -692,12 +662,12 @@ class TestRunDeployment:
         )
 
         # LLM should be called for release
-        assert mock_llm_client.generate.called
+        assert mock_backend.execute.called
 
     @pytest.mark.asyncio
     async def test_runs_deployment_agent_after_release(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -708,14 +678,14 @@ class TestRunDeployment:
         passing_security_report,
     ):
         """Test that deployment agent runs after release agent."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
-            MagicMock(content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -731,12 +701,12 @@ class TestRunDeployment:
         )
 
         # Both release and deployment should be called
-        assert mock_llm_client.generate.call_count >= 2
+        assert mock_backend.execute.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_submits_to_hitl6(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -748,14 +718,14 @@ class TestRunDeployment:
         passing_security_report,
     ):
         """Test that HITL-6 is submitted after deployment agent."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
-            MagicMock(content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -778,7 +748,7 @@ class TestRunDeployment:
     @pytest.mark.asyncio
     async def test_runs_monitor_after_hitl6_approval(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -790,14 +760,14 @@ class TestRunDeployment:
         deployment_plan,
     ):
         """Test that monitor agent runs after HITL-6 approval."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
-            MagicMock(content='{"deployment_id": "test", "metrics": [{"name": "cpu", "metric_type": "gauge", "description": "CPU", "labels": []}], "alerts": [], "dashboards": []}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [{"name": "cpu", "metric_type": "gauge", "description": "CPU", "labels": []}], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -815,7 +785,7 @@ class TestRunDeployment:
         )
 
         # All three agents (release, deployment, monitor) should be called
-        assert mock_llm_client.generate.call_count >= 3
+        assert mock_backend.execute.call_count >= 3
         assert result.monitoring_config is not None
 
 
@@ -825,7 +795,7 @@ class TestContinueFromHITL6:
     @pytest.mark.asyncio
     async def test_runs_monitor_agent_after_hitl6_approval(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -835,12 +805,14 @@ class TestContinueFromHITL6:
         deployment_plan,
     ):
         """Test that monitor agent runs after HITL-6 approval."""
-        mock_llm_client.generate.return_value = MagicMock(
-            content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}',
+            structured_output=None,
         )
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -871,7 +843,7 @@ class TestRejectionHandling:
     @pytest.mark.asyncio
     async def test_handles_hitl5_rejection(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -880,7 +852,7 @@ class TestRejectionHandling:
     ):
         """Test that HITL-5 rejection is handled correctly."""
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -900,7 +872,7 @@ class TestRejectionHandling:
     @pytest.mark.asyncio
     async def test_handles_hitl6_rejection(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -909,7 +881,7 @@ class TestRejectionHandling:
     ):
         """Test that HITL-6 rejection is handled correctly."""
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -932,7 +904,7 @@ class TestEvidenceBundle:
     @pytest.mark.asyncio
     async def test_creates_hitl5_evidence_bundle(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -943,13 +915,13 @@ class TestEvidenceBundle:
         acceptance_criteria,
     ):
         """Test that HITL-5 evidence bundle is created correctly."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
-            MagicMock(content='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -975,7 +947,7 @@ class TestEvidenceBundle:
     @pytest.mark.asyncio
     async def test_creates_hitl6_evidence_bundle(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         mock_hitl_dispatcher,
@@ -987,14 +959,14 @@ class TestEvidenceBundle:
         passing_security_report,
     ):
         """Test that HITL-6 evidence bundle is created correctly."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
-            MagicMock(content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -1024,7 +996,7 @@ class TestWorkflowCoordination:
     @pytest.mark.asyncio
     async def test_full_validation_to_deployment_flow(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -1034,21 +1006,21 @@ class TestWorkflowCoordination:
         acceptance_criteria,
     ):
         """Test complete flow from validation through deployment."""
-        mock_llm_client.generate.side_effect = [
+        mock_backend.execute.side_effect = [
             # Validation
-            MagicMock(content='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
+            BackendResult(success=True, output='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
             # Security
-            MagicMock(content='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
             # Release
-            MagicMock(content='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
+            BackendResult(success=True, output='{"version": "1.0.0", "features": [], "changelog": "", "artifacts": [], "rollback_plan": ""}'),
             # Deployment
-            MagicMock(content='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
+            BackendResult(success=True, output='{"release_version": "1.0.0", "target_environment": "staging", "strategy": "rolling", "steps": [], "rollback_triggers": [], "health_checks": []}'),
             # Monitor
-            MagicMock(content='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
+            BackendResult(success=True, output='{"deployment_id": "test", "metrics": [], "alerts": [], "dashboards": []}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -1082,7 +1054,7 @@ class TestWorkflowCoordination:
     @pytest.mark.asyncio
     async def test_skips_hitl_when_no_dispatcher(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -1092,13 +1064,13 @@ class TestWorkflowCoordination:
         acceptance_criteria,
     ):
         """Test that HITL is skipped when no dispatcher is configured."""
-        mock_llm_client.generate.side_effect = [
-            MagicMock(content='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
-            MagicMock(content='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
+        mock_backend.execute.side_effect = [
+            BackendResult(success=True, output='{"checks": [{"name": "test", "category": "functional", "passed": true, "details": "ok", "evidence": null}], "recommendations": []}'),
+            BackendResult(success=True, output='{"findings": [], "compliance_status": {"OWASP": true}, "scan_coverage": 95.0}'),
         ]
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -1123,7 +1095,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_validation_agent_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -1136,7 +1108,7 @@ class TestErrorHandling:
         mock_test_runner.run_tests.side_effect = Exception("Test runner failed")
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,
@@ -1155,7 +1127,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_release_agent_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -1166,10 +1138,10 @@ class TestErrorHandling:
         passing_security_report,
     ):
         """Test that release agent errors are handled gracefully."""
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("LLM service unavailable")
 
         coordinator = ValidationDeploymentCoordinator(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             validation_config=validation_config,

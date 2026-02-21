@@ -1,0 +1,93 @@
+name: Teardown GCP Cloud Run
+
+# Manual only — never auto-triggered
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "destroy" to confirm teardown'
+        required: true
+        type: string
+      delete_bucket:
+        description: 'Also delete GCS bucket (Postgres dumps)?'
+        required: false
+        default: false
+        type: boolean
+      delete_images:
+        description: 'Also delete Artifact Registry images?'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+  REGISTRY: ${{ vars.GCP_REGION || 'us-central1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/asdlc
+  BUCKET: ${{ vars.GCP_PROJECT_ID }}-asdlc-pgdump
+
+jobs:
+  teardown:
+    name: Teardown Cloud Run Services
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == 'destroy' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Delete Cloud Run services
+        run: |
+          echo "Deleting Cloud Run services..."
+          gcloud run services delete asdlc-backend \
+            --region="${REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || echo "asdlc-backend not found"
+          gcloud run services delete hitl-ui \
+            --region="${REGION}" --project="${PROJECT_ID}" --quiet 2>/dev/null || echo "hitl-ui not found"
+          echo "Cloud Run services deleted."
+
+      - name: Delete GCS bucket
+        if: ${{ inputs.delete_bucket }}
+        run: |
+          echo "Deleting GCS bucket gs://${BUCKET}..."
+          gsutil rm -r "gs://${BUCKET}" 2>/dev/null || echo "Bucket not found"
+
+      - name: Delete Artifact Registry images
+        if: ${{ inputs.delete_images }}
+        run: |
+          echo "Deleting Artifact Registry images..."
+          for img in orchestrator workers review-swarm hitl-ui postgres-gcs; do
+            echo "  Deleting ${img}..."
+            gcloud artifacts docker images delete \
+              "${REGISTRY}/${img}" \
+              --project="${PROJECT_ID}" \
+              --delete-tags --quiet 2>/dev/null || echo "  ${img} not found"
+          done
+
+      - name: Summary
+        run: |
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║       Teardown Complete                       ║"
+          echo "╠══════════════════════════════════════════════╣"
+          echo "║ Cloud Run services: DELETED                   ║"
+          echo "║ GCS bucket: ${{ inputs.delete_bucket && 'DELETED' || 'PRESERVED' }}"
+          echo "║ AR images:  ${{ inputs.delete_images && 'DELETED' || 'PRESERVED' }}"
+          echo "║ Secrets:    PRESERVED (delete manually)       ║"
+          echo "╚══════════════════════════════════════════════╝"
+
+  guard:
+    name: Confirmation Failed
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm != 'destroy' }}
+    steps:
+      - name: Abort
+        run: |
+          echo "Teardown aborted. You must type 'destroy' to confirm."
+          exit 1

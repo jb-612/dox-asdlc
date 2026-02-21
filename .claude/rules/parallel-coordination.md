@@ -13,14 +13,9 @@ Multiple CLI sessions work in parallel with domain boundaries. Sessions are iden
 | **Session Context** (CLAUDE_INSTANCE_ID) | Which feature worktree | `p11-guardrails`, `p04-review-swarm` |
 | **Subagent Role** | Path restrictions within a session | `backend`, `frontend`, `orchestrator`, `devops` |
 
-## Subagent Roles (Path Restrictions)
+## Subagent Roles
 
-| Role | Domain |
-|------|--------|
-| backend | Workers, infra (P01-P03, P06) |
-| frontend | HITL UI (P05) |
-| orchestrator | Meta files, coordination |
-| devops | Docker, K8s, cloud, GitHub Actions |
+See `CLAUDE.md` Roles and Path Restrictions tables for the authoritative role-to-domain mapping.
 
 ## Sender Identity
 
@@ -116,22 +111,8 @@ When using native Agent Teams, the `team_name` parameter maps to the bounded con
 
 ## Path Restrictions
 
-**Backend** can modify:
-- `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `src/core/`
-- `docker/workers/`, `docker/orchestrator/`
-- `.workitems/P01-*`, `P02-*`, `P03-*`, `P06-*`
-
-**Frontend** can modify:
-- `src/hitl_ui/`, `docker/hitl-ui/`
-- `.workitems/P05-*`
-
-**Orchestrator** owns exclusively:
-- `CLAUDE.md`, `README.md`, `docs/**`, `contracts/**`, `.claude/rules/**`, `.claude/skills/**`
-
-**DevOps** can modify:
-- `docker/`, `helm/`, `.github/workflows/`
-- `scripts/k8s/`, `scripts/deploy/`
-- Infrastructure configuration files
+See `CLAUDE.md` Path Restrictions for the authoritative list.
+Enforcement: `.claude/rules/permissions.md` and PreToolUse hooks.
 
 ## Multi-CLI Coordination
 

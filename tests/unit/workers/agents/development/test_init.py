@@ -216,11 +216,11 @@ class TestFactoryFunctions:
         """Test creating UTest agent via factory."""
         from src.workers.agents.development import create_utest_agent, UTestAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_utest_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -234,12 +234,12 @@ class TestFactoryFunctions:
             DevelopmentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         config = DevelopmentConfig()
 
         agent = create_utest_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )
@@ -250,34 +250,34 @@ class TestFactoryFunctions:
         """Test creating Coding agent via factory."""
         from src.workers.agents.development import create_coding_agent, CodingAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
 
         agent = create_coding_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
         assert isinstance(agent, CodingAgent)
 
-    def test_create_coding_agent_with_rlm(self) -> None:
-        """Test creating Coding agent with RLM integration."""
+    def test_create_coding_agent_with_config(self) -> None:
+        """Test creating Coding agent with custom config."""
         from src.workers.agents.development import (
             create_coding_agent,
             CodingAgent,
             DevelopmentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
+        mock_backend.backend_name = "mock"
         mock_writer = MagicMock()
-        mock_rlm = MagicMock()
         config = DevelopmentConfig()
 
         agent = create_coding_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
-            rlm_integration=mock_rlm,
         )
 
         assert isinstance(agent, CodingAgent)
@@ -286,34 +286,32 @@ class TestFactoryFunctions:
         """Test creating Debugger agent via factory."""
         from src.workers.agents.development import create_debugger_agent, DebuggerAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_debugger_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
         assert isinstance(agent, DebuggerAgent)
 
-    def test_create_debugger_agent_with_rlm(self) -> None:
-        """Test creating Debugger agent with RLM integration."""
+    def test_create_debugger_agent_with_config(self) -> None:
+        """Test creating Debugger agent with custom config."""
         from src.workers.agents.development import (
             create_debugger_agent,
             DebuggerAgent,
             DevelopmentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
-        mock_rlm = MagicMock()
         config = DevelopmentConfig()
 
         agent = create_debugger_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
-            rlm_integration=mock_rlm,
         )
 
         assert isinstance(agent, DebuggerAgent)
@@ -322,11 +320,11 @@ class TestFactoryFunctions:
         """Test creating Reviewer agent via factory."""
         from src.workers.agents.development import create_reviewer_agent, ReviewerAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_reviewer_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -340,12 +338,12 @@ class TestFactoryFunctions:
             DevelopmentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         config = DevelopmentConfig()
 
         agent = create_reviewer_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )

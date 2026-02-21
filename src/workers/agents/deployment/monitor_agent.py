@@ -3,15 +3,18 @@
 Monitoring configuration agent that defines metrics to collect, configures
 alerts, generates dashboard configurations, and outputs MonitoringConfig
 artifacts for deployments.
+
+Delegates work to a pluggable AgentBackend (Claude Code CLI,
+Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.deployment.config import DeploymentConfig
 from src.workers.agents.deployment.models import (
     AlertRule,
@@ -25,10 +28,67 @@ from src.workers.agents.deployment.models import (
 from src.workers.agents.protocols import AgentContext, AgentResult
 
 if TYPE_CHECKING:
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+MONITOR_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "deployment_id": {"type": "string"},
+        "metrics": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "metric_type": {"type": "string"},
+                    "description": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["name", "metric_type", "description"],
+            },
+        },
+        "alerts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "condition": {"type": "string"},
+                    "severity": {"type": "string"},
+                    "description": {"type": "string"},
+                    "runbook_url": {"type": ["string", "null"]},
+                },
+                "required": ["name", "condition", "severity", "description"],
+            },
+        },
+        "dashboards": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "title": {"type": "string"},
+                    "panels": {"type": "array", "items": {"type": "string"}},
+                    "refresh_interval_seconds": {"type": "integer"},
+                },
+                "required": ["name", "title", "panels"],
+            },
+        },
+    },
+    "required": ["deployment_id", "metrics", "alerts", "dashboards"],
+}
+
+# System prompt for the monitoring backend
+MONITOR_SYSTEM_PROMPT = (
+    "You are a monitoring configuration agent. Generate monitoring "
+    "configurations with metrics, alerts, and dashboards for deployments. "
+    "Always respond with valid JSON matching the requested schema."
+)
 
 
 class MonitorAgentError(Exception):
@@ -50,8 +110,10 @@ class MonitorAgent:
     - Generate dashboard configuration
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = MonitorAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DeploymentConfig(),
         )
@@ -60,18 +122,18 @@ class MonitorAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DeploymentConfig,
     ) -> None:
         """Initialize the MonitorAgent.
 
         Args:
-            llm_client: LLM client for monitoring config generation.
+            backend: Agent backend for monitoring config generation.
             artifact_writer: Writer for persisting artifacts.
             config: Deployment configuration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
 
@@ -96,7 +158,10 @@ class MonitorAgent:
         Returns:
             AgentResult: Result with monitoring config artifacts.
         """
-        logger.info(f"MonitorAgent starting for task {context.task_id}")
+        logger.info(
+            f"MonitorAgent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Validate required inputs
@@ -113,7 +178,7 @@ class MonitorAgent:
             # Parse deployment plan
             deployment_plan = DeploymentPlan.from_dict(deployment_plan_dict)
 
-            # Generate monitoring configuration using LLM
+            # Generate monitoring configuration using backend
             monitoring_config = await self._generate_monitoring_config(
                 deployment_plan=deployment_plan,
                 task_id=context.task_id,
@@ -145,6 +210,7 @@ class MonitorAgent:
                 artifact_paths=artifact_paths,
                 metadata={
                     "monitoring_config": monitoring_config.to_dict(),
+                    "backend": self._backend.backend_name,
                 },
             )
 
@@ -163,7 +229,7 @@ class MonitorAgent:
         deployment_plan: DeploymentPlan,
         task_id: str,
     ) -> MonitoringConfig | None:
-        """Generate monitoring configuration using LLM.
+        """Generate monitoring configuration using backend.
 
         Args:
             deployment_plan: Deployment plan to create monitoring for.
@@ -179,14 +245,33 @@ class MonitorAgent:
         )
 
         try:
-            response = await self._llm_client.generate(
-                prompt=prompt,
-                max_tokens=self._config.max_tokens,
-                temperature=self._config.temperature,
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.deployment_model,
+                output_schema=MONITOR_OUTPUT_SCHEMA,
+                system_prompt=MONITOR_SYSTEM_PROMPT,
+                timeout_seconds=300,
             )
 
-            # Parse response
-            config_data = self._parse_json_from_response(response.content)
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path="",
+                config=backend_config,
+            )
+
+            if not result.success:
+                logger.warning(
+                    "Monitoring config generation failed: %s", result.error
+                )
+                return None
+
+            # Parse response - try structured output first, then text
+            config_data = None
+            if result.structured_output:
+                config_data = result.structured_output
+            else:
+                config_data = parse_json_from_response(result.output)
 
             if not config_data:
                 logger.warning("Invalid monitoring config response - no valid JSON")
@@ -354,46 +439,6 @@ Generate appropriate metrics, alerts, and dashboards for monitoring a {deploymen
 """
 
         return prompt
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     async def _write_artifacts(
         self,

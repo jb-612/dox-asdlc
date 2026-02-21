@@ -30,7 +30,7 @@ The main Claude session operates as the Project Manager (PM CLI) with identity `
 - Does NOT design features (planner does this)
 - Does NOT commit to main (orchestrator does this)
 
-See `.claude/rules/pm-cli.md` for full PM CLI specification.
+See `.claude/rules/pm-cli/` for full PM CLI specification.
 
 ## When to Use PM CLI vs Subagent
 

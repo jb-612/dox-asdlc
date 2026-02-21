@@ -1,6 +1,7 @@
 ---
 name: tdd-execution
 description: Guides test-driven development using the 3-agent TDD flow (test-writer -> coder -> debugger) and Red-Green-Refactor cycle. Use when implementing tasks from tasks.md, writing tests before code, or debugging failing tests.
+allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
 ## Agent Flow
@@ -132,3 +133,8 @@ The diagnostic report is passed as context to whichever agent continues the work
 - Never write code before tests
 - Never skip to next task while tests fail
 - Never refactor while tests are red
+
+## Cross-References
+
+- `@testing` — Run full quality gates after TDD cycle
+- `@feature-completion` — Validate when all tasks complete

@@ -187,11 +187,11 @@ class TestFactoryFunctions:
         """Test creating ReleaseAgent via factory."""
         from src.workers.agents.deployment import create_release_agent, ReleaseAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_release_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -205,12 +205,12 @@ class TestFactoryFunctions:
             DeploymentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         config = DeploymentConfig()
 
         agent = create_release_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )
@@ -221,11 +221,11 @@ class TestFactoryFunctions:
         """Test creating DeploymentAgent via factory."""
         from src.workers.agents.deployment import create_deployment_agent, DeploymentAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_deployment_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -239,12 +239,12 @@ class TestFactoryFunctions:
             DeploymentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         config = DeploymentConfig()
 
         agent = create_deployment_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )
@@ -255,11 +255,11 @@ class TestFactoryFunctions:
         """Test creating MonitorAgent via factory."""
         from src.workers.agents.deployment import create_monitor_agent, MonitorAgent
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
 
         agent = create_monitor_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
         )
 
@@ -273,12 +273,12 @@ class TestFactoryFunctions:
             DeploymentConfig,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         config = DeploymentConfig()
 
         agent = create_monitor_agent(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             config=config,
         )
@@ -292,12 +292,12 @@ class TestFactoryFunctions:
             ValidationDeploymentCoordinator,
         )
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         mock_runner = MagicMock()
 
         coordinator = create_validation_deployment_coordinator(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             test_runner=mock_runner,
         )
@@ -313,21 +313,19 @@ class TestFactoryFunctions:
         )
         from src.workers.agents.validation import ValidationConfig
 
-        mock_llm = MagicMock()
+        mock_backend = MagicMock()
         mock_writer = MagicMock()
         mock_runner = MagicMock()
-        mock_rlm = MagicMock()
         mock_hitl = MagicMock()
         validation_config = ValidationConfig()
         deployment_config = DeploymentConfig()
 
         coordinator = create_validation_deployment_coordinator(
-            llm_client=mock_llm,
+            backend=mock_backend,
             artifact_writer=mock_writer,
             test_runner=mock_runner,
             validation_config=validation_config,
             deployment_config=deployment_config,
-            rlm_integration=mock_rlm,
             hitl_dispatcher=mock_hitl,
         )
 

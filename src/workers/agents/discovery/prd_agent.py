@@ -1,16 +1,18 @@
 """PRD Agent for generating Product Requirements Documents.
 
-Transforms raw user requirements into structured PRD documents
-following the BaseAgent protocol.
+Transforms raw user requirements into structured PRD documents.
+Delegates work to a pluggable AgentBackend (Claude Code CLI,
+Codex CLI, or direct LLM API calls).
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any, TYPE_CHECKING
 
+from src.workers.agents.backends.base import BackendConfig, BackendResult
+from src.workers.agents.backends.response_parser import parse_json_from_response
 from src.workers.agents.protocols import AgentContext, AgentResult, BaseAgent
 from src.workers.agents.discovery.config import DiscoveryConfig
 from src.workers.agents.discovery.models import (
@@ -21,18 +23,153 @@ from src.workers.agents.discovery.models import (
     RequirementType,
 )
 from src.workers.agents.discovery.prompts.prd_prompts import (
-    PRD_SYSTEM_PROMPT,
+    PRD_SYSTEM_PROMPT as _PRD_SYSTEM_PROMPT,
     format_requirements_extraction_prompt,
     format_prd_prompt,
-    format_ambiguity_detection_prompt,
 )
 
 if TYPE_CHECKING:
-    from src.workers.llm.client import LLMClient
+    from src.workers.agents.backends.base import AgentBackend
     from src.workers.artifacts.writer import ArtifactWriter
-    from src.workers.rlm.integration import RLMIntegration
 
 logger = logging.getLogger(__name__)
+
+
+# JSON Schema for structured output validation (CLI backends)
+PRD_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "requirements": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "description": {"type": "string"},
+                    "priority": {
+                        "type": "string",
+                        "enum": [
+                            "must_have",
+                            "should_have",
+                            "could_have",
+                            "wont_have",
+                        ],
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "functional",
+                            "non_functional",
+                            "constraint",
+                            "assumption",
+                        ],
+                    },
+                    "rationale": {"type": "string"},
+                    "source": {"type": "string"},
+                },
+                "required": ["id", "description"],
+            },
+        },
+        "prd": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "version": {"type": "string"},
+                "executive_summary": {"type": "string"},
+                "objectives": {"type": "object"},
+                "scope": {"type": "object"},
+                "sections": {"type": "array"},
+            },
+            "required": ["title"],
+        },
+    },
+    "required": ["requirements", "prd"],
+}
+
+# System prompt for the PRD backend
+PRD_SYSTEM_PROMPT = _PRD_SYSTEM_PROMPT
+
+
+def _build_prd_prompt(
+    raw_requirements: str,
+    project_title: str,
+    project_context: str,
+) -> str:
+    """Build the complete prompt for the PRD backend.
+
+    Combines requirements extraction and PRD generation into a single
+    prompt so the backend can handle both in one call.
+
+    Args:
+        raw_requirements: Raw user input text.
+        project_title: Title for the PRD.
+        project_context: Additional project context.
+
+    Returns:
+        str: Complete prompt for the backend.
+    """
+    extraction_prompt = format_requirements_extraction_prompt(
+        raw_requirements, project_context
+    )
+    prd_instructions = format_prd_prompt(
+        requirements_json="(use the requirements you extracted above)",
+        project_title=project_title,
+        additional_context=project_context,
+    )
+
+    return "\n\n".join([
+        "## Task",
+        "",
+        "Perform the following two steps and return the results as a single "
+        "JSON object with `requirements` and `prd` keys.",
+        "",
+        "### Step 1: Extract Requirements",
+        "",
+        extraction_prompt,
+        "",
+        "### Step 2: Generate PRD",
+        "",
+        prd_instructions,
+        "",
+        "### Required JSON Output",
+        "",
+        "Return a single JSON object with two top-level keys:",
+        "- `requirements`: array of requirement objects from Step 1",
+        "- `prd`: the full PRD object from Step 2",
+    ])
+
+
+def _parse_prd_from_result(
+    result: BackendResult,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """Parse requirements and PRD data from backend result.
+
+    Handles structured output (from --json-schema), direct JSON,
+    and JSON embedded in text/code blocks.
+
+    Args:
+        result: Backend execution result.
+
+    Returns:
+        Tuple of (requirements_data_list, prd_data_dict_or_None).
+    """
+    data = None
+
+    # Prefer structured output from --json-schema backends
+    if result.structured_output:
+        data = result.structured_output
+    else:
+        content = result.output
+        if content:
+            data = parse_json_from_response(content)
+
+    if not data:
+        return [], None
+
+    requirements_data = data.get("requirements", [])
+    prd_data = data.get("prd")
+
+    return requirements_data, prd_data
 
 
 class PRDAgentError(Exception):
@@ -44,12 +181,14 @@ class PRDAgentError(Exception):
 class PRDAgent:
     """Agent that generates structured PRD documents from raw requirements.
 
-    Implements the BaseAgent protocol to be dispatched by the worker pool.
-    Uses LLM to extract requirements and generate comprehensive PRD documents.
+    Delegates the actual generation to a pluggable AgentBackend
+    (Claude Code CLI, Codex CLI, or direct LLM API).
 
     Example:
+        from src.workers.agents.backends.cli_backend import CLIAgentBackend
+        backend = CLIAgentBackend(cli="claude")
         agent = PRDAgent(
-            llm_client=client,
+            backend=backend,
             artifact_writer=writer,
             config=DiscoveryConfig(),
         )
@@ -58,23 +197,20 @@ class PRDAgent:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        backend: AgentBackend,
         artifact_writer: ArtifactWriter,
         config: DiscoveryConfig,
-        rlm_integration: RLMIntegration | None = None,
     ) -> None:
         """Initialize the PRD agent.
 
         Args:
-            llm_client: LLM client for text generation.
+            backend: Agent backend for PRD generation.
             artifact_writer: Writer for persisting artifacts.
             config: Agent configuration.
-            rlm_integration: Optional RLM integration for exploration.
         """
-        self._llm_client = llm_client
+        self._backend = backend
         self._artifact_writer = artifact_writer
         self._config = config
-        self._rlm_integration = rlm_integration
 
     @property
     def agent_type(self) -> str:
@@ -99,7 +235,10 @@ class PRDAgent:
         Returns:
             AgentResult: Result with artifact paths on success.
         """
-        logger.info(f"PRD Agent starting for task {context.task_id}")
+        logger.info(
+            f"PRD Agent starting for task {context.task_id} "
+            f"(backend={self._backend.backend_name})"
+        )
 
         try:
             # Extract raw requirements from metadata
@@ -116,18 +255,52 @@ class PRDAgent:
             project_title = event_metadata.get("project_title", "Untitled Project")
             project_context = event_metadata.get("project_context", "")
 
-            # Step 1: Check if RLM exploration is needed for ambiguous requirements
-            if self._config.enable_rlm and self._rlm_integration:
-                rlm_context = await self._check_and_explore_rlm(
-                    raw_requirements, project_context, context
-                )
-                if rlm_context:
-                    project_context = f"{project_context}\n\n{rlm_context}"
-
-            # Step 2: Extract structured requirements
-            requirements = await self._extract_requirements(
-                raw_requirements, project_context
+            # Build the combined prompt
+            prompt = _build_prd_prompt(
+                raw_requirements=raw_requirements,
+                project_title=project_title,
+                project_context=project_context,
             )
+
+            # Configure the backend
+            backend_config = BackendConfig(
+                model=self._config.prd_model,
+                output_schema=PRD_OUTPUT_SCHEMA,
+                system_prompt=PRD_SYSTEM_PROMPT,
+                timeout_seconds=300,
+                allowed_tools=["Read", "Glob", "Grep"],
+            )
+
+            # Execute via backend
+            result = await self._backend.execute(
+                prompt=prompt,
+                workspace_path=context.workspace_path,
+                config=backend_config,
+            )
+
+            if not result.success:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message=result.error or "Backend execution failed",
+                    should_retry=True,
+                )
+
+            # Parse requirements and PRD from result
+            requirements_data, prd_data = _parse_prd_from_result(result)
+
+            if not requirements_data:
+                return AgentResult(
+                    success=False,
+                    agent_type=self.agent_type,
+                    task_id=context.task_id,
+                    error_message="Failed to extract requirements from backend output",
+                    should_retry=True,
+                )
+
+            # Convert to Requirement objects
+            requirements = self._build_requirements(requirements_data)
 
             if not requirements:
                 return AgentResult(
@@ -138,10 +311,13 @@ class PRDAgent:
                     should_retry=True,
                 )
 
-            # Step 3: Generate full PRD document
-            prd = await self._generate_prd(requirements, project_title, project_context)
+            # Build PRD document
+            if prd_data:
+                prd = self._build_prd_from_response(prd_data, requirements)
+            else:
+                prd = self._create_fallback_prd(requirements, project_title)
 
-            # Step 4: Write artifact
+            # Write artifact
             artifact_path = await self._write_artifact(context, prd)
 
             logger.info(
@@ -158,6 +334,10 @@ class PRDAgent:
                     "requirement_count": len(prd.all_requirements),
                     "prd_version": prd.version,
                     "prd_title": prd.title,
+                    "backend": self._backend.backend_name,
+                    "cost_usd": result.cost_usd,
+                    "turns": result.turns,
+                    "session_id": result.session_id,
                 },
             )
 
@@ -171,118 +351,36 @@ class PRDAgent:
                 should_retry=True,
             )
 
-    async def _extract_requirements(
+    def _build_requirements(
         self,
-        raw_requirements: str,
-        project_context: str,
+        requirements_data: list[dict[str, Any]],
     ) -> list[Requirement]:
-        """Extract structured requirements from raw input.
+        """Build Requirement objects from parsed data.
 
         Args:
-            raw_requirements: Raw user input text.
-            project_context: Additional project context.
+            requirements_data: List of requirement dicts.
 
         Returns:
-            list[Requirement]: Extracted requirements.
+            list[Requirement]: Built requirement objects.
         """
-        prompt = format_requirements_extraction_prompt(raw_requirements, project_context)
-
-        for attempt in range(self._config.max_retries):
+        requirements = []
+        for req_data in requirements_data:
             try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=PRD_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
+                req = Requirement(
+                    id=req_data.get("id", f"REQ-{len(requirements) + 1:03d}"),
+                    description=req_data.get("description", ""),
+                    priority=RequirementPriority(
+                        req_data.get("priority", "should_have")
+                    ),
+                    type=RequirementType(req_data.get("type", "functional")),
+                    rationale=req_data.get("rationale", ""),
+                    source=req_data.get("source", ""),
                 )
-
-                # Parse JSON from response
-                requirements_data = self._parse_json_from_response(response.content)
-
-                if not requirements_data or "requirements" not in requirements_data:
-                    logger.warning(f"Invalid requirements response on attempt {attempt + 1}")
-                    if attempt < self._config.max_retries - 1:
-                        await asyncio.sleep(self._config.retry_delay_seconds)
-                    continue
-
-                # Convert to Requirement objects
-                requirements = []
-                for req_data in requirements_data["requirements"]:
-                    try:
-                        req = Requirement(
-                            id=req_data.get("id", f"REQ-{len(requirements) + 1:03d}"),
-                            description=req_data.get("description", ""),
-                            priority=RequirementPriority(
-                                req_data.get("priority", "should_have")
-                            ),
-                            type=RequirementType(req_data.get("type", "functional")),
-                            rationale=req_data.get("rationale", ""),
-                            source=req_data.get("source", ""),
-                        )
-                        requirements.append(req)
-                    except (ValueError, KeyError) as e:
-                        logger.warning(f"Skipping invalid requirement: {e}")
-                        continue
-
-                return requirements
-
-            except Exception as e:
-                logger.warning(f"Requirements extraction attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        return []
-
-    async def _generate_prd(
-        self,
-        requirements: list[Requirement],
-        project_title: str,
-        additional_context: str,
-    ) -> PRDDocument:
-        """Generate full PRD document from requirements.
-
-        Args:
-            requirements: List of extracted requirements.
-            project_title: Title for the PRD.
-            additional_context: Additional context information.
-
-        Returns:
-            PRDDocument: Generated PRD document.
-        """
-        requirements_json = json.dumps(
-            [r.to_dict() for r in requirements], indent=2
-        )
-
-        prompt = format_prd_prompt(requirements_json, project_title, additional_context)
-
-        for attempt in range(self._config.max_retries):
-            try:
-                response = await self._llm_client.generate(
-                    prompt=prompt,
-                    system=PRD_SYSTEM_PROMPT,
-                    max_tokens=self._config.max_tokens,
-                    temperature=self._config.temperature,
-                )
-
-                prd_data = self._parse_json_from_response(response.content)
-
-                if not prd_data:
-                    logger.warning(f"Invalid PRD response on attempt {attempt + 1}")
-                    if attempt < self._config.max_retries - 1:
-                        await asyncio.sleep(self._config.retry_delay_seconds)
-                    continue
-
-                # Build PRD document from response
-                prd = self._build_prd_from_response(prd_data, requirements)
-                return prd
-
-            except Exception as e:
-                logger.warning(f"PRD generation attempt {attempt + 1} failed: {e}")
-                if attempt < self._config.max_retries - 1:
-                    await asyncio.sleep(self._config.retry_delay_seconds)
-
-        # Fallback: create minimal PRD from requirements
-        return self._create_fallback_prd(requirements, project_title)
+                requirements.append(req)
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Skipping invalid requirement: {e}")
+                continue
+        return requirements
 
     def _build_prd_from_response(
         self,
@@ -432,136 +530,6 @@ class PRDAgent:
         )
 
         return json_path
-
-    async def _check_and_explore_rlm(
-        self,
-        raw_requirements: str,
-        project_context: str,
-        context: AgentContext,
-    ) -> str | None:
-        """Check if RLM exploration is needed and execute if so.
-
-        Args:
-            raw_requirements: Raw requirements text.
-            project_context: Project context.
-            context: Agent context.
-
-        Returns:
-            str | None: RLM exploration results or None.
-        """
-        if not self._rlm_integration:
-            return None
-
-        try:
-            # Check for ambiguities
-            ambiguity_prompt = format_ambiguity_detection_prompt(
-                raw_requirements, project_context
-            )
-
-            response = await self._llm_client.generate(
-                prompt=ambiguity_prompt,
-                system=PRD_SYSTEM_PROMPT,
-                max_tokens=2000,
-                temperature=0.2,
-            )
-
-            analysis = self._parse_json_from_response(response.content)
-
-            if not analysis:
-                return None
-
-            # Check if RLM exploration is recommended
-            if analysis.get("recommended_action") != "research":
-                return None
-
-            # Check if we have issues that need research
-            issues_needing_research = [
-                issue for issue in analysis.get("issues", [])
-                if issue.get("research_needed", False)
-            ]
-
-            if not issues_needing_research:
-                return None
-
-            # Build research query
-            research_queries = [
-                issue.get("description", "") for issue in issues_needing_research
-            ]
-            combined_query = (
-                f"Research the following technical aspects for PRD generation:\n"
-                + "\n".join(f"- {q}" for q in research_queries)
-            )
-
-            # Execute RLM exploration
-            trigger_result = self._rlm_integration.should_use_rlm(
-                query=combined_query,
-                context_tokens=len(raw_requirements) // 4,
-                agent_type=self.agent_type,
-            )
-
-            if not trigger_result.should_trigger:
-                return None
-
-            logger.info(f"PRD Agent triggering RLM exploration for task {context.task_id}")
-
-            rlm_result = await self._rlm_integration.explore(
-                query=combined_query,
-                context_hints=["docs/", "README.md", "requirements/"],
-                task_id=context.task_id,
-            )
-
-            if rlm_result.error:
-                logger.warning(f"RLM exploration failed: {rlm_result.error}")
-                return None
-
-            return rlm_result.formatted_output
-
-        except Exception as e:
-            logger.warning(f"RLM check/exploration failed: {e}")
-            return None
-
-    def _parse_json_from_response(self, content: str) -> dict[str, Any] | None:
-        """Parse JSON from LLM response, handling code blocks.
-
-        Args:
-            content: Raw LLM response content.
-
-        Returns:
-            dict | None: Parsed JSON or None if parsing fails.
-        """
-        # Try direct JSON parse first
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-
-        # Try extracting from code blocks
-        import re
-
-        # Match ```json ... ``` or ``` ... ```
-        patterns = [
-            r'```json\s*\n?(.*?)\n?```',
-            r'```\s*\n?(.*?)\n?```',
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, content, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    continue
-
-        # Try finding JSON-like content
-        json_start = content.find('{')
-        json_end = content.rfind('}')
-        if json_start != -1 and json_end != -1 and json_end > json_start:
-            try:
-                return json.loads(content[json_start:json_end + 1])
-            except json.JSONDecodeError:
-                pass
-
-        return None
 
     def validate_context(self, context: AgentContext) -> bool:
         """Validate that context is suitable for execution.

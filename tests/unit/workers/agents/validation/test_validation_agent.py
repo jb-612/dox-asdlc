@@ -1,15 +1,15 @@
 """Tests for ValidationAgent.
 
-Tests the RLM-enabled validation agent that runs E2E tests,
+Tests the backend-based validation agent that runs E2E tests,
 checks integration points, and generates validation reports.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from src.workers.agents.backends.base import BackendResult
 from src.workers.agents.protocols import AgentContext, AgentResult
 from src.workers.agents.validation.config import ValidationConfig
 from src.workers.agents.validation.models import (
@@ -20,8 +20,7 @@ from src.workers.agents.validation.models import (
 from src.workers.agents.development.models import TestResult, TestRunResult
 
 
-# Import the module under test (will be created)
-# These imports will fail until implementation exists
+# Import the module under test
 from src.workers.agents.validation.validation_agent import (
     ValidationAgent,
     ValidationAgentError,
@@ -29,11 +28,17 @@ from src.workers.agents.validation.validation_agent import (
 
 
 @pytest.fixture
-def mock_llm_client():
-    """Create a mock LLM client."""
-    client = AsyncMock()
-    client.generate = AsyncMock()
-    return client
+def mock_backend():
+    """Create a mock agent backend."""
+    backend = AsyncMock()
+    backend.backend_name = "mock"
+    backend.execute = AsyncMock(return_value=BackendResult(
+        success=True,
+        output='{"checks": [], "recommendations": []}',
+        structured_output={"checks": [], "recommendations": []},
+    ))
+    backend.health_check = AsyncMock(return_value=True)
+    return backend
 
 
 @pytest.fixture
@@ -52,19 +57,9 @@ def mock_test_runner():
 
 
 @pytest.fixture
-def mock_rlm_integration():
-    """Create a mock RLM integration."""
-    rlm = MagicMock()
-    rlm.should_use_rlm = MagicMock()
-    rlm.explore = AsyncMock()
-    return rlm
-
-
-@pytest.fixture
 def validation_config():
     """Create a validation configuration."""
     return ValidationConfig(
-        enable_rlm=True,
         e2e_test_timeout=300,
         security_scan_level="standard",
     )
@@ -167,14 +162,14 @@ class TestValidationAgentInit:
 
     def test_creates_with_required_args(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
     ):
         """Test that agent can be created with required arguments."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -183,36 +178,16 @@ class TestValidationAgentInit:
         assert agent is not None
         assert agent.agent_type == "validation_agent"
 
-    def test_creates_with_rlm_integration(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        mock_rlm_integration,
-    ):
-        """Test that agent can be created with RLM integration."""
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        assert agent is not None
-        assert agent._rlm_integration is mock_rlm_integration
-
     def test_agent_type_is_validation_agent(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
     ):
         """Test that agent_type property returns correct value."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -227,7 +202,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_implementation(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -235,7 +210,7 @@ class TestValidationAgentExecute:
     ):
         """Test that execute returns failure when no implementation provided."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -253,7 +228,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_returns_failure_when_no_acceptance_criteria(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -261,7 +236,7 @@ class TestValidationAgentExecute:
     ):
         """Test that execute returns failure when no acceptance criteria provided."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -282,7 +257,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_runs_e2e_tests_successfully(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -292,24 +267,26 @@ class TestValidationAgentExecute:
         """Test that agent runs E2E tests and succeeds with passing tests."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        # Mock LLM response for validation analysis
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        # Mock backend response for validation analysis
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": true,
+                        "passed": True,
                         "details": "All E2E tests passed",
-                        "evidence": "test_output.log"
+                        "evidence": "test_output.log",
                     }
                 ],
-                "recommendations": []
-            }"""
+                "recommendations": [],
+            },
         )
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -332,7 +309,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_fails_when_e2e_tests_fail(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -342,24 +319,26 @@ class TestValidationAgentExecute:
         """Test that agent fails when E2E tests fail."""
         mock_test_runner.run_tests.return_value = failing_test_run_result
 
-        # Mock LLM response for validation analysis
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        # Mock backend response for validation analysis
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": false,
+                        "passed": False,
                         "details": "Integration test failed",
-                        "evidence": "test_output.log"
+                        "evidence": "test_output.log",
                     }
                 ],
-                "recommendations": ["Fix integration issues"]
-            }"""
+                "recommendations": ["Fix integration issues"],
+            },
         )
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -381,7 +360,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_generates_validation_report(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -391,30 +370,32 @@ class TestValidationAgentExecute:
         """Test that agent generates a proper validation report."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [
                     {
                         "name": "E2E Tests",
                         "category": "functional",
-                        "passed": true,
+                        "passed": True,
                         "details": "All tests passed",
-                        "evidence": null
+                        "evidence": None,
                     },
                     {
                         "name": "Integration Check",
                         "category": "compatibility",
-                        "passed": true,
+                        "passed": True,
                         "details": "All integrations verified",
-                        "evidence": null
-                    }
+                        "evidence": None,
+                    },
                 ],
-                "recommendations": ["Consider adding more edge case tests"]
-            }"""
+                "recommendations": ["Consider adding more edge case tests"],
+            },
         )
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -442,7 +423,7 @@ class TestValidationAgentExecute:
     @pytest.mark.asyncio
     async def test_writes_artifacts(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -452,15 +433,17 @@ class TestValidationAgentExecute:
         """Test that agent writes artifacts correctly."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
 
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
+        mock_backend.execute.return_value = BackendResult(
+            success=True,
+            output='{}',
+            structured_output={
                 "checks": [],
-                "recommendations": []
-            }"""
+                "recommendations": [],
+            },
         )
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -480,432 +463,12 @@ class TestValidationAgentExecute:
         assert len(result.artifact_paths) > 0
 
 
-class TestValidationAgentRLMIntegration:
-    """Tests for ValidationAgent RLM integration."""
-
-    @pytest.mark.asyncio
-    async def test_uses_rlm_for_intermittent_failures(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        agent_context,
-        intermittent_test_run_result,
-        mock_rlm_integration,
-    ):
-        """Test that agent uses RLM when tests have intermittent failures."""
-        mock_test_runner.run_tests.return_value = intermittent_test_run_result
-
-        # Configure RLM to trigger for intermittent failures
-        mock_rlm_integration.should_use_rlm.return_value = MagicMock(
-            should_trigger=True,
-            reasons=["Intermittent test failures detected"],
-        )
-        mock_rlm_integration.explore.return_value = MagicMock(
-            formatted_output="RLM found: Test depends on external service timing",
-            error=None,
-        )
-
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [
-                    {
-                        "name": "E2E Tests",
-                        "category": "functional",
-                        "passed": false,
-                        "details": "Intermittent failure analyzed via RLM",
-                        "evidence": "rlm_analysis.md"
-                    }
-                ],
-                "recommendations": ["Add retry logic for flaky tests"]
-            }"""
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "implementation": {"files": [{"path": "test.py", "content": "pass"}]},
-                "acceptance_criteria": ["Feature works"],
-                "test_path": "/workspace/tests/e2e",
-            },
-        )
-
-        # Verify RLM was used
-        assert mock_rlm_integration.explore.called
-        assert result.metadata.get("used_rlm") is True
-
-    @pytest.mark.asyncio
-    async def test_uses_rlm_for_performance_regression(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        agent_context,
-        mock_rlm_integration,
-    ):
-        """Test that agent uses RLM when performance regression detected."""
-        # Create a test result with performance issues
-        perf_test_result = TestRunResult(
-            suite_id="e2e-suite",
-            results=[
-                TestResult(
-                    test_id="test_performance",
-                    passed=False,
-                    output="Test failed: response time exceeded threshold",
-                    error="PerformanceError: 5000ms > 1000ms threshold",
-                    duration_ms=5000,
-                ),
-            ],
-            passed=0,
-            failed=1,
-            coverage=80.0,
-            metadata={"performance_regression": True},
-        )
-        mock_test_runner.run_tests.return_value = perf_test_result
-
-        mock_rlm_integration.should_use_rlm.return_value = MagicMock(
-            should_trigger=True,
-            reasons=["Performance regression detected"],
-        )
-        mock_rlm_integration.explore.return_value = MagicMock(
-            formatted_output="RLM found: N+1 query issue in new code",
-            error=None,
-        )
-
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [
-                    {
-                        "name": "Performance Check",
-                        "category": "performance",
-                        "passed": false,
-                        "details": "Performance regression found via RLM",
-                        "evidence": "rlm_perf_analysis.md"
-                    }
-                ],
-                "recommendations": ["Fix N+1 query issue"]
-            }"""
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "implementation": {"files": [{"path": "test.py", "content": "pass"}]},
-                "acceptance_criteria": ["Feature is performant"],
-                "test_path": "/workspace/tests/e2e",
-            },
-        )
-
-        assert mock_rlm_integration.explore.called
-        assert result.metadata.get("used_rlm") is True
-
-    @pytest.mark.asyncio
-    async def test_uses_rlm_for_integration_issues(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        agent_context,
-        mock_rlm_integration,
-    ):
-        """Test that agent uses RLM when integration issues detected."""
-        # Create a test result with integration issues
-        integration_test_result = TestRunResult(
-            suite_id="e2e-suite",
-            results=[
-                TestResult(
-                    test_id="test_external_api",
-                    passed=False,
-                    output="Test failed: external API integration error",
-                    error="IntegrationError: API contract mismatch",
-                    duration_ms=200,
-                ),
-            ],
-            passed=0,
-            failed=1,
-            coverage=70.0,
-            metadata={"integration_failure": True},
-        )
-        mock_test_runner.run_tests.return_value = integration_test_result
-
-        mock_rlm_integration.should_use_rlm.return_value = MagicMock(
-            should_trigger=True,
-            reasons=["Integration issues with external systems"],
-        )
-        mock_rlm_integration.explore.return_value = MagicMock(
-            formatted_output="RLM found: API version mismatch",
-            error=None,
-        )
-
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [
-                    {
-                        "name": "Integration Check",
-                        "category": "compatibility",
-                        "passed": false,
-                        "details": "API contract mismatch found via RLM",
-                        "evidence": "rlm_integration_analysis.md"
-                    }
-                ],
-                "recommendations": ["Update API client to match new contract"]
-            }"""
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "implementation": {"files": [{"path": "test.py", "content": "pass"}]},
-                "acceptance_criteria": ["Integration works"],
-                "test_path": "/workspace/tests/e2e",
-            },
-        )
-
-        assert mock_rlm_integration.explore.called
-        assert result.metadata.get("used_rlm") is True
-
-    @pytest.mark.asyncio
-    async def test_skips_rlm_when_disabled(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        agent_context,
-        passing_test_run_result,
-        mock_rlm_integration,
-    ):
-        """Test that agent skips RLM when disabled in config."""
-        config = ValidationConfig(enable_rlm=False)
-        mock_test_runner.run_tests.return_value = passing_test_run_result
-
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [],
-                "recommendations": []
-            }"""
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "implementation": {"files": [{"path": "test.py", "content": "pass"}]},
-                "acceptance_criteria": ["Feature works"],
-                "test_path": "/workspace/tests/e2e",
-            },
-        )
-
-        # RLM should not be called when disabled
-        assert not mock_rlm_integration.explore.called
-        assert result.metadata.get("used_rlm") is False
-
-    @pytest.mark.asyncio
-    async def test_handles_rlm_failure_gracefully(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        agent_context,
-        intermittent_test_run_result,
-        mock_rlm_integration,
-    ):
-        """Test that agent handles RLM failures gracefully."""
-        # Use intermittent test result to trigger RLM
-        mock_test_runner.run_tests.return_value = intermittent_test_run_result
-
-        mock_rlm_integration.should_use_rlm.return_value = MagicMock(
-            should_trigger=True,
-            reasons=["Test failure"],
-        )
-        mock_rlm_integration.explore.return_value = MagicMock(
-            formatted_output="",
-            error="RLM exploration failed: timeout",
-        )
-
-        mock_llm_client.generate.return_value = MagicMock(
-            content="""{
-                "checks": [
-                    {
-                        "name": "E2E Tests",
-                        "category": "functional",
-                        "passed": false,
-                        "details": "Tests failed",
-                        "evidence": null
-                    }
-                ],
-                "recommendations": []
-            }"""
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-            rlm_integration=mock_rlm_integration,
-        )
-
-        result = await agent.execute(
-            context=agent_context,
-            event_metadata={
-                "implementation": {"files": [{"path": "test.py", "content": "pass"}]},
-                "acceptance_criteria": ["Feature works"],
-                "test_path": "/workspace/tests/e2e",
-            },
-        )
-
-        # Should still produce a result even with RLM failure
-        assert result.agent_type == "validation_agent"
-        assert result.metadata.get("rlm_error") is not None
-
-
-class TestValidationAgentNeedsRLM:
-    """Tests for the _needs_rlm_validation internal method."""
-
-    def test_returns_true_for_intermittent_failures(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        intermittent_test_run_result,
-    ):
-        """Test that _needs_rlm_validation returns True for intermittent failures."""
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-        )
-
-        # Intermittent failures should trigger RLM
-        result = agent._needs_rlm_validation(intermittent_test_run_result)
-        assert result is True
-
-    def test_returns_true_for_performance_issues(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-    ):
-        """Test that _needs_rlm_validation returns True for performance issues."""
-        perf_result = TestRunResult(
-            suite_id="suite",
-            results=[],
-            passed=0,
-            failed=1,
-            coverage=0,
-            metadata={"performance_regression": True},
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-        )
-
-        result = agent._needs_rlm_validation(perf_result)
-        assert result is True
-
-    def test_returns_true_for_integration_failures(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-    ):
-        """Test that _needs_rlm_validation returns True for integration failures."""
-        integration_result = TestRunResult(
-            suite_id="suite",
-            results=[
-                TestResult(
-                    test_id="test",
-                    passed=False,
-                    output="",
-                    error="IntegrationError: connection failed",
-                    duration_ms=0,
-                ),
-            ],
-            passed=0,
-            failed=1,
-            coverage=0,
-            metadata={"integration_failure": True},
-        )
-
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-        )
-
-        result = agent._needs_rlm_validation(integration_result)
-        assert result is True
-
-    def test_returns_false_for_simple_failures(
-        self,
-        mock_llm_client,
-        mock_artifact_writer,
-        mock_test_runner,
-        validation_config,
-        failing_test_run_result,
-    ):
-        """Test that _needs_rlm_validation returns False for simple failures."""
-        agent = ValidationAgent(
-            llm_client=mock_llm_client,
-            artifact_writer=mock_artifact_writer,
-            test_runner=mock_test_runner,
-            config=validation_config,
-        )
-
-        # Simple assertion failures should not trigger RLM
-        result = agent._needs_rlm_validation(failing_test_run_result)
-        assert result is False
-
-
 class TestValidationAgentValidateContext:
     """Tests for context validation."""
 
     def test_validates_complete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -913,7 +476,7 @@ class TestValidationAgentValidateContext:
     ):
         """Test that complete context passes validation."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -923,14 +486,14 @@ class TestValidationAgentValidateContext:
 
     def test_rejects_incomplete_context(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
     ):
         """Test that incomplete context fails validation."""
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -952,7 +515,7 @@ class TestValidationAgentErrorHandling:
     @pytest.mark.asyncio
     async def test_handles_test_runner_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -962,7 +525,7 @@ class TestValidationAgentErrorHandling:
         mock_test_runner.run_tests.side_effect = Exception("Test runner crashed")
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -982,21 +545,21 @@ class TestValidationAgentErrorHandling:
         assert result.should_retry is True
 
     @pytest.mark.asyncio
-    async def test_handles_llm_error(
+    async def test_handles_backend_error(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
         agent_context,
         passing_test_run_result,
     ):
-        """Test that agent handles LLM errors gracefully."""
+        """Test that agent handles backend errors gracefully."""
         mock_test_runner.run_tests.return_value = passing_test_run_result
-        mock_llm_client.generate.side_effect = Exception("LLM service unavailable")
+        mock_backend.execute.side_effect = Exception("Backend service unavailable")
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,
@@ -1012,13 +575,13 @@ class TestValidationAgentErrorHandling:
         )
 
         assert result.success is False
-        assert "LLM service unavailable" in result.error_message
+        assert "Backend service unavailable" in result.error_message
         assert result.should_retry is True
 
     @pytest.mark.asyncio
     async def test_handles_test_timeout(
         self,
-        mock_llm_client,
+        mock_backend,
         mock_artifact_writer,
         mock_test_runner,
         validation_config,
@@ -1032,7 +595,7 @@ class TestValidationAgentErrorHandling:
         )
 
         agent = ValidationAgent(
-            llm_client=mock_llm_client,
+            backend=mock_backend,
             artifact_writer=mock_artifact_writer,
             test_runner=mock_test_runner,
             config=validation_config,

@@ -18,7 +18,7 @@ Example:
     )
 
     coordinator = DesignCoordinator(
-        llm_client=client,
+        backend=backend,
         artifact_writer=writer,
         hitl_dispatcher=dispatcher,
         config=DesignConfig(),
@@ -29,6 +29,8 @@ Example:
         prd_content="Build a user authentication system...",
     )
 """
+
+from typing import TYPE_CHECKING
 
 from src.workers.agents.design.config import DesignConfig, ConfigValidationError
 from src.workers.agents.design.models import (
@@ -51,7 +53,7 @@ from src.workers.agents.design.models import (
 )
 from src.workers.agents.design.surveyor_agent import SurveyorAgent, SurveyorAgentError
 from src.workers.agents.design.architect_agent import ArchitectAgent, ArchitectAgentError
-from src.workers.agents.design.planner_agent import PlannerAgent, PlannerAgentError
+from src.workers.agents.design.planner_agent import PlannerAgent
 from src.workers.agents.design.coordinator import (
     DesignCoordinator,
     DesignCoordinatorError,
@@ -88,7 +90,6 @@ __all__ = [
     "ArchitectAgent",
     "ArchitectAgentError",
     "PlannerAgent",
-    "PlannerAgentError",
     # Coordinator
     "DesignCoordinator",
     "DesignCoordinatorError",
@@ -103,7 +104,7 @@ AGENT_METADATA = {
         "phase": "design",
         "inputs": ["prd_content", "prd_reference"],
         "outputs": ["tech_survey.json", "tech_survey.md"],
-        "capabilities": ["technology_analysis", "rlm_research", "context_pack_consumption"],
+        "capabilities": ["technology_analysis", "context_pack_consumption"],
     },
     "architect_agent": {
         "class": ArchitectAgent,
@@ -129,7 +130,7 @@ def register_design_agents(dispatcher: "AgentDispatcher") -> None:
 
     Note: This function is called from workers/main.py with proper
     dependency injection. The actual instantiation requires dependencies
-    (llm_client, artifact_writer, etc.) that must be provided at runtime.
+    (backend, artifact_writer, etc.) that must be provided at runtime.
 
     Args:
         dispatcher: The agent dispatcher to register with.
@@ -150,42 +151,36 @@ def register_design_agents(dispatcher: "AgentDispatcher") -> None:
 
 
 def create_surveyor_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DesignConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
-    repo_mapper: "RepoMapper | None" = None,
 ) -> SurveyorAgent:
     """Factory function to create a Surveyor agent.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration for deep research.
-        repo_mapper: Optional RepoMapper for context pack.
 
     Returns:
         SurveyorAgent: Configured Surveyor agent instance.
     """
     return SurveyorAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DesignConfig(),
-        rlm_integration=rlm_integration,
-        repo_mapper=repo_mapper,
     )
 
 
 def create_architect_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DesignConfig | None = None,
 ) -> ArchitectAgent:
     """Factory function to create an Architect agent.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -193,21 +188,21 @@ def create_architect_agent(
         ArchitectAgent: Configured Architect agent instance.
     """
     return ArchitectAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DesignConfig(),
     )
 
 
 def create_planner_agent(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     config: DesignConfig | None = None,
 ) -> PlannerAgent:
     """Factory function to create a Planner agent.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         config: Optional configuration.
 
@@ -215,38 +210,32 @@ def create_planner_agent(
         PlannerAgent: Configured Planner agent instance.
     """
     return PlannerAgent(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         config=config or DesignConfig(),
     )
 
 
 def create_design_coordinator(
-    llm_client: "LLMClient",
+    backend: "AgentBackend",
     artifact_writer: "ArtifactWriter",
     hitl_dispatcher: "HITLDispatcher | None" = None,
     config: DesignConfig | None = None,
-    rlm_integration: "RLMIntegration | None" = None,
-    repo_mapper: "RepoMapper | None" = None,
 ) -> DesignCoordinator:
     """Factory function to create a Design coordinator.
 
     Args:
-        llm_client: LLM client for generation.
+        backend: Agent backend for generation.
         artifact_writer: Writer for artifacts.
         hitl_dispatcher: Optional HITL dispatcher.
         config: Optional configuration.
-        rlm_integration: Optional RLM integration.
-        repo_mapper: Optional RepoMapper for context pack.
 
     Returns:
         DesignCoordinator: Configured coordinator instance.
     """
     return DesignCoordinator(
-        llm_client=llm_client,
+        backend=backend,
         artifact_writer=artifact_writer,
         hitl_dispatcher=hitl_dispatcher,
         config=config or DesignConfig(),
-        rlm_integration=rlm_integration,
-        repo_mapper=repo_mapper,
     )
