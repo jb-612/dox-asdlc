@@ -109,12 +109,22 @@ export default function FormatTabContent({
     if (!content) return;
 
     try {
-      // For PNG, copy the base64 data (or could copy as image)
-      await navigator.clipboard.writeText(content);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopySuccess(true);
       onCopy?.();
     } catch {
-      // Clipboard write failed
+      console.warn('Failed to copy content to clipboard');
     }
   }, [content, onCopy]);
 

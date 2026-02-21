@@ -777,8 +777,6 @@ export async function saveMockDraft(
   const status = draft.status || existing?.status || 'draft';
   const dataSource = draft.dataSource || existing?.dataSource || 'mock';
 
-  console.log('[Mock] Saving draft:', sessionId, projectName, status, dataSource);
-
   mockDrafts.set(sessionId, {
     messages: draft.messages,
     maturity: draft.maturity,
@@ -788,8 +786,6 @@ export async function saveMockDraft(
     dataSource,
     lastModified: new Date().toISOString(),
   });
-
-  console.log('[Mock] Total drafts after save:', mockDrafts.size);
 }
 
 /**

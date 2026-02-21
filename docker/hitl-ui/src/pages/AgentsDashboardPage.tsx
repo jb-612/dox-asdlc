@@ -8,7 +8,7 @@
  * - Agent selection for log viewing
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowPathIcon,
@@ -63,9 +63,6 @@ export default function AgentsDashboardPage({ className }: AgentsDashboardPagePr
 
   // Get effective refresh interval
   const refreshInterval = getEffectiveRefreshInterval();
-
-  // Local state for collapsible sections
-  const [timelineExpanded, setTimelineExpanded] = useState(true);
 
   // Data fetching
   const {

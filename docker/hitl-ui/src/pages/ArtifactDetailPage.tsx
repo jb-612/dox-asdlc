@@ -78,20 +78,20 @@ export default function ArtifactDetailPage() {
   };
 
   const handleDownload = () => {
-    console.log('Download requested for:', artifactId);
+    // TODO: Implement artifact download
   };
 
-  const handleExport = (format: string) => {
-    console.log('Export requested:', format, artifactId);
+  const handleExport = (_format: string) => {
+    // TODO: Implement artifact export
     setShowExportMenu(false);
   };
 
   const handleViewInGit = () => {
-    console.log('View in Git requested for:', artifactId);
+    // TODO: Implement view in Git
   };
 
   const handleSubmitToGate = () => {
-    console.log('Submit to Gate requested for:', artifactId);
+    // TODO: Implement submit to gate
   };
 
   const handleBack = () => {

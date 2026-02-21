@@ -70,7 +70,7 @@ export function BrainflareHubPage({ className }: BrainflareHubPageProps) {
       const data = await fetchGraph(useMock);
       setGraphData(data.nodes, data.edges);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }

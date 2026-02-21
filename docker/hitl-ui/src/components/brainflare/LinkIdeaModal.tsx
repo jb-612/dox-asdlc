@@ -44,7 +44,7 @@ export function LinkIdeaModal({ sourceIdea, onClose, onLinked }: LinkIdeaModalPr
         // Exclude the source idea from the list
         setIdeas(response.ideas.filter((i) => i.id !== sourceIdea.id));
       } catch (e) {
-        setError((e as Error).message);
+        setError((e instanceof Error ? e.message : String(e)));
       } finally {
         setIsLoading(false);
       }
@@ -70,7 +70,7 @@ export function LinkIdeaModal({ sourceIdea, onClose, onLinked }: LinkIdeaModalPr
       });
       onLinked();
     } catch (e) {
-      setError((e as Error).message);
+      setError((e instanceof Error ? e.message : String(e)));
       setIsSubmitting(false);
     }
   };

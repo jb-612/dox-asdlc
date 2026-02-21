@@ -14,6 +14,11 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: 'completed', label: 'Completed' },
 ];
 
+export interface SessionsPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function SessionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusParam = searchParams.get('status') as StatusFilter | null;

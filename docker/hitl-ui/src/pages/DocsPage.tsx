@@ -206,6 +206,11 @@ const mockTerms: GlossaryTerm[] = [
   },
 ];
 
+export interface DocsPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function DocsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();

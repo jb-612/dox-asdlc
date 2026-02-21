@@ -85,7 +85,7 @@ describe('ReviewBackendToggle', () => {
     const realButton = screen.getByTestId('review-source-real');
     fireEvent.click(realButton);
 
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('review-data-source', 'real');
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('asdlc:review-data-source', 'real');
   });
 
   it('applies custom className', () => {

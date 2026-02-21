@@ -1,41 +1,42 @@
 import { useEffect, useCallback, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import Layout from "./components/layout/Layout";
-import { initMermaid } from "./config/mermaid";
+
+import { useDevOpsActivity } from "./api/devops";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { ErrorFallback } from "./components/common/ErrorFallback";
 import { LoadingSpinner } from "./components/common/LoadingStates";
+import { DevOpsNotificationBanner } from "./components/devops";
+import Layout from "./components/layout/Layout";
+import { initMermaid } from "./config/mermaid";
+import { useDevOpsStore } from "./stores/devopsStore";
 
 // Lazy-loaded pages for code splitting
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const GatesPage = lazy(() => import("./pages/GatesPage"));
-const GateDetailPage = lazy(() => import("./pages/GateDetailPage"));
-const WorkersPage = lazy(() => import("./pages/WorkersPage"));
-const SessionsPage = lazy(() => import("./pages/SessionsPage"));
-const CockpitPage = lazy(() => import("./pages/CockpitPage"));
-const RunDetailPage = lazy(() => import("./pages/RunDetailPage"));
-const ArtifactsPage = lazy(() => import("./pages/ArtifactsPage"));
+const AdminLabelsPage = lazy(() => import("./pages/AdminLabelsPage"));
+const AgentsDashboardPage = lazy(() => import("./pages/AgentsDashboardPage"));
+const ArchitectBoardPage = lazy(() => import("./pages/ArchitectBoardPage"));
 const ArtifactDetailPage = lazy(() => import("./pages/ArtifactDetailPage"));
-const DocsPage = lazy(() => import("./pages/DocsPage"));
+const ArtifactsPage = lazy(() => import("./pages/ArtifactsPage"));
+const BrainflareHubPage = lazy(() => import("./pages/BrainflareHubPage"));
+const CockpitPage = lazy(() => import("./pages/CockpitPage"));
+const CodeReviewPage = lazy(() => import("./pages/CodeReviewPage"));
+const CostDashboardPage = lazy(() => import("./pages/CostDashboardPage"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const DiagramDetailPage = lazy(() => import("./pages/DiagramDetailPage"));
 const DocDetailPage = lazy(() => import("./pages/DocDetailPage"));
+const DocsPage = lazy(() => import("./pages/DocsPage"));
+const GateDetailPage = lazy(() => import("./pages/GateDetailPage"));
+const GatesPage = lazy(() => import("./pages/GatesPage"));
+const GuardrailsPage = lazy(() => import("./pages/GuardrailsPage"));
+const K8sPage = lazy(() => import("./pages/K8sPage"));
+const LLMConfigPage = lazy(() => import("./pages/LLMConfigPage"));
+const MetricsPage = lazy(() => import("./pages/MetricsPage"));
+const RuleProposalsPage = lazy(() => import("./pages/RuleProposalsPage"));
+const RunDetailPage = lazy(() => import("./pages/RunDetailPage"));
+const SearchPage = lazy(() => import("./pages/SearchPage"));
+const SessionsPage = lazy(() => import("./pages/SessionsPage"));
 const StudioDiscoveryPage = lazy(() => import("./pages/StudioDiscoveryPage"));
 const StudioIdeationPage = lazy(() => import("./pages/StudioIdeationPage"));
-const RuleProposalsPage = lazy(() => import("./pages/RuleProposalsPage"));
-const CodeReviewPage = lazy(() => import("./pages/CodeReviewPage"));
-const K8sPage = lazy(() => import("./pages/K8sPage"));
-const MetricsPage = lazy(() => import("./pages/MetricsPage"));
-const SearchPage = lazy(() => import("./pages/SearchPage"));
-const AgentsDashboardPage = lazy(() => import("./pages/AgentsDashboardPage"));
-const LLMConfigPage = lazy(() => import("./pages/LLMConfigPage"));
-const AdminLabelsPage = lazy(() => import("./pages/AdminLabelsPage"));
-const BrainflareHubPage = lazy(() => import("./pages/BrainflareHubPage"));
-const ArchitectBoardPage = lazy(() => import("./pages/ArchitectBoardPage"));
-const GuardrailsPage = lazy(() => import("./pages/GuardrailsPage"));
-const CostDashboardPage = lazy(() => import("./pages/CostDashboardPage"));
-import { DevOpsNotificationBanner } from "./components/devops";
-import { useDevOpsActivity } from "./api/devops";
-import { useDevOpsStore } from "./stores/devopsStore";
+const WorkersPage = lazy(() => import("./pages/WorkersPage"));
 
 /**
  * Per-route ErrorBoundary wrapper to isolate route-level crashes
@@ -100,7 +101,7 @@ function DevOpsNotificationWrapper() {
 function App() {
   // Initialize theme on app load
   useEffect(() => {
-    const theme = localStorage.getItem("theme") || "dark";
+    const theme = localStorage.getItem("asdlc:theme") || "dark";
     document.documentElement.classList.toggle("dark", theme === "dark");
     initMermaid(theme as "light" | "dark");
   }, []);

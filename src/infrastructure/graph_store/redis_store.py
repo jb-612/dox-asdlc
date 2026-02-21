@@ -14,9 +14,21 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 from redis.asyncio import Redis
+
+_KEY_COMPONENT_PATTERN = re.compile(r"^[a-zA-Z0-9:._-]+$")
+
+
+def _validate_key_component(value: str, name: str = "key") -> None:
+    """Validate a Redis key component to prevent injection."""
+    if not value or not _KEY_COMPONENT_PATTERN.match(value):
+        raise ValueError(
+            f"Invalid Redis {name}: {value!r}. "
+            "Only alphanumeric characters, colons, dots, underscores, and hyphens are allowed."
+        )
 
 
 class RedisGraphStore:
@@ -106,6 +118,7 @@ class RedisGraphStore:
             node_id: Unique identifier for the node.
             properties: Dictionary of node properties to store.
         """
+        _validate_key_component(node_id, "node_id")
         redis = await self._get_redis()
         await redis.hset(
             f"GRAPH:NODE:{node_id}",
@@ -130,6 +143,9 @@ class RedisGraphStore:
             edge_type: Type of edge.
             properties: Optional edge properties.
         """
+        _validate_key_component(from_id, "from_id")
+        _validate_key_component(to_id, "to_id")
+        _validate_key_component(edge_type, "edge_type")
         redis = await self._get_redis()
         # Bidirectional adjacency
         await redis.sadd(f"GRAPH:NEIGHBORS:{from_id}:{edge_type}", to_id)
@@ -158,6 +174,9 @@ class RedisGraphStore:
         Returns:
             True if edge existed and was removed, False otherwise.
         """
+        _validate_key_component(from_id, "from_id")
+        _validate_key_component(to_id, "to_id")
+        _validate_key_component(edge_type, "edge_type")
         redis = await self._get_redis()
         removed = await redis.srem(f"GRAPH:NEIGHBORS:{from_id}:{edge_type}", to_id)
         await redis.srem(f"GRAPH:NEIGHBORS:{to_id}:{edge_type}", from_id)
@@ -179,6 +198,9 @@ class RedisGraphStore:
         Returns:
             List of neighbor node IDs.
         """
+        _validate_key_component(node_id, "node_id")
+        if edge_type:
+            _validate_key_component(edge_type, "edge_type")
         redis = await self._get_redis()
         if edge_type:
             members = await redis.smembers(f"GRAPH:NEIGHBORS:{node_id}:{edge_type}")
@@ -205,6 +227,9 @@ class RedisGraphStore:
         Returns:
             List of edge dictionaries.
         """
+        _validate_key_component(node_id, "node_id")
+        if edge_type:
+            _validate_key_component(edge_type, "edge_type")
         redis = await self._get_redis()
         edges: list[dict] = []
         neighbors = await self.get_neighbors(node_id, edge_type)
@@ -275,6 +300,9 @@ class RedisGraphStore:
         Returns:
             Tuple of (nodes, edges).
         """
+        if node_ids is not None:
+            for nid in node_ids:
+                _validate_key_component(nid, "node_id")
         redis = await self._get_redis()
         # Get all nodes or filtered
         if node_ids is None:
@@ -311,6 +339,7 @@ class RedisGraphStore:
         Args:
             node_id: The ID of the node to delete.
         """
+        _validate_key_component(node_id, "node_id")
         redis = await self._get_redis()
         # Get all neighbors to clean up reverse edges
         neighbors = await self.get_neighbors(node_id)

@@ -57,7 +57,7 @@ export const DEFAULT_TIME_RANGE: TimeRange = '1h';
 export const DEFAULT_BACKEND: MetricsBackendMode = 'mock';
 
 /** Storage key for persistence */
-const STORAGE_KEY = 'metrics-dashboard-store';
+const STORAGE_KEY = 'asdlc:metrics-dashboard-store';
 
 // ============================================================================
 // Initial State

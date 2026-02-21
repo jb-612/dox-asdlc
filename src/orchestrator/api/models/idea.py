@@ -11,6 +11,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from src.orchestrator.api.models.classification import ClassificationType
+
 
 class IdeaStatus(str, Enum):
     """Status of an idea."""
@@ -19,12 +21,8 @@ class IdeaStatus(str, Enum):
     ARCHIVED = "archived"
 
 
-class IdeaClassification(str, Enum):
-    """Classification type for ideas."""
-
-    FUNCTIONAL = "functional"
-    NON_FUNCTIONAL = "non_functional"
-    UNDETERMINED = "undetermined"
+# Alias for backward compatibility -- canonical definition lives in classification.py
+IdeaClassification = ClassificationType
 
 
 class Idea(BaseModel):

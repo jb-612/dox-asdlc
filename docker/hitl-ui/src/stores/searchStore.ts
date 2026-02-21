@@ -22,7 +22,7 @@ import type {
 // ============================================================================
 
 const MAX_RECENT_SEARCHES = 10;
-const STORAGE_KEY = 'knowledge-search-store';
+const STORAGE_KEY = 'asdlc:knowledge-search-store';
 
 // ============================================================================
 // Types

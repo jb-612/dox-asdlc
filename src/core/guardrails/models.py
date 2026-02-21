@@ -324,6 +324,7 @@ class TaskContext:
     tenant_id: str | None = None
     session_id: str | None = None
     metadata: dict[str, Any] | None = None
+    is_ambiguous: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Convert task context to dictionary for JSON serialization.
@@ -349,6 +350,8 @@ class TaskContext:
             result["session_id"] = self.session_id
         if self.metadata is not None:
             result["metadata"] = dict(self.metadata)
+        if self.is_ambiguous:
+            result["is_ambiguous"] = self.is_ambiguous
         return result
 
     @classmethod
@@ -371,6 +374,7 @@ class TaskContext:
             tenant_id=data.get("tenant_id"),
             session_id=data.get("session_id"),
             metadata=data.get("metadata"),
+            is_ambiguous=data.get("is_ambiguous", False),
         )
 
 

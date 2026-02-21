@@ -151,6 +151,13 @@ async def batch_classify(
     if not request.idea_ids:
         raise HTTPException(status_code=400, detail="idea_ids list cannot be empty")
 
+    MAX_BATCH_SIZE = 100
+    if len(request.idea_ids) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch size {len(request.idea_ids)} exceeds maximum of {MAX_BATCH_SIZE}",
+        )
+
     worker = get_classification_worker()
     job_id = await worker.enqueue_batch(request.idea_ids, force=force)
 

@@ -72,15 +72,29 @@ export default function CommandTerminal({
   }, [terminalHistory]);
 
   // Handle copy output
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     const output = terminalHistory
       .map((entry) => `$ ${entry.command}\n${entry.output}`)
       .join('\n\n');
 
-    navigator.clipboard.writeText(output).then(() => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(output);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = output;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    } catch {
+      console.warn('Failed to copy terminal output to clipboard');
+    }
   }, [terminalHistory]);
 
   // Handle clear terminal

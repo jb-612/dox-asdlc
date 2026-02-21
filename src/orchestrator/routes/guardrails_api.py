@@ -27,6 +27,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from fastapi.security import APIKeyHeader
 
 from src.core.guardrails.exceptions import (
     GuardrailsError,
@@ -65,6 +66,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/guardrails", tags=["guardrails"])
 
 MAX_IMPORT_BATCH_SIZE = 100
+
+# ---------------------------------------------------------------------------
+# Optional API key authentication for write endpoints
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+GUARDRAILS_API_KEY = os.getenv("GUARDRAILS_API_KEY", "")
+
+
+async def verify_api_key(
+    api_key: str | None = Depends(_api_key_header),
+) -> None:
+    """Verify the API key for write operations.
+
+    If ``GUARDRAILS_API_KEY`` is not set, authentication is disabled and all
+    requests are allowed through.
+
+    Raises:
+        HTTPException: 401 if the key is required but missing or invalid.
+    """
+    if not GUARDRAILS_API_KEY:
+        return  # Auth disabled when no key configured
+    if not api_key or api_key != GUARDRAILS_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 # ---------------------------------------------------------------------------
 # Lazy-init dependency for GuardrailsStore
@@ -567,6 +593,7 @@ async def export_guidelines(
 async def import_guidelines(
     body: list[GuidelineCreate],
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> dict[str, Any]:
     """Bulk import guidelines from a JSON array.
 
@@ -658,6 +685,7 @@ async def get_guideline(
 async def create_guideline(
     body: GuidelineCreate,
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> GuidelineResponse:
     """Create a new guardrails guideline.
 
@@ -695,6 +723,7 @@ async def update_guideline(
     guideline_id: str,
     body: GuidelineUpdate,
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> GuidelineResponse:
     """Update an existing guardrails guideline.
 
@@ -747,6 +776,7 @@ async def update_guideline(
 async def delete_guideline(
     guideline_id: str,
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> Response:
     """Delete a guardrails guideline.
 
@@ -789,6 +819,7 @@ async def delete_guideline(
 async def toggle_guideline(
     guideline_id: str,
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> GuidelineResponse:
     """Toggle the enabled state of a guideline.
 

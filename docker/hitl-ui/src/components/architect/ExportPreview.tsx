@@ -47,10 +47,21 @@ export default function ExportPreview({ className }: ExportPreviewProps) {
     if (!exportedSvg) return;
 
     try {
-      await navigator.clipboard.writeText(exportedSvg);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(exportedSvg);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = exportedSvg;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopySuccess(true);
     } catch {
-      // Clipboard write failed - silently ignore
+      console.warn('Failed to copy SVG to clipboard');
     }
   }, [exportedSvg]);
 

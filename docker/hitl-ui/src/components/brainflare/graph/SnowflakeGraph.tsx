@@ -75,7 +75,7 @@ export function SnowflakeGraph({ className }: SnowflakeGraphProps) {
         const data = await fetchGraph();
         setGraphData(data.nodes, data.edges);
       } catch (e) {
-        setError((e as Error).message);
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
@@ -123,6 +123,17 @@ export function SnowflakeGraph({ className }: SnowflakeGraphProps) {
     }),
     [filteredNodes, filteredEdges]
   );
+
+  // Fit graph to viewport after data loads or changes
+  useEffect(() => {
+    if (filteredNodes.length > 0 && graphRef.current) {
+      // Delay slightly to allow the force simulation to settle
+      const timer = setTimeout(() => {
+        graphRef.current?.zoomToFit(400, 40);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [filteredNodes.length]);
 
   // Node rendering
   const nodeCanvasObject = useCallback(

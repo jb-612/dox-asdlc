@@ -24,7 +24,7 @@ export type ReviewDataSource = 'mock' | 'real';
  */
 function getInitialDataSource(): ReviewDataSource {
   if (typeof window === 'undefined') return 'mock';
-  const stored = localStorage.getItem('review-data-source');
+  const stored = localStorage.getItem('asdlc:review-data-source');
   return stored === 'real' ? 'real' : 'mock';
 }
 
@@ -278,7 +278,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   // Data source toggle
   setDataSource: (source) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('review-data-source', source);
+      localStorage.setItem('asdlc:review-data-source', source);
     }
     set({ dataSource: source });
   },

@@ -72,7 +72,7 @@ export function IdeaForm({ idea, onSubmit, onCancel }: IdeaFormProps) {
             .filter(Boolean),
         });
       } catch (e) {
-        setError((e as Error).message);
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setIsSubmitting(false);
       }

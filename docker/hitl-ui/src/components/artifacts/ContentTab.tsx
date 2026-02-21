@@ -82,12 +82,27 @@ export default function ContentTab({
   const [validationExpanded, setValidationExpanded] = useState(false);
 
   // Handle copy
-  const handleCopy = useCallback(() => {
-    navigator.clipboard?.writeText(content).then(() => {
+  const handleCopy = useCallback(async () => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        // Fallback for non-secure contexts
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopied(true);
       onCopy?.();
       setTimeout(() => setCopied(false), 2000);
-    });
+    } catch (err) {
+      console.error('Failed to copy content:', err);
+    }
   }, [content, onCopy]);
 
   // Toggle TOC
@@ -206,9 +221,11 @@ export default function ContentTab({
           className="p-4 border-b border-border-primary"
           data-testid="validation-status"
         >
-          <div
+          <button
+            type="button"
             onClick={handleToggleValidation}
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2 cursor-pointer w-full text-left"
+            aria-expanded={validationExpanded}
             data-testid="expand-validation"
           >
             {validationExpanded ? (
@@ -240,7 +257,7 @@ export default function ContentTab({
             <span className="text-xs text-text-muted" data-testid="validation-time">
               Checked {formatTimestamp(validation.checkedAt)}
             </span>
-          </div>
+          </button>
 
           {validationExpanded && (
             <div className="mt-3 ml-6 space-y-2">

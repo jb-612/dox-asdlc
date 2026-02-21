@@ -206,10 +206,21 @@ export default function DiagramViewer({
   // Export: Copy source
   const handleCopySource = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(diagram.content);
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(diagram.content);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = diagram.content;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
       setCopySuccess(true);
     } catch {
-      // Clipboard write failed
+      console.warn('Failed to copy diagram source to clipboard');
     }
   }, [diagram.content]);
 

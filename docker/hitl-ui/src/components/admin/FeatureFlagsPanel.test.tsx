@@ -68,7 +68,7 @@ describe('FeatureFlagsPanel', () => {
       const docsSwitch = screen.getAllByRole('switch')[2];
       fireEvent.click(docsSwitch);
 
-      expect(localStorage.getItem('feature_docs')).toBe('false');
+      expect(localStorage.getItem('asdlc:feature_docs')).toBe('false');
     });
 
     it('resets all flags on reset button click', () => {
@@ -82,8 +82,8 @@ describe('FeatureFlagsPanel', () => {
       fireEvent.click(resetButton);
 
       // All flags should be reset to defaults
-      expect(localStorage.getItem('feature_docs')).toBeNull();
-      expect(localStorage.getItem('feature_cockpit')).toBeNull();
+      expect(localStorage.getItem('asdlc:feature_docs')).toBeNull();
+      expect(localStorage.getItem('asdlc:feature_cockpit')).toBeNull();
     });
   });
 

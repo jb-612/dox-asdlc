@@ -410,7 +410,7 @@ export const useIdeationStore = create<IdeationState>()(
   },
     }),
     {
-      name: 'ideation-session',
+      name: 'asdlc:ideation-session',
       version: 1,
       storage: createJSONStorage(() => localStorage),
       migrate: (persisted: unknown, version: number) => {

@@ -353,7 +353,7 @@ describe('searchStore', () => {
 
       // Check localStorage
       const stored = JSON.parse(
-        localStorage.getItem('knowledge-search-store') || '{}'
+        localStorage.getItem('asdlc:knowledge-search-store') || '{}'
       );
 
       expect(stored.state.recentSearches).toHaveLength(1);
@@ -368,7 +368,7 @@ describe('searchStore', () => {
       });
 
       const stored = JSON.parse(
-        localStorage.getItem('knowledge-search-store') || '{}'
+        localStorage.getItem('asdlc:knowledge-search-store') || '{}'
       );
 
       expect(stored.state.filtersOpen).toBeUndefined();

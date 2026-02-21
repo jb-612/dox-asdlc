@@ -33,7 +33,7 @@ export interface DocSearchProps {
 /** Maximum number of recent searches to store */
 const MAX_RECENT_SEARCHES = 5;
 /** LocalStorage key for recent searches */
-const RECENT_SEARCHES_KEY = 'doc-search-recent';
+const RECENT_SEARCHES_KEY = 'asdlc:doc-search-recent';
 
 /** Internal search result with score for sorting */
 interface ScoredResult extends SearchResult {

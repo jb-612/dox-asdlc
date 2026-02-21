@@ -62,15 +62,15 @@ export default function RunDetailPage() {
   const run = { ...mockRunData, id: runId || 'unknown' };
 
   const handleRerun = () => {
-    console.log('Rerun requested for:', runId);
+    // TODO: Implement rerun functionality
   };
 
   const handleExport = () => {
-    console.log('Export requested for:', runId);
+    // TODO: Implement export functionality
   };
 
   const handleEscalate = () => {
-    console.log('Escalate requested for:', runId);
+    // TODO: Implement escalation functionality
   };
 
   // Format duration as "Xm Ys"

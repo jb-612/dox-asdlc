@@ -92,7 +92,7 @@ export const useBrainflareStore = create<BrainflareState>((set, get) => ({
       });
     } catch (e) {
       set({
-        error: (e as Error).message,
+        error: (e instanceof Error ? e.message : String(e)),
         isLoading: false,
       });
     }
@@ -107,7 +107,7 @@ export const useBrainflareStore = create<BrainflareState>((set, get) => ({
       set({ classificationCounts: counts });
     } catch (e) {
       // Silently fail - counts are optional enhancement
-      console.warn('Failed to fetch classification counts:', (e as Error).message);
+      console.warn('Failed to fetch classification counts:', (e instanceof Error ? e.message : String(e)));
     }
   },
 

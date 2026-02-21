@@ -18,6 +18,7 @@ Endpoints:
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -438,6 +439,53 @@ async def get_active_tasks() -> ActiveTasksMetrics:
     )
 
 
+# PromQL query validation
+_ALLOWED_METRIC_PREFIXES = (
+    "asdlc_",
+    "process_",
+    "up",
+    "histogram_quantile",
+    "rate(",
+    "sum(",
+    "avg(",
+    "count(",
+    "group by",
+)
+
+_DANGEROUS_PATTERNS = re.compile(
+    r"(label_replace|label_join|count_values)\s*\(",
+    re.IGNORECASE,
+)
+
+MAX_QUERY_LENGTH = 2000
+
+
+def _validate_promql_query(query: str) -> None:
+    """Validate a PromQL query to prevent abuse.
+
+    Raises:
+        HTTPException: 400 if the query is invalid or disallowed.
+    """
+    if not query or not query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+    if len(query) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Query length {len(query)} exceeds maximum of {MAX_QUERY_LENGTH}",
+        )
+    if _DANGEROUS_PATTERNS.search(query):
+        raise HTTPException(
+            status_code=400,
+            detail="Query contains disallowed PromQL functions",
+        )
+    query_stripped = query.strip()
+    if not any(query_stripped.startswith(prefix) for prefix in _ALLOWED_METRIC_PREFIXES):
+        raise HTTPException(
+            status_code=400,
+            detail="Query must reference an allowed metric prefix (asdlc_*, process_*, up)",
+        )
+
+
 # Keep the generic query_range for advanced use cases
 @router.get("/query_range")
 async def query_range(
@@ -447,4 +495,5 @@ async def query_range(
     step: str = Query("15s", description="Query resolution step"),
 ) -> dict[str, Any]:
     """Proxy PromQL range queries to VictoriaMetrics."""
+    _validate_promql_query(query)
     return await query_victoriametrics(query, start, end, step)

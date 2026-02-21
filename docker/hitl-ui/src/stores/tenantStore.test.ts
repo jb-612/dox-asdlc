@@ -37,12 +37,12 @@ describe('tenantStore', () => {
     });
 
     expect(result.current.currentTenant).toBe('tenant-a');
-    expect(sessionStorage.getItem('currentTenant')).toBe('tenant-a');
+    expect(sessionStorage.getItem('asdlc:currentTenant')).toBe('tenant-a');
   });
 
   it('restores tenant from sessionStorage on initialization', async () => {
     // Set up sessionStorage before importing the module
-    sessionStorage.setItem('currentTenant', 'default');
+    sessionStorage.setItem('asdlc:currentTenant', 'default');
 
     const { useTenantStore } = await import('./tenantStore');
     const { result } = renderHook(() => useTenantStore());
@@ -105,7 +105,7 @@ describe('tenantStore', () => {
 
     // Should switch to first available
     expect(result.current.currentTenant).toBe('default');
-    expect(sessionStorage.getItem('currentTenant')).toBe('default');
+    expect(sessionStorage.getItem('asdlc:currentTenant')).toBe('default');
   });
 
   it('does not set tenant if not in allowed list', async () => {
@@ -138,7 +138,7 @@ describe('tenantStore', () => {
     });
 
     // Manually set session storage
-    sessionStorage.setItem('currentTenant', 'tenant-x');
+    sessionStorage.setItem('asdlc:currentTenant', 'tenant-x');
 
     // Call initialize
     act(() => {
@@ -166,7 +166,7 @@ describe('getCurrentTenantId', () => {
   });
 
   it('returns tenant ID from session storage', async () => {
-    sessionStorage.setItem('currentTenant', 'test-tenant');
+    sessionStorage.setItem('asdlc:currentTenant', 'test-tenant');
 
     const { getCurrentTenantId } = await import('./tenantStore');
 

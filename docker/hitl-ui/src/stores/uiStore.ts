@@ -4,7 +4,7 @@ import { updateMermaidTheme } from '../config/mermaid';
 // Safe localStorage access for SSR/test environments
 const getStoredTheme = (): 'light' | 'dark' => {
   if (typeof window !== 'undefined' && window.localStorage) {
-    const stored = localStorage.getItem('theme');
+    const stored = localStorage.getItem('asdlc:theme');
     if (stored === 'light' || stored === 'dark') {
       return stored;
     }
@@ -57,7 +57,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   theme: initialTheme,
   setTheme: (theme) => {
     if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem('theme', theme);
+      localStorage.setItem('asdlc:theme', theme);
     }
     set({ theme });
     if (typeof document !== 'undefined') {

@@ -99,6 +99,7 @@ flowchart TB
     ClassificationService --> Redis
     CorrelationService --> ES
     CorrelationService --> Redis
+    EmbeddingService --> ES
     CorrelationService -.->|"optional"| Neo4j
 
     %% Async processing
@@ -108,7 +109,7 @@ flowchart TB
 
     CorrelationService -->|"queue"| Redis
     Redis -->|"consume"| CorrelationWorker
-    CorrelationWorker -->|"embeddings"| ES
+    CorrelationWorker -->|"embeddings"| EmbeddingService
 
     %% HITL integration
     HITLDispatcher --> RedisStreams
@@ -125,7 +126,7 @@ flowchart TB
     class Slack,User external
     class GateConsumer,DecisionHandler,IdeaHandler,Policy,RBAC bridge
     class MindflareHub,SnowflakeGraph,IdeationStudio,IdeaCards,FilterPanel,GraphCanvas,GraphControls frontend
-    class IdeasAPI,CorrelationAPI,GraphAPI,ClassifyAPI,IdeasService,ClassificationService,CorrelationService backend
+    class IdeasAPI,CorrelationAPI,GraphAPI,ClassifyAPI,IdeasService,ClassificationService,CorrelationService,EmbeddingService backend
     class ES,Redis,Neo4j storage
     class ClassificationWorker,CorrelationWorker worker
     class HITLDispatcher,RedisStreams existing

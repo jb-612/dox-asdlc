@@ -258,14 +258,14 @@ describe('DocBrowser', () => {
 
       fireEvent.click(screen.getByTestId('category-header-system'));
 
-      const saved = localStorageMock.getItem('doc-browser-collapsed');
+      const saved = localStorageMock.getItem('asdlc:doc-browser-collapsed');
       expect(saved).toBeTruthy();
       const parsed = JSON.parse(saved!);
       expect(parsed).toContain('system');
     });
 
     it('restores collapsed state from localStorage', () => {
-      localStorageMock.setItem('doc-browser-collapsed', JSON.stringify(['system']));
+      localStorageMock.setItem('asdlc:doc-browser-collapsed', JSON.stringify(['system']));
 
       render(<DocBrowser documents={mockDocuments} onSelect={vi.fn()} />);
 

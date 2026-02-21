@@ -153,13 +153,11 @@ export class WebSocketClient {
     }
 
     this.socket.on('connect', () => {
-      console.log('[WebSocket] Connected');
       this.reconnectAttempts = 0;
       useEventStore.getState().setConnected(true);
     });
 
-    this.socket.on('disconnect', (reason: string) => {
-      console.log('[WebSocket] Disconnected:', reason);
+    this.socket.on('disconnect', (_reason: string) => {
       useEventStore.getState().setConnected(false);
     });
 
@@ -174,13 +172,11 @@ export class WebSocketClient {
     });
 
     this.socket.on('reconnect_attempt', (attemptNumber: number) => {
-      console.log(`[WebSocket] Reconnect attempt ${attemptNumber}`);
       this.reconnectAttempts = attemptNumber;
       useEventStore.getState().setReconnecting(true);
     });
 
-    this.socket.on('reconnect', (attemptNumber: number) => {
-      console.log(`[WebSocket] Reconnected after ${attemptNumber} attempts`);
+    this.socket.on('reconnect', (_attemptNumber: number) => {
       this.reconnectAttempts = 0;
       useEventStore.getState().setConnected(true);
     });

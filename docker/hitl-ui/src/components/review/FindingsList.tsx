@@ -48,7 +48,7 @@ export function FindingsList({ findings, onCreateIssue }: FindingsListProps) {
     return groups;
   }, [findings, severityFilter, showIgnored, ignoredFindings]);
 
-  const handleCopy = (finding: ReviewFinding) => {
+  const handleCopy = async (finding: ReviewFinding) => {
     const markdown = `## ${finding.title}
 
 **Severity:** ${finding.severity}
@@ -57,7 +57,22 @@ export function FindingsList({ findings, onCreateIssue }: FindingsListProps) {
 ${finding.description}
 
 **Recommendation:** ${finding.recommendation}`;
-    navigator.clipboard.writeText(markdown);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(markdown);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = markdown;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch {
+      console.warn('Failed to copy finding to clipboard');
+    }
   };
 
   return (

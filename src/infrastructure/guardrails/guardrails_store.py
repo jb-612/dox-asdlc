@@ -65,7 +65,7 @@ class GuardrailsStore:
             es_client: An ``AsyncElasticsearch`` instance.
             index_prefix: Optional prefix for multi-tenancy index isolation.
         """
-        if index_prefix and not re.match(r"^[a-zA-Z0-9_-]*$", index_prefix):
+        if index_prefix and not re.match(r"^[a-z0-9_-]*$", index_prefix):
             raise GuardrailsError(
                 "Invalid index prefix: contains unsafe characters",
                 details={"index_prefix": index_prefix},

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 /**
  * Session storage key for persisting tenant selection
  */
-const TENANT_STORAGE_KEY = 'currentTenant';
+const TENANT_STORAGE_KEY = 'asdlc:currentTenant';
 
 interface TenantState {
   /** Currently selected tenant ID */

@@ -51,11 +51,9 @@ ENV PYTHONPATH=/app \
     HEALTH_PORT=8085
 
 # Default environment variables for configuration
-# These should be overridden at runtime
-ENV SLACK_BOT_TOKEN="" \
-    SLACK_APP_TOKEN="" \
-    SLACK_SIGNING_SECRET="" \
-    REDIS_URL="redis://redis:6379"
+# Secret values (SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET)
+# MUST be provided at runtime -- no defaults are set in the image.
+ENV REDIS_URL="redis://redis:6379"
 
 # Expose health check port
 EXPOSE 8085

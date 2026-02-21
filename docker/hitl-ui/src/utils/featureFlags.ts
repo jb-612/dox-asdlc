@@ -57,7 +57,7 @@ const DEFAULT_FLAGS: FeatureFlags = {
 // localStorage Helpers
 // =============================================================================
 
-const STORAGE_PREFIX = 'feature_';
+const STORAGE_PREFIX = 'asdlc:feature_';
 
 /**
  * Get the localStorage key for a feature flag

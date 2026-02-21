@@ -11,7 +11,20 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'src/test/'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        'src/api/mocks/',
+        '**/*.test.{ts,tsx}',
+        '**/*.spec.{ts,tsx}',
+        'src/vite-env.d.ts',
+      ],
+      thresholds: {
+        statements: 40,
+        branches: 30,
+        functions: 30,
+        lines: 40,
+      },
     },
   },
   resolve: {

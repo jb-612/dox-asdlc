@@ -157,3 +157,29 @@ export function formatRunId(runId: string): string {
   if (runId.length <= 8) return runId;
   return runId.slice(0, 8);
 }
+
+/**
+ * Format an ISO timestamp string for display using locale formatting.
+ * This is a shared utility to replace duplicated formatTimestamp functions
+ * found across multiple components.
+ */
+export function formatTimestamp(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch {
+    return 'Unknown time';
+  }
+}
+
+/**
+ * Format a time-only string from an ISO timestamp (HH:MM:SS).
+ * Replaces duplicated formatTime functions across chart components.
+ */
+export function formatTimeOnly(timestamp: string): string {
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString();
+  } catch {
+    return 'Unknown time';
+  }
+}

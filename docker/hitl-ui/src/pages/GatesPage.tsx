@@ -9,6 +9,11 @@ import { gateTypeLabels } from '@/api/types';
 import { ALL_GATE_TYPES } from '@/utils/constants';
 import clsx from 'clsx';
 
+export interface GatesPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function GatesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParam = searchParams.get('type') as GateType | null;

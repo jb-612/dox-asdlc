@@ -118,7 +118,7 @@ describe('SearchPage Integration', () => {
 
       // Check localStorage
       const stored = JSON.parse(
-        localStorage.getItem('knowledge-search-store') || '{}'
+        localStorage.getItem('asdlc:knowledge-search-store') || '{}'
       );
       expect(stored.state?.selectedBackend).toBe('rest');
     });
@@ -154,7 +154,7 @@ describe('SearchPage Integration', () => {
 
       // Check localStorage
       const stored = JSON.parse(
-        localStorage.getItem('knowledge-search-store') || '{}'
+        localStorage.getItem('asdlc:knowledge-search-store') || '{}'
       );
       expect(stored.state?.recentSearches?.length).toBeGreaterThan(0);
     });

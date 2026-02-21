@@ -9,6 +9,11 @@
 
 import { SearchPage as SearchPageComponent } from '../components/search';
 
+export interface SearchPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function SearchPage() {
   return <SearchPageComponent />;
 }

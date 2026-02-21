@@ -94,9 +94,7 @@ export default function IdeationDraftsList({
     setIsLoading(true);
     setError(null);
     try {
-      console.log('[IdeationDraftsList] Loading drafts...');
       const result = await listIdeationDrafts(useMock);
-      console.log('[IdeationDraftsList] Loaded drafts:', result.length);
       setDrafts(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load drafts');

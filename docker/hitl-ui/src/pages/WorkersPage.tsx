@@ -4,6 +4,11 @@ import { WorkerPool, WorkerCard } from '@/components/workers';
 import { Card, CardHeader, CardTitle, CardContent, LoadingOverlay, EmptyState } from '@/components/common';
 import clsx from 'clsx';
 
+export interface WorkersPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function WorkersPage() {
   const { data, isLoading, error, refetch, isFetching } = useWorkerPoolStatus();
 

@@ -84,11 +84,11 @@ export default function ArtifactsPage() {
   );
 
   const handleCreateArtifact = () => {
-    console.log('Create artifact clicked');
+    // TODO: Implement artifact creation dialog
   };
 
   const handleRefresh = () => {
-    console.log('Refresh artifacts');
+    // TODO: Implement artifact refresh
   };
 
   const handleTabChange = (tab: TabType) => {

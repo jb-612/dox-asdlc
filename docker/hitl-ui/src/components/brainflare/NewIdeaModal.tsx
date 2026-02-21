@@ -104,7 +104,7 @@ export function NewIdeaModal({ isOpen, idea, onSubmit, onClose }: NewIdeaModalPr
         });
         onClose();
       } catch (e) {
-        setError((e as Error).message);
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setIsSubmitting(false);
       }

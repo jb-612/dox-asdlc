@@ -194,7 +194,7 @@ function MermaidDiagram({
           role="img"
           aria-label={ariaLabel}
           className={clsx(
-            'overflow-auto',
+            'overflow-auto [&_svg]:overflow-visible [&_svg_text]:overflow-visible [&_svg_foreignObject]:overflow-visible [&_svg_foreignObject_div]:break-words [&_svg_foreignObject_div]:overflow-wrap-anywhere',
             // In dark mode, invert light backgrounds to dark while preserving colors
             theme === 'dark' && 'diagram-dark-mode'
           )}

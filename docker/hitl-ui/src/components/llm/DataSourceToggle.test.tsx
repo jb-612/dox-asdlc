@@ -78,7 +78,7 @@ describe('DataSourceToggle', () => {
     const realButton = screen.getByTestId('data-source-real');
     fireEvent.click(realButton);
 
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('llm-data-source', 'real');
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('asdlc:llm-data-source', 'real');
   });
 
   it('applies custom className', () => {

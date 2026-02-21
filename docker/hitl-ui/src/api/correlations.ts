@@ -10,8 +10,8 @@
 
 import type { GraphData, GraphNode, GraphEdge, CorrelationType } from '../types/graph';
 import { getWorkItemGraphData } from './mocks/workItemCorrelations';
+import { apiClient } from './client';
 
-const API_BASE = '/api/brainflare';
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Original user-submitted mock nodes
@@ -111,9 +111,8 @@ export async function fetchGraph(useMock: boolean = USE_MOCKS): Promise<GraphDat
     };
   }
 
-  const res = await fetch(`${API_BASE}/graph`);
-  if (!res.ok) throw new Error(`Failed to fetch graph: ${res.statusText}`);
-  const data = await res.json();
+  const res = await apiClient.get(`/brainflare/graph`);
+  const data = res.data;
 
   // Transform API response to our types
   return {
@@ -158,12 +157,7 @@ export async function createCorrelation(
     return;
   }
 
-  const res = await fetch(`${API_BASE}/correlations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-  if (!res.ok) throw new Error(`Failed to create correlation: ${res.statusText}`);
+  await apiClient.post(`/brainflare/correlations`, request);
 }
 
 /**
@@ -182,14 +176,11 @@ export async function deleteCorrelation(
     return;
   }
 
-  const params = new URLSearchParams({
-    source_idea_id: sourceIdeaId,
-    target_idea_id: targetIdeaId,
-    correlation_type: correlationType,
+  await apiClient.delete(`/brainflare/correlations/${correlationId}`, {
+    params: {
+      source_idea_id: sourceIdeaId,
+      target_idea_id: targetIdeaId,
+      correlation_type: correlationType,
+    },
   });
-
-  const res = await fetch(`${API_BASE}/correlations/${correlationId}?${params}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) throw new Error(`Failed to delete correlation: ${res.statusText}`);
 }

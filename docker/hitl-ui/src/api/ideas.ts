@@ -13,8 +13,9 @@ import type {
   IdeaFilters,
 } from '../types/ideas';
 import { mockIdeas, generateMockIdea, simulateIdeaDelay } from './mocks/ideas';
+import { apiClient } from './client';
 
-const API_BASE = '/api/brainflare/ideas';
+const API_BASE = '/brainflare/ideas';
 const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 /**
@@ -58,18 +59,16 @@ export async function fetchIdeas(
     };
   }
 
-  const params = new URLSearchParams();
-  if (filters?.status) params.set('status', filters.status);
-  if (filters?.classification) params.set('classification', filters.classification);
-  if (filters?.search) params.set('search', filters.search);
-  params.set('limit', String(limit));
-  params.set('offset', String(offset));
+  const params: Record<string, string> = {
+    limit: String(limit),
+    offset: String(offset),
+  };
+  if (filters?.status) params.status = filters.status;
+  if (filters?.classification) params.classification = filters.classification;
+  if (filters?.search) params.search = filters.search;
 
-  const res = await fetch(`${API_BASE}?${params}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ideas: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.get<IdeaListResponse>(API_BASE, { params });
+  return res.data;
 }
 
 /**
@@ -86,11 +85,8 @@ export async function fetchIdea(id: string): Promise<Idea> {
     return idea;
   }
 
-  const res = await fetch(`${API_BASE}/${id}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch idea: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.get<Idea>(`${API_BASE}/${id}`);
+  return res.data;
 }
 
 /**
@@ -105,17 +101,8 @@ export async function createIdea(request: CreateIdeaRequest): Promise<Idea> {
     return idea;
   }
 
-  const res = await fetch(API_BASE, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || 'Failed to create idea');
-  }
-  return res.json();
+  const res = await apiClient.post<Idea>(API_BASE, request);
+  return res.data;
 }
 
 /**
@@ -146,16 +133,8 @@ export async function updateIdea(id: string, request: UpdateIdeaRequest): Promis
     return updated;
   }
 
-  const res = await fetch(`${API_BASE}/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to update idea: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.put<Idea>(`${API_BASE}/${id}`, request);
+  return res.data;
 }
 
 /**
@@ -172,10 +151,7 @@ export async function deleteIdea(id: string): Promise<void> {
     return;
   }
 
-  const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    throw new Error(`Failed to delete idea: ${res.statusText}`);
-  }
+  await apiClient.delete(`${API_BASE}/${id}`);
 }
 
 /**
@@ -218,12 +194,9 @@ export async function fetchClassificationCounts(
     return counts;
   }
 
-  const params = new URLSearchParams();
-  if (status) params.set('status', status);
+  const params: Record<string, string> = {};
+  if (status) params.status = status;
 
-  const res = await fetch(`${API_BASE}/counts?${params}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch classification counts: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.get<ClassificationCountsResponse>(`${API_BASE}/counts`, { params });
+  return res.data;
 }

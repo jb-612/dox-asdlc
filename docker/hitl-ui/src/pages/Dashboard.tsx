@@ -12,6 +12,11 @@ import { GateCard } from '@/components/gates';
 import { Card, CardHeader, CardTitle, CardContent, LoadingOverlay } from '@/components/common';
 import StatsCard from '@/components/common/StatsCard';
 
+export interface DashboardProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function Dashboard() {
   const { data: gatesData, isLoading: gatesLoading } = usePendingGates({ limit: 5 });
   const { data: workersData, isLoading: workersLoading } = useWorkerPoolStatus();

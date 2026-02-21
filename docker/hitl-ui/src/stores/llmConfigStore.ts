@@ -27,7 +27,7 @@ export type DataSource = 'mock' | 'real';
  */
 function getInitialDataSource(): DataSource {
   if (typeof window === 'undefined') return 'mock';
-  const stored = localStorage.getItem('llm-data-source');
+  const stored = localStorage.getItem('asdlc:llm-data-source');
   return stored === 'real' ? 'real' : 'mock';
 }
 
@@ -155,7 +155,7 @@ export const useLLMConfigStore = create<LLMConfigStore>((set, get) => ({
   // Data source toggle
   setDataSource: (source) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('llm-data-source', source);
+      localStorage.setItem('asdlc:llm-data-source', source);
     }
     set({ dataSource: source });
   },

@@ -21,7 +21,7 @@ export interface DocBrowserProps {
 }
 
 /** Storage key for collapsed categories */
-const STORAGE_KEY = 'doc-browser-collapsed';
+const STORAGE_KEY = 'asdlc:doc-browser-collapsed';
 
 /** Category display labels */
 const categoryLabels: Record<DocumentCategory, string> = {

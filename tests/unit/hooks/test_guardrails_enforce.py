@@ -219,18 +219,69 @@ class TestGuardrailsEnforceHook:
         assert reason is None
         assert is_mandatory is False
 
-    def test_check_path_restriction(self, hook):
-        """Test path restriction checking."""
+    def test_check_path_restriction_allowed(self, hook):
+        """Test path restriction allows backend agent to modify backend paths."""
         evaluated = {
             "matched_guidelines": [],
             "tools_denied": [],
         }
+        context = {"agent": "backend"}
         paths = ["src/workers/pool.py"]
 
-        reason, is_mandatory = hook.check_path_restriction(paths, evaluated)
+        reason, is_mandatory = hook.check_path_restriction(paths, evaluated, context)
 
-        # For now, should return no restriction (paths come from tools_denied patterns)
         assert reason is None
+        assert is_mandatory is False
+
+    def test_check_path_restriction_blocked(self, hook):
+        """Test path restriction blocks backend agent from modifying frontend paths."""
+        evaluated = {
+            "matched_guidelines": [],
+            "tools_denied": [],
+        }
+        context = {"agent": "backend"}
+        paths = ["src/hitl_ui/components/App.tsx"]
+
+        reason, is_mandatory = hook.check_path_restriction(paths, evaluated, context)
+
+        assert reason is not None
+        assert is_mandatory is True
+        assert "backend" in reason
+        assert "hitl_ui" in reason
+
+    def test_check_path_restriction_no_context(self, hook):
+        """Test path restriction allows when no context is available."""
+        evaluated = {
+            "matched_guidelines": [],
+            "tools_denied": [],
+        }
+        paths = ["src/hitl_ui/components/App.tsx"]
+
+        reason, is_mandatory = hook.check_path_restriction(paths, evaluated, None)
+
+        assert reason is None
+        assert is_mandatory is False
+
+    def test_check_path_restriction_test_writer(self, hook):
+        """Test that test-writer agent can only write test files."""
+        evaluated = {
+            "matched_guidelines": [],
+            "tools_denied": [],
+        }
+        context = {"agent": "test-writer"}
+
+        # Allowed: test files
+        reason, _ = hook.check_path_restriction(
+            ["tests/unit/test_something.py"], evaluated, context
+        )
+        assert reason is None
+
+        # Blocked: non-test source files
+        reason, is_mandatory = hook.check_path_restriction(
+            ["src/core/models.py"], evaluated, context
+        )
+        assert reason is not None
+        assert is_mandatory is True
 
 
 class TestGuardrailsEnforceSubprocess:

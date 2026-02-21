@@ -433,11 +433,11 @@ describe('DocSearch', () => {
 
       fireEvent.click(screen.getByTestId('search-result-system-design'));
 
-      expect(localStorage.getItem('doc-search-recent')).toContain('system');
+      expect(localStorage.getItem('asdlc:doc-search-recent')).toContain('system');
     });
 
     it('shows recent searches when input is focused with empty value', async () => {
-      localStorage.setItem('doc-search-recent', JSON.stringify(['system', 'workflow']));
+      localStorage.setItem('asdlc:doc-search-recent', JSON.stringify(['system', 'workflow']));
 
       render(
         <DocSearch
@@ -458,7 +458,7 @@ describe('DocSearch', () => {
     });
 
     it('populates search when recent search clicked', async () => {
-      localStorage.setItem('doc-search-recent', JSON.stringify(['system']));
+      localStorage.setItem('asdlc:doc-search-recent', JSON.stringify(['system']));
 
       render(
         <DocSearch
@@ -484,7 +484,7 @@ describe('DocSearch', () => {
 
     it('limits recent searches to 5 items', async () => {
       localStorage.setItem(
-        'doc-search-recent',
+        'asdlc:doc-search-recent',
         JSON.stringify(['one', 'two', 'three', 'four', 'five', 'six'])
       );
 

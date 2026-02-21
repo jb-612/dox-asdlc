@@ -25,8 +25,8 @@ import {
   getMockJob,
   simulateClassificationDelay,
 } from './mocks/classification';
+import { apiClient } from './client';
 
-const API_BASE = '/api';
 const USE_MOCK = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // ============================================================================
@@ -55,12 +55,8 @@ export async function fetchTaxonomy(): Promise<LabelTaxonomy> {
     return getMockTaxonomy();
   }
 
-  const res = await fetch(`${API_BASE}/admin/labels/taxonomy`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch taxonomy: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data.taxonomy;
+  const res = await apiClient.get('/admin/labels/taxonomy');
+  return res.data.taxonomy;
 }
 
 /**
@@ -72,12 +68,8 @@ export async function fetchLabels(): Promise<LabelDefinition[]> {
     return getMockLabels();
   }
 
-  const res = await fetch(`${API_BASE}/admin/labels/taxonomy/labels`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch labels: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data.labels;
+  const res = await apiClient.get('/admin/labels/taxonomy/labels');
+  return res.data.labels;
 }
 
 /**
@@ -91,16 +83,8 @@ export async function createLabel(
     return addMockLabel(label);
   }
 
-  const res = await fetch(`${API_BASE}/admin/labels/taxonomy/labels`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(label),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to create label: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.post<LabelDefinition>('/admin/labels/taxonomy/labels', label);
+  return res.data;
 }
 
 /**
@@ -119,16 +103,8 @@ export async function updateLabel(
     return result;
   }
 
-  const res = await fetch(`${API_BASE}/admin/labels/taxonomy/labels/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to update label: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.put<LabelDefinition>(`/admin/labels/taxonomy/labels/${id}`, updates);
+  return res.data;
 }
 
 /**
@@ -141,13 +117,7 @@ export async function deleteLabel(id: string): Promise<void> {
     return;
   }
 
-  const res = await fetch(`${API_BASE}/admin/labels/taxonomy/labels/${id}`, {
-    method: 'DELETE',
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to delete label: ${res.statusText}`);
-  }
+  await apiClient.delete(`/admin/labels/taxonomy/labels/${id}`);
 }
 
 // ============================================================================
@@ -163,15 +133,16 @@ export async function fetchClassification(ideaId: string): Promise<Classificatio
     return getMockClassificationResult(ideaId) || null;
   }
 
-  const res = await fetch(`${API_BASE}/ideas/${ideaId}/classification`);
-  if (res.status === 404) {
-    return null;
+  try {
+    const res = await apiClient.get(`/ideas/${ideaId}/classification`);
+    return res.data.result;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 404) return null;
+    }
+    throw err;
   }
-  if (!res.ok) {
-    throw new Error(`Failed to fetch classification: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data.result;
 }
 
 /**
@@ -183,14 +154,8 @@ export async function classifyIdea(ideaId: string): Promise<ClassificationResult
     return classifyMockIdea(ideaId);
   }
 
-  const res = await fetch(`${API_BASE}/ideas/${ideaId}/classify`, {
-    method: 'POST',
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to classify idea: ${res.statusText}`);
-  }
-  return res.json();
+  const res = await apiClient.post<ClassificationResult>(`/ideas/${ideaId}/classify`);
+  return res.data;
 }
 
 /**
@@ -202,17 +167,8 @@ export async function classifyBatch(ideaIds: string[]): Promise<ClassificationJo
     return createMockBatchJob(ideaIds);
   }
 
-  const res = await fetch(`${API_BASE}/ideas/classify/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idea_ids: ideaIds }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Failed to start batch classification: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data.job;
+  const res = await apiClient.post('/ideas/classify/batch', { idea_ids: ideaIds });
+  return res.data.job;
 }
 
 /**
@@ -224,15 +180,16 @@ export async function fetchJob(jobId: string): Promise<ClassificationJob | null>
     return getMockJob(jobId) || null;
   }
 
-  const res = await fetch(`${API_BASE}/ideas/classify/job/${jobId}`);
-  if (res.status === 404) {
-    return null;
+  try {
+    const res = await apiClient.get(`/ideas/classify/job/${jobId}`);
+    return res.data.job;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 404) return null;
+    }
+    throw err;
   }
-  if (!res.ok) {
-    throw new Error(`Failed to fetch job: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data.job;
 }
 
 // ============================================================================

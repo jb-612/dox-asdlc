@@ -10,7 +10,7 @@ import StudioDiscoveryPage from './StudioDiscoveryPage';
 // Mock store
 const mockStudioStore = {
   messages: [] as Array<{ id: string; role: string; content: string; timestamp: string }>,
-  outline: null as { sections: Array<{ id: string; title: string; status: string }> } | null,
+  workingOutline: [] as Array<{ id: string; title: string; status: string; content?: string }>,
   artifacts: [] as Array<{
     id: string;
     name: string;
@@ -46,7 +46,7 @@ describe('StudioDiscoveryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStudioStore.messages = [];
-    mockStudioStore.outline = null;
+    mockStudioStore.workingOutline = [];
     mockStudioStore.artifacts = [];
     mockStudioStore.isStreaming = false;
   });
@@ -112,7 +112,7 @@ describe('StudioDiscoveryPage', () => {
     it('handles message send', async () => {
       mockSendMessage.mockResolvedValueOnce({
         message: { id: 'msg-2', role: 'assistant', content: 'Response', timestamp: new Date().toISOString() },
-        outline: null,
+        outline_update: null,
         artifacts: [],
       });
       renderWithRouter(<StudioDiscoveryPage />);
@@ -131,31 +131,27 @@ describe('StudioDiscoveryPage', () => {
 
   describe('Outline Integration', () => {
     it('displays outline sections from store', () => {
-      mockStudioStore.outline = {
-        sections: [
-          { id: 'sec-1', title: 'Overview', status: 'complete' },
-          { id: 'sec-2', title: 'Requirements', status: 'in_progress' },
-        ],
-      };
+      mockStudioStore.workingOutline = [
+        { id: 'sec-1', title: 'Overview', status: 'complete' },
+        { id: 'sec-2', title: 'Requirements', status: 'in_progress' },
+      ];
       renderWithRouter(<StudioDiscoveryPage />);
       expect(screen.getByText('Overview')).toBeInTheDocument();
       expect(screen.getByText('Requirements')).toBeInTheDocument();
     });
 
     it('shows empty state when no outline', () => {
-      mockStudioStore.outline = null;
+      mockStudioStore.workingOutline = [];
       renderWithRouter(<StudioDiscoveryPage />);
       expect(screen.getByText(/no outline/i)).toBeInTheDocument();
     });
 
     it('updates completeness indicator', () => {
-      mockStudioStore.outline = {
-        sections: [
-          { id: 'sec-1', title: 'Overview', status: 'complete' },
-          { id: 'sec-2', title: 'Requirements', status: 'complete' },
-          { id: 'sec-3', title: 'Scope', status: 'pending' },
-        ],
-      };
+      mockStudioStore.workingOutline = [
+        { id: 'sec-1', title: 'Overview', status: 'complete' },
+        { id: 'sec-2', title: 'Requirements', status: 'complete' },
+        { id: 'sec-3', title: 'Scope', status: 'pending' },
+      ];
       renderWithRouter(<StudioDiscoveryPage />);
       // 2 out of 3 complete = 67%
       expect(screen.getByText(/67%/)).toBeInTheDocument();
@@ -231,7 +227,7 @@ describe('StudioDiscoveryPage', () => {
     });
 
     it('Preview PRD button is disabled when no outline', () => {
-      mockStudioStore.outline = null;
+      mockStudioStore.workingOutline = [];
       renderWithRouter(<StudioDiscoveryPage />);
       // Check the first Preview PRD button (header)
       const buttons = screen.getAllByRole('button', { name: /preview prd/i });
@@ -240,7 +236,7 @@ describe('StudioDiscoveryPage', () => {
 
     it('Save Draft button is disabled when no content', () => {
       mockStudioStore.messages = [];
-      mockStudioStore.outline = null;
+      mockStudioStore.workingOutline = [];
       renderWithRouter(<StudioDiscoveryPage />);
       // Check the first Save Draft button (header)
       const buttons = screen.getAllByRole('button', { name: /save draft/i });

@@ -42,7 +42,7 @@ export default function StudioDiscoveryPage({
 }: StudioDiscoveryPageProps) {
   // Store subscriptions
   const messages = useStudioStore((state) => state.messages);
-  const outline = useStudioStore((state) => state.outline);
+  const workingOutline = useStudioStore((state) => state.workingOutline);
   const artifacts = useStudioStore((state) => state.artifacts);
   const isStreaming = useStudioStore((state) => state.isStreaming);
   const addMessage = useStudioStore((state) => state.addMessage);
@@ -93,7 +93,7 @@ export default function StudioDiscoveryPage({
         setStreaming(true);
 
         // Send to API
-        const response = await sendChatMessage({ message: content });
+        const response = await sendChatMessage({ session_id: 'default', message: content });
 
         // Add assistant response
         if (response.message) {
@@ -101,8 +101,15 @@ export default function StudioDiscoveryPage({
         }
 
         // Update outline if provided
-        if (response.outline) {
-          updateOutline(response.outline);
+        if (response.outline_update && response.outline_update.sections) {
+          updateOutline(response.outline_update.sections.map((s, i) => ({
+            id: `sec-${i}`,
+            title: s.name,
+            status: s.status === 'complete' ? 'complete' as const
+              : s.status === 'in_progress' ? 'in_progress' as const
+              : 'not_started' as const,
+            content: s.content ?? undefined,
+          })));
         }
 
         // Add artifacts if provided
@@ -131,7 +138,7 @@ export default function StudioDiscoveryPage({
   }, []);
 
   // Check if content exists for Save Draft
-  const hasContent = messages.length > 0 || outline !== null;
+  const hasContent = messages.length > 0 || workingOutline.length > 0;
 
   // Loading skeleton
   if (isLoading) {
@@ -189,7 +196,7 @@ export default function StudioDiscoveryPage({
             <button
               type="button"
               className="px-3 py-1.5 text-sm border border-border-primary rounded hover:bg-bg-tertiary text-text-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              disabled={!outline}
+              disabled={workingOutline.length === 0}
             >
               <DocumentTextIcon className="h-4 w-4" />
               Preview PRD
@@ -270,7 +277,7 @@ export default function StudioDiscoveryPage({
           </div>
           {!isOutlineCollapsed && (
             <div className="flex-1 overflow-auto">
-              <WorkingOutlinePanel sections={outline?.sections || []} />
+              <WorkingOutlinePanel sections={workingOutline} />
             </div>
           )}
         </div>

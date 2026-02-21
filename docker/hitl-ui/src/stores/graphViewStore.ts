@@ -132,7 +132,7 @@ export const useGraphViewStore = create<GraphViewState>()(
       setUseMock: (useMock) => set({ useMock }),
     }),
     {
-      name: 'brainflare-graph-settings',
+      name: 'asdlc:brainflare-graph-settings',
       // Only persist useMock setting
       partialize: (state) => ({ useMock: state.useMock }),
     }

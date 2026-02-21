@@ -37,6 +37,11 @@ const ruleTypeOptions = [
   { value: 'NEGATIVE_EXAMPLE', label: 'Negative Example' },
 ];
 
+export interface RuleProposalsPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function RuleProposalsPage() {
   const [agentFilter, setAgentFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<RuleType | ''>('');
@@ -74,9 +79,8 @@ export default function RuleProposalsPage() {
   );
 
   // Handle modify (opens edit dialog - future enhancement)
-  const handleModify = useCallback((ruleId: string) => {
+  const handleModify = useCallback((_ruleId: string) => {
     // TODO: Implement rule modification dialog
-    console.log('Modify rule:', ruleId);
   }, []);
 
   // Handle reject

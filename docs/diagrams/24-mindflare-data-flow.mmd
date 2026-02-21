@@ -54,7 +54,8 @@ flowchart LR
 
     %% Classification flow (async)
     Store -->|"trigger"| Queue1
-    Queue1 --> LLM
+    Queue1 --> ClassifySvc
+    ClassifySvc --> LLM
     LLM --> Labels
     Labels -->|"update"| Store
 
@@ -95,7 +96,7 @@ flowchart LR
 
     class Manual,SlackMsg,SlackEmoji source
     class Validate,Embed,Store ingest
-    class Queue1,LLM,Labels classify
+    class Queue1,ClassifySvc,LLM,Labels classify
     class Queue2,Similarity,GraphStore,Cluster correlate
     class ListView,GraphView,Filters viz
     class Bake,Accept,Reject,Refine action

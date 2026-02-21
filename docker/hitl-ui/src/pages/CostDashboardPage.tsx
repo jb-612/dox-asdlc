@@ -20,6 +20,11 @@ import {
 import { useCostsStore } from '../stores/costsStore';
 import type { CostGroupBy } from '../types/costs';
 
+export interface CostDashboardPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export default function CostDashboardPage() {
   const queryClient = useQueryClient();
 

@@ -13,6 +13,7 @@ sequenceDiagram
     participant Policy as Routing Policy
     participant Slack as Slack Channel
     participant Human as Human Reviewer
+    participant API as Orchestrator API
     participant SPA as HITL Web UI
 
     Note over Agent,SPA: Part A: Gate Notification (OUT)
@@ -60,8 +61,8 @@ sequenceDiagram
     Human->>Slack: Post message in #ideas channel
     Slack->>Bridge: message event
     Bridge->>Bridge: Extract content, author
-    Bridge->>HITL: POST /api/ideas (source=slack)
-    HITL-->>Bridge: idea_id
+    Bridge->>API: POST /api/ideas (source=slack)
+    API-->>Bridge: idea_id
     Bridge->>Slack: Add reaction (checkmark)
 
     Note over Agent,SPA: Alternative: Emoji Trigger
@@ -69,8 +70,8 @@ sequenceDiagram
     Human->>Slack: React with lightbulb emoji
     Slack->>Bridge: reaction_added event
     Bridge->>Bridge: Fetch original message
-    Bridge->>HITL: POST /api/ideas (source=slack)
-    HITL-->>Bridge: idea_id
+    Bridge->>API: POST /api/ideas (source=slack)
+    API-->>Bridge: idea_id
     Bridge->>Slack: Thread reply with link
 
     Note over SPA: SPA also shows gates<br/>for users who prefer browser

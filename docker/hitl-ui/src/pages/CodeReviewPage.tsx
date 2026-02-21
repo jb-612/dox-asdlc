@@ -19,6 +19,11 @@ import { copyFindingToClipboard } from '../utils/clipboardUtils';
 
 type Phase = 'input' | 'progress' | 'results';
 
+export interface CodeReviewPageProps {
+  /** Custom class name */
+  className?: string;
+}
+
 export function CodeReviewPage() {
   const [phase, setPhase] = useState<Phase>('input');
   const [issueModalOpen, setIssueModalOpen] = useState(false);
@@ -116,11 +121,8 @@ export function CodeReviewPage() {
   }, [results]);
 
   const handleCopyFinding = useCallback(async (finding: ReviewFinding) => {
-    const success = await copyFindingToClipboard(finding);
-    if (success) {
-      // TODO: Show toast notification
-      console.log('Copied to clipboard');
-    }
+    await copyFindingToClipboard(finding);
+    // TODO: Show toast notification on success
   }, []);
 
   return (

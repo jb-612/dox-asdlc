@@ -63,10 +63,10 @@ describe('Feature Flags', () => {
     });
 
     it('respects localStorage overrides', () => {
-      localStorage.setItem('feature_discovery_studio', 'false');
+      localStorage.setItem('asdlc:feature_discovery_studio', 'false');
       expect(isFeatureEnabled(FEATURE_FLAGS.DISCOVERY_STUDIO)).toBe(false);
 
-      localStorage.setItem('feature_discovery_studio', 'true');
+      localStorage.setItem('asdlc:feature_discovery_studio', 'true');
       expect(isFeatureEnabled(FEATURE_FLAGS.DISCOVERY_STUDIO)).toBe(true);
     });
   });
@@ -84,7 +84,7 @@ describe('Feature Flags', () => {
 
     it('persists to localStorage', () => {
       setFeatureOverride(FEATURE_FLAGS.COCKPIT, false);
-      expect(localStorage.getItem('feature_cockpit')).toBe('false');
+      expect(localStorage.getItem('asdlc:feature_cockpit')).toBe('false');
     });
   });
 
@@ -104,7 +104,7 @@ describe('Feature Flags', () => {
       setFeatureOverride(FEATURE_FLAGS.DOCS, false);
       clearFeatureOverrides();
 
-      expect(localStorage.getItem('feature_docs')).toBeNull();
+      expect(localStorage.getItem('asdlc:feature_docs')).toBeNull();
     });
   });
 
