@@ -1,6 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { ExecutionEngine } from '../services/execution-engine';
+import type { CLISpawner } from '../services/cli-spawner';
+import type { RedisEventClient } from '../services/redis-client';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
 
@@ -10,27 +12,17 @@ import type { WorkItemReference } from '../../shared/types/workitem';
 // Bridges IPC channels from the renderer to the ExecutionEngine running in
 // the main process. A single engine instance is maintained; only one
 // execution can run at a time.
+//
+// The handlers accept an optional CLISpawner and RedisEventClient for real
+// CLI execution mode. When mockMode is false in the start config, the engine
+// spawns real CLI processes instead of using simulated delays.
 // ---------------------------------------------------------------------------
 
 let engine: ExecutionEngine | null = null;
 
-/**
- * Lazily obtain (or create) the ExecutionEngine, attaching it to the first
- * available BrowserWindow. A new engine is created for each execution to
- * guarantee a clean state.
- */
-function getOrCreateEngine(): ExecutionEngine {
-  const windows = BrowserWindow.getAllWindows();
-  const mainWindow = windows[0] ?? null;
-
-  if (!mainWindow) {
-    throw new Error('No BrowserWindow available for execution');
-  }
-
-  if (!engine) {
-    engine = new ExecutionEngine(mainWindow);
-  }
-  return engine;
+export interface ExecutionHandlerDeps {
+  cliSpawner?: CLISpawner;
+  redisClient?: RedisEventClient;
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +33,10 @@ function getOrCreateEngine(): ExecutionEngine {
 // workflow object directly in the start payload.
 // ---------------------------------------------------------------------------
 
-export function registerExecutionHandlers(): void {
+export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
+  const cliSpawner = deps?.cliSpawner;
+  const redisClient = deps?.redisClient;
+
   // --- Start execution ---------------------------------------------------
   ipcMain.handle(
     IPC_CHANNELS.EXECUTION_START,
@@ -52,6 +47,7 @@ export function registerExecutionHandlers(): void {
         workflow?: WorkflowDefinition;
         workItem?: WorkItemReference;
         variables?: Record<string, unknown>;
+        mockMode?: boolean;
       },
     ) => {
       // Refuse if already running
@@ -88,7 +84,12 @@ export function registerExecutionHandlers(): void {
       if (!mainWindow) {
         return { success: false, error: 'No BrowserWindow available' };
       }
-      engine = new ExecutionEngine(mainWindow);
+
+      engine = new ExecutionEngine(mainWindow, {
+        mockMode: config.mockMode ?? true,
+        cliSpawner: cliSpawner ?? undefined,
+        redisClient: redisClient ?? undefined,
+      });
 
       // Start is async and runs in the background -- we return immediately
       // with the execution ID while the engine drives the workflow.
@@ -171,4 +172,20 @@ export function registerExecutionHandlers(): void {
       return { success: true };
     },
   );
+
+  // --- CLI Exit forwarding -----------------------------------------------
+  // Listen for CLI exit events and forward them to the engine so it can
+  // resolve pending node waits.
+  if (cliSpawner) {
+    // The CLI_EXIT event is sent by CLISpawner when a process exits.
+    // We intercept it here to notify the engine.
+    const originalSend = BrowserWindow.prototype?.webContents?.send;
+
+    // Register a listener for CLI exit events from the main window
+    ipcMain.on?.(IPC_CHANNELS.CLI_EXIT, (_event, data: { sessionId: string; exitCode: number }) => {
+      if (engine) {
+        engine.handleCLIExit(data.sessionId, data.exitCode);
+      }
+    });
+  }
 }

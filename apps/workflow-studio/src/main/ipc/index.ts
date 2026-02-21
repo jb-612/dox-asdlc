@@ -31,7 +31,7 @@ export interface IPCServiceDeps {
  */
 export function registerAllHandlers(deps: IPCServiceDeps): void {
   registerWorkflowHandlers(deps.workflowFileService);
-  registerExecutionHandlers();
+  registerExecutionHandlers({ cliSpawner: deps.cliSpawner });
   registerWorkItemHandlers(deps.workItemService);
   registerCLIHandlers(deps.cliSpawner);
   registerSettingsHandlers(deps.settingsService);

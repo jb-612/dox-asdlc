@@ -1,4 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -20,10 +23,11 @@ export interface TerminalPanelProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Terminal output panel with dark background, monospace text, and auto-scroll.
+ * Terminal output panel powered by xterm.js with ANSI color support,
+ * cursor movement, and proper terminal rendering.
  *
- * Shows preformatted CLI output. When a running session is selected, an input
- * field at the bottom allows sending text to the session's stdin.
+ * When a running session is selected, an input field at the bottom allows
+ * sending text to the session's stdin.
  */
 export default function TerminalPanel({
   outputLines,
@@ -31,24 +35,89 @@ export default function TerminalPanel({
   isRunning,
   onWrite,
 }: TerminalPanelProps): JSX.Element {
-  const outputRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const writtenIndexRef = useRef<number>(0);
   const [input, setInput] = useState('');
-  const [autoScroll, setAutoScroll] = useState(true);
 
-  // Auto-scroll to bottom when new output arrives
+  // Initialize xterm.js terminal on mount
   useEffect(() => {
-    if (autoScroll && outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
-    }
-  }, [outputLines, autoScroll]);
+    if (!hasSession || !containerRef.current) return;
 
-  // Detect manual scrolling to disable auto-scroll temporarily
-  const handleScroll = useCallback(() => {
-    if (!outputRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = outputRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
-    setAutoScroll(isAtBottom);
-  }, []);
+    const terminal = new Terminal({
+      fontFamily: 'monospace',
+      fontSize: 12,
+      cursorBlink: true,
+      theme: {
+        background: '#000000',
+        foreground: '#4ade80',
+        cursor: '#4ade80',
+      },
+      disableStdin: true,
+      convertEol: true,
+    });
+
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(containerRef.current);
+
+    // Delay fit to allow container dimensions to settle
+    requestAnimationFrame(() => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // Container may not be visible yet
+      }
+    });
+
+    terminalRef.current = terminal;
+    fitAddonRef.current = fitAddon;
+    writtenIndexRef.current = 0;
+
+    // Handle window resize
+    const handleResize = () => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // Ignore fit errors during transitions
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      terminal.dispose();
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+      writtenIndexRef.current = 0;
+    };
+  }, [hasSession]);
+
+  // Write new output lines to the terminal incrementally
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+
+    const start = writtenIndexRef.current;
+    if (start < outputLines.length) {
+      for (let i = start; i < outputLines.length; i++) {
+        terminal.writeln(outputLines[i]);
+      }
+      writtenIndexRef.current = outputLines.length;
+    }
+  }, [outputLines]);
+
+  // Reset written index when outputLines is replaced (e.g., session switch)
+  useEffect(() => {
+    if (outputLines.length === 0) {
+      const terminal = terminalRef.current;
+      if (terminal) {
+        terminal.clear();
+      }
+      writtenIndexRef.current = 0;
+    }
+  }, [outputLines.length === 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -77,22 +146,8 @@ export default function TerminalPanel({
 
   return (
     <div className="h-full flex flex-col bg-black">
-      {/* Output area */}
-      <div
-        ref={outputRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed"
-      >
-        {outputLines.length === 0 ? (
-          <span className="text-gray-600">Waiting for output...</span>
-        ) : (
-          outputLines.map((line, idx) => (
-            <div key={idx} className="text-green-400 whitespace-pre-wrap break-all">
-              {line}
-            </div>
-          ))
-        )}
-      </div>
+      {/* xterm.js terminal container */}
+      <div ref={containerRef} className="flex-1 min-h-0" />
 
       {/* Stdin input */}
       {isRunning && (

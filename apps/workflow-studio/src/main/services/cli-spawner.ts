@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { spawn, ChildProcess } from 'child_process';
+import * as pty from 'node-pty';
 import { v4 as uuidv4 } from 'uuid';
 import type { CLISpawnConfig, CLISession } from '../../shared/types/cli';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
@@ -7,14 +7,20 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels';
 // ---------------------------------------------------------------------------
 // CLISpawner
 //
-// Manages child processes for Claude CLI sessions. Each spawn creates a real
-// OS process via child_process.spawn. stdout/stderr are forwarded to the
-// renderer via IPC events. The spawner tracks all active sessions and
-// provides kill / write / list operations.
+// Manages pseudo-terminal (PTY) processes for Claude CLI sessions using
+// node-pty. Each spawn creates a real PTY via pty.spawn, which provides
+// proper terminal emulation (colours, cursor control, interactive prompts).
+// Data events are forwarded to the renderer via IPC. The spawner tracks all
+// active sessions and provides kill / write / list operations.
 // ---------------------------------------------------------------------------
 
+interface PTYEntry {
+  pty: pty.IPty;
+  session: CLISession;
+}
+
 export class CLISpawner {
-  private sessions = new Map<string, { process: ChildProcess; session: CLISession }>();
+  private sessions = new Map<string, PTYEntry>();
   private mainWindow: BrowserWindow | null;
 
   constructor(mainWindow: BrowserWindow) {
@@ -22,89 +28,105 @@ export class CLISpawner {
   }
 
   /**
-   * Spawn a new CLI child process using the provided configuration.
+   * Spawn a new CLI process inside a PTY using the provided configuration.
    *
-   * Returns a CLISession descriptor immediately. Output, exit, and error
-   * events are pushed to the renderer asynchronously.
+   * Returns a CLISession descriptor immediately. Output and exit events are
+   * pushed to the renderer asynchronously via IPC.
    */
   spawn(config: CLISpawnConfig): CLISession {
     const id = uuidv4();
-    const env = { ...process.env, ...config.env };
+    const env: Record<string, string> = {};
+
+    // Copy current process env as strings
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined) {
+        env[key] = value;
+      }
+    }
+
+    // Merge config env
+    if (config.env) {
+      Object.assign(env, config.env);
+    }
+
     if (config.instanceId) {
       env.CLAUDE_INSTANCE_ID = config.instanceId;
     }
 
-    const child = spawn(config.command, config.args, {
+    // Build the shell command to execute
+    const shell = process.platform === 'win32' ? 'cmd.exe' : process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
+    const shellArgs = process.platform === 'win32'
+      ? ['/c', config.command, ...config.args]
+      : ['-c', [config.command, ...config.args].join(' ')];
+
+    const ptyProcess = pty.spawn(shell, shellArgs, {
+      name: 'xterm-256color',
       cwd: config.cwd,
       env,
-      shell: true,
+      cols: 120,
+      rows: 30,
     });
 
     const session: CLISession = {
       id,
       config,
       status: 'running',
-      pid: child.pid,
+      pid: ptyProcess.pid,
       startedAt: new Date().toISOString(),
     };
 
-    child.stdout?.on('data', (data: Buffer) => {
+    // node-pty combines stdout/stderr into a single data stream
+    ptyProcess.onData((data: string) => {
       this.mainWindow?.webContents.send(IPC_CHANNELS.CLI_OUTPUT, {
         sessionId: id,
-        data: data.toString(),
+        data,
       });
     });
 
-    child.stderr?.on('data', (data: Buffer) => {
-      this.mainWindow?.webContents.send(IPC_CHANNELS.CLI_OUTPUT, {
-        sessionId: id,
-        data: data.toString(),
-      });
-    });
-
-    child.on('exit', (code) => {
+    ptyProcess.onExit(({ exitCode }) => {
       session.status = 'exited';
-      session.exitCode = code ?? undefined;
+      session.exitCode = exitCode;
       session.exitedAt = new Date().toISOString();
       this.mainWindow?.webContents.send(IPC_CHANNELS.CLI_EXIT, {
         sessionId: id,
-        exitCode: code,
+        exitCode,
       });
     });
 
-    child.on('error', (err) => {
-      session.status = 'error';
-      this.mainWindow?.webContents.send(IPC_CHANNELS.CLI_ERROR, {
-        sessionId: id,
-        error: err.message,
-      });
-    });
-
-    this.sessions.set(id, { process: child, session });
+    this.sessions.set(id, { pty: ptyProcess, session });
     return session;
   }
 
   /**
-   * Send SIGTERM to the session process. If it does not exit within 5
-   * seconds, escalate to SIGKILL.
+   * Send kill signal to the session PTY. If it does not exit within 5
+   * seconds, escalate to a forced kill.
    */
   kill(sessionId: string): boolean {
     const entry = this.sessions.get(sessionId);
     if (!entry) return false;
-    entry.process.kill('SIGTERM');
+
+    entry.pty.kill();
+
     setTimeout(() => {
-      if (!entry.process.killed) entry.process.kill('SIGKILL');
+      // Attempt a second kill in case the first didn't terminate
+      try {
+        entry.pty.kill();
+      } catch {
+        // Process may have already exited
+      }
     }, 5000);
+
     return true;
   }
 
   /**
-   * Write data to the stdin of the session process.
+   * Write data to the stdin of the session PTY.
    */
   write(sessionId: string, data: string): boolean {
     const entry = this.sessions.get(sessionId);
     if (!entry) return false;
-    return entry.process.stdin?.write(data) ?? false;
+    entry.pty.write(data);
+    return true;
   }
 
   /**

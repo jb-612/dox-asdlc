@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { v4 as uuidv4 } from 'uuid';
-import type { WorkflowDefinition, HITLGateDefinition } from '../../shared/types/workflow';
+import type { WorkflowDefinition, HITLGateDefinition, AgentNode } from '../../shared/types/workflow';
 import type {
   Execution,
   ExecutionStatus,
@@ -11,15 +11,34 @@ import type {
 } from '../../shared/types/execution';
 import type { WorkItemReference } from '../../shared/types/workitem';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
+import type { CLISpawner } from './cli-spawner';
+import type { RedisEventClient } from './redis-client';
 
 // ---------------------------------------------------------------------------
 // ExecutionEngine
 //
-// Mock execution engine that lives in the Electron main process. It traverses
-// a workflow DAG node-by-node using topological sort, simulating agent work
-// with random delays. HITL gates pause the traversal until the renderer
-// submits a decision via IPC.
+// Executes a workflow DAG node-by-node using topological sort. Supports two
+// execution modes:
+//
+//   1. MOCK MODE (default, mockMode: true)
+//      Simulates agent work with random 1-3 second delays. Useful for UI
+//      development and demo purposes.
+//
+//   2. REAL CLI MODE (mockMode: false)
+//      Spawns actual CLI processes via CLISpawner for each agent node.
+//      Monitors process exit codes to determine node success/failure.
+//      Supports configurable timeout per node.
+//
+// HITL gates pause the traversal until the renderer submits a decision via
+// IPC regardless of mode.
 // ---------------------------------------------------------------------------
+
+export interface ExecutionEngineOptions {
+  mockMode?: boolean;
+  cliSpawner?: CLISpawner;
+  redisClient?: RedisEventClient;
+  nodeTimeoutMs?: number;
+}
 
 export class ExecutionEngine {
   private execution: Execution | null = null;
@@ -27,11 +46,30 @@ export class ExecutionEngine {
   private isAborted = false;
   private mainWindow: BrowserWindow | null = null;
 
+  /** Whether to use mock execution (true) or real CLI spawning (false). */
+  private mockMode: boolean;
+  /** CLI process spawner, required when mockMode is false. */
+  private cliSpawner: CLISpawner | null;
+  /** Optional Redis client for monitoring event streams. */
+  private redisClient: RedisEventClient | null;
+  /** Default timeout for CLI node execution in milliseconds. */
+  private nodeTimeoutMs: number;
+
   /** Pending gate resolvers keyed by nodeId. */
   private gateResolvers = new Map<string, (decision: string) => void>();
 
-  constructor(mainWindow: BrowserWindow) {
+  /** Pending CLI exit resolvers keyed by CLI session ID. */
+  private cliExitResolvers = new Map<string, (exitCode: number) => void>();
+
+  /** Maps CLI session IDs to node IDs for exit handling. */
+  private sessionToNode = new Map<string, string>();
+
+  constructor(mainWindow: BrowserWindow, options?: ExecutionEngineOptions) {
     this.mainWindow = mainWindow;
+    this.mockMode = options?.mockMode ?? true;
+    this.cliSpawner = options?.cliSpawner ?? null;
+    this.redisClient = options?.redisClient ?? null;
+    this.nodeTimeoutMs = options?.nodeTimeoutMs ?? 300000; // 5 minute default
   }
 
   // -----------------------------------------------------------------------
@@ -44,7 +82,9 @@ export class ExecutionEngine {
    * Creates the Execution state, topologically sorts the DAG, and walks
    * through each node sequentially. For every node that has a gate
    * attached, the engine pauses and waits for a decision from the renderer.
-   * Nodes are simulated with a 1-3 second random delay.
+   *
+   * In mock mode, nodes are simulated with a 1-3 second random delay.
+   * In real mode, CLI processes are spawned for each agent node.
    */
   async start(
     workflow: WorkflowDefinition,
@@ -54,6 +94,8 @@ export class ExecutionEngine {
     this.isPaused = false;
     this.isAborted = false;
     this.gateResolvers.clear();
+    this.cliExitResolvers.clear();
+    this.sessionToNode.clear();
 
     // Create execution state
     const executionId = uuidv4();
@@ -117,24 +159,18 @@ export class ExecutionEngine {
         if (!shouldContinue || this.isAborted) break;
       }
 
-      // Execute node (mock: wait 1-3 seconds)
+      // Execute node using the appropriate mode
       this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
       this.emitEvent('node_started', nodeId, `Started: ${node.label}`);
 
-      const duration = 1000 + Math.random() * 2000;
-      await this.sleep(duration);
-
-      // Check abort/pause after sleeping
-      if (this.isAborted) {
-        this.updateNodeState(nodeId, 'failed', { error: 'Execution aborted' });
-        break;
+      if (this.mockMode) {
+        await this.executeNodeMock(nodeId);
+      } else {
+        await this.executeNodeReal(nodeId, node);
       }
 
-      this.updateNodeState(nodeId, 'completed', {
-        completedAt: new Date().toISOString(),
-        output: { mock: true, duration: Math.round(duration) },
-      });
-      this.emitEvent('node_completed', nodeId, `Completed: ${node.label}`);
+      // If aborted during execution, we already handled state
+      if (this.isAborted) break;
     }
 
     // Final status
@@ -187,6 +223,15 @@ export class ExecutionEngine {
       resolver('__aborted__');
       this.gateResolvers.delete(nodeId);
     }
+
+    // Kill any active CLI sessions and resolve their exit promises
+    for (const [sessionId, resolver] of this.cliExitResolvers) {
+      if (this.cliSpawner) {
+        this.cliSpawner.kill(sessionId);
+      }
+      resolver(-1); // Signal abort
+      this.cliExitResolvers.delete(sessionId);
+    }
   }
 
   /**
@@ -203,6 +248,21 @@ export class ExecutionEngine {
     }
   }
 
+  /**
+   * Handle a CLI process exit event. Called when the CLI_EXIT IPC event is
+   * received by the execution handlers.
+   *
+   * @param sessionId  The CLI session that exited.
+   * @param exitCode   The process exit code.
+   */
+  handleCLIExit(sessionId: string, exitCode: number): void {
+    const resolver = this.cliExitResolvers.get(sessionId);
+    if (resolver) {
+      resolver(exitCode);
+      this.cliExitResolvers.delete(sessionId);
+    }
+  }
+
   /** Return the current execution snapshot (or null if not started). */
   getState(): Execution | null {
     return this.execution;
@@ -216,6 +276,134 @@ export class ExecutionEngine {
       this.execution.status === 'paused' ||
       this.execution.status === 'waiting_gate'
     );
+  }
+
+  // -----------------------------------------------------------------------
+  // Node execution modes
+  // -----------------------------------------------------------------------
+
+  /**
+   * Execute a node in mock mode. Simulates work with a 1-3 second random
+   * delay and marks the node as completed with mock output.
+   */
+  private async executeNodeMock(nodeId: string): Promise<void> {
+    const duration = 1000 + Math.random() * 2000;
+    await this.sleep(duration);
+
+    // Check abort/pause after sleeping
+    if (this.isAborted) {
+      this.updateNodeState(nodeId, 'failed', { error: 'Execution aborted' });
+      return;
+    }
+
+    this.updateNodeState(nodeId, 'completed', {
+      completedAt: new Date().toISOString(),
+      output: { mock: true, duration: Math.round(duration) },
+    });
+    this.emitEvent('node_completed', nodeId, `Completed: ${nodeId}`);
+  }
+
+  /**
+   * Execute a node by spawning a real CLI process via CLISpawner.
+   *
+   * The engine waits for the CLI process to exit. Exit code 0 means
+   * success; any other code means failure. If the process does not exit
+   * within the configured timeout, it is killed and the node fails.
+   */
+  private async executeNodeReal(nodeId: string, node: AgentNode): Promise<void> {
+    if (!this.cliSpawner) {
+      // Fall back to mock mode if no spawner is available
+      this.emitEvent('node_started', nodeId, `No CLI spawner available, falling back to mock`);
+      await this.executeNodeMock(nodeId);
+      return;
+    }
+
+    // Build CLI spawn config from node config
+    const args: string[] = [];
+    if (node.config.model) {
+      args.push('--model', node.config.model);
+    }
+    if (node.config.maxTurns) {
+      args.push('--max-turns', String(node.config.maxTurns));
+    }
+    if (node.config.extraFlags) {
+      args.push(...node.config.extraFlags);
+    }
+
+    const session = this.cliSpawner.spawn({
+      command: 'claude',
+      args,
+      cwd: process.cwd(),
+      instanceId: `${this.execution?.id ?? 'unknown'}-${nodeId}`,
+    });
+
+    // Track the session for exit handling
+    this.sessionToNode.set(session.id, nodeId);
+
+    // Update node state with CLI session reference
+    this.updateNodeState(nodeId, 'running', { cliSessionId: session.id });
+
+    // Send work item context as initial prompt if available
+    if (this.execution?.workItem) {
+      const prompt = `Working on: ${this.execution.workItem.id} - ${this.execution.workItem.title ?? ''}\n`;
+      this.cliSpawner.write(session.id, prompt);
+    }
+
+    // Wait for CLI exit or timeout
+    const timeoutMs = (node.config.timeoutSeconds ?? 0) * 1000 || this.nodeTimeoutMs;
+
+    const exitCode = await this.waitForCLIExit(session.id, timeoutMs);
+
+    if (this.isAborted) {
+      this.updateNodeState(nodeId, 'failed', { error: 'Execution aborted' });
+      return;
+    }
+
+    if (exitCode === -1) {
+      // Timeout or abort
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: `CLI session timed out after ${timeoutMs}ms`,
+      });
+      this.emitEvent('node_failed', nodeId, `Node timed out after ${timeoutMs}ms`);
+    } else if (exitCode === 0) {
+      this.updateNodeState(nodeId, 'completed', {
+        completedAt: new Date().toISOString(),
+        output: { cliSessionId: session.id, exitCode },
+      });
+      this.emitEvent('node_completed', nodeId, `Completed: ${node.label}`);
+    } else {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: `CLI exited with exit code ${exitCode}`,
+      });
+      this.emitEvent('node_failed', nodeId, `Failed with exit code ${exitCode}`);
+    }
+
+    // Clean up session tracking
+    this.sessionToNode.delete(session.id);
+  }
+
+  /**
+   * Wait for a CLI session to exit or for the timeout to expire.
+   * Returns the exit code, or -1 on timeout.
+   */
+  private waitForCLIExit(sessionId: string, timeoutMs: number): Promise<number> {
+    return new Promise<number>((resolve) => {
+      const timer = setTimeout(() => {
+        // Timeout: kill the CLI session and resolve with -1
+        this.cliExitResolvers.delete(sessionId);
+        if (this.cliSpawner) {
+          this.cliSpawner.kill(sessionId);
+        }
+        resolve(-1);
+      }, timeoutMs);
+
+      this.cliExitResolvers.set(sessionId, (exitCode: number) => {
+        clearTimeout(timer);
+        resolve(exitCode);
+      });
+    });
   }
 
   // -----------------------------------------------------------------------

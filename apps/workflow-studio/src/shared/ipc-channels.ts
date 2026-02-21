@@ -31,6 +31,9 @@ export const IPC_CHANNELS = {
   CLI_EXIT: 'cli:exit',
   CLI_ERROR: 'cli:error',
 
+  // Redis events (main -> renderer)
+  REDIS_EVENT: 'redis:event',
+
   // Settings operations
   SETTINGS_LOAD: 'settings:load',
   SETTINGS_SAVE: 'settings:save',
