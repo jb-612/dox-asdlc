@@ -1,4 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import DesignerPage from './pages/DesignerPage';
+import TemplateManagerPage from './pages/TemplateManagerPage';
+import ExecutionPage from './pages/ExecutionPage';
+import ExecutionWalkthroughPage from './pages/ExecutionWalkthroughPage';
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   const base = 'block px-3 py-2 rounded text-sm font-medium transition-colors';
@@ -7,45 +11,12 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
     : `${base} text-gray-300 hover:bg-gray-700 hover:text-white`;
 }
 
-function DesignerPage(): JSX.Element {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Workflow Designer</h2>
-        <p className="text-gray-400">Visual canvas for building aSDLC workflows (coming soon)</p>
-      </div>
-    </div>
-  );
-}
-
-function TemplatesPage(): JSX.Element {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Templates</h2>
-        <p className="text-gray-400">Pre-built workflow templates (coming soon)</p>
-      </div>
-    </div>
-  );
-}
-
-function ExecutePage(): JSX.Element {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Execute Workflow</h2>
-        <p className="text-gray-400">Run and monitor workflow execution (coming soon)</p>
-      </div>
-    </div>
-  );
-}
-
 function CliSessionsPage(): JSX.Element {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-center">
         <h2 className="text-2xl font-bold mb-2">CLI Sessions</h2>
-        <p className="text-gray-400">Manage Claude CLI sessions (coming soon)</p>
+        <p className="text-gray-400">Manage Claude CLI sessions (Phase 5)</p>
       </div>
     </div>
   );
@@ -56,7 +27,7 @@ function SettingsPage(): JSX.Element {
     <div className="flex items-center justify-center h-full">
       <div className="text-center">
         <h2 className="text-2xl font-bold mb-2">Settings</h2>
-        <p className="text-gray-400">Application configuration (coming soon)</p>
+        <p className="text-gray-400">Application configuration (Phase 5)</p>
       </div>
     </div>
   );
@@ -96,11 +67,12 @@ function App(): JSX.Element {
         </nav>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-hidden">
           <Routes>
             <Route path="/" element={<DesignerPage />} />
-            <Route path="/templates" element={<TemplatesPage />} />
-            <Route path="/execute" element={<ExecutePage />} />
+            <Route path="/templates" element={<TemplateManagerPage />} />
+            <Route path="/execute" element={<ExecutionPage />} />
+            <Route path="/execute/run" element={<ExecutionWalkthroughPage />} />
             <Route path="/cli" element={<CliSessionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

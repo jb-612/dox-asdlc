@@ -1,178 +1,172 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { v4 as uuidv4 } from 'uuid';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { Execution, ExecutionEvent, NodeExecutionState } from '../../shared/types/execution';
+import { ExecutionEngine } from '../services/execution-engine';
+import type { WorkflowDefinition } from '../../shared/types/workflow';
+import type { WorkItemReference } from '../../shared/types/workitem';
 
 // ---------------------------------------------------------------------------
-// In-memory execution state for development
+// Execution IPC handlers
+//
+// Bridges IPC channels from the renderer to the ExecutionEngine running in
+// the main process. A single engine instance is maintained; only one
+// execution can run at a time.
 // ---------------------------------------------------------------------------
 
-let currentExecution: Execution | null = null;
+let engine: ExecutionEngine | null = null;
 
-function emitToRenderer(channel: string, data: unknown): void {
+/**
+ * Lazily obtain (or create) the ExecutionEngine, attaching it to the first
+ * available BrowserWindow. A new engine is created for each execution to
+ * guarantee a clean state.
+ */
+function getOrCreateEngine(): ExecutionEngine {
   const windows = BrowserWindow.getAllWindows();
-  for (const win of windows) {
-    win.webContents.send(channel, data);
-  }
-}
+  const mainWindow = windows[0] ?? null;
 
-function createEvent(
-  type: ExecutionEvent['type'],
-  message: string,
-  nodeId?: string,
-  data?: unknown,
-): ExecutionEvent {
-  return {
-    id: uuidv4(),
-    type,
-    timestamp: new Date().toISOString(),
-    nodeId,
-    data,
-    message,
-  };
+  if (!mainWindow) {
+    throw new Error('No BrowserWindow available for execution');
+  }
+
+  if (!engine) {
+    engine = new ExecutionEngine(mainWindow);
+  }
+  return engine;
 }
 
 // ---------------------------------------------------------------------------
-// IPC handler registration
+// In-memory workflow lookup (mirrors workflow-handlers.ts seed store).
+//
+// In a production build the engine would receive the full workflow from the
+// renderer or load it from persistent storage. For now we accept the
+// workflow object directly in the start payload.
 // ---------------------------------------------------------------------------
 
 export function registerExecutionHandlers(): void {
+  // --- Start execution ---------------------------------------------------
   ipcMain.handle(
     IPC_CHANNELS.EXECUTION_START,
-    async (_event, config: { workflowId: string; variables?: Record<string, unknown> }) => {
-      // Stub: create a mock execution. In a real implementation this would
-      // load the workflow, initialise node states, and begin orchestration.
-      const executionId = uuidv4();
-      const now = new Date().toISOString();
+    async (
+      _event,
+      config: {
+        workflowId: string;
+        workflow?: WorkflowDefinition;
+        workItem?: WorkItemReference;
+        variables?: Record<string, unknown>;
+      },
+    ) => {
+      // Refuse if already running
+      if (engine?.isActive()) {
+        return {
+          success: false,
+          error: 'An execution is already in progress. Abort it first.',
+        };
+      }
 
-      const startEvent = createEvent(
-        'execution_started',
-        `Execution ${executionId} started for workflow ${config.workflowId}`,
-      );
-
-      currentExecution = {
-        id: executionId,
-        workflowId: config.workflowId,
-        // Stub: workflow object would normally be loaded from storage
-        workflow: {
-          id: config.workflowId,
-          metadata: {
-            name: 'Stub Workflow',
-            version: '1.0.0',
-            createdAt: now,
-            updatedAt: now,
-            tags: [],
-          },
-          nodes: [],
-          transitions: [],
-          gates: [],
-          variables: [],
+      // The renderer should pass the full workflow definition. If it does
+      // not, we build a minimal stub so the engine can still start.
+      const workflow: WorkflowDefinition = config.workflow ?? {
+        id: config.workflowId,
+        metadata: {
+          name: 'Unknown Workflow',
+          version: '1.0.0',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tags: [],
         },
-        status: 'running',
-        nodeStates: {},
-        events: [startEvent],
-        variables: config.variables ?? {},
-        startedAt: now,
+        nodes: [],
+        transitions: [],
+        gates: [],
+        variables: [],
       };
 
-      emitToRenderer(IPC_CHANNELS.EXECUTION_EVENT, startEvent);
-      emitToRenderer(IPC_CHANNELS.EXECUTION_STATE_UPDATE, {
-        executionId,
-        status: currentExecution.status,
+      // Merge initial variables into the workflow if provided
+      const workItem = config.workItem;
+
+      // Fresh engine per execution
+      const windows = BrowserWindow.getAllWindows();
+      const mainWindow = windows[0] ?? null;
+      if (!mainWindow) {
+        return { success: false, error: 'No BrowserWindow available' };
+      }
+      engine = new ExecutionEngine(mainWindow);
+
+      // Start is async and runs in the background -- we return immediately
+      // with the execution ID while the engine drives the workflow.
+      const executionPromise = engine.start(workflow, workItem);
+
+      // Inject initial variables
+      const state = engine.getState();
+      if (state && config.variables) {
+        Object.assign(state.variables, config.variables);
+      }
+
+      // Do not await -- let the traversal run in the background
+      executionPromise.catch((err: unknown) => {
+        console.error('[ExecutionEngine] Unexpected error:', err);
       });
 
-      return { success: true, executionId };
+      return {
+        success: true,
+        executionId: state?.id ?? 'unknown',
+      };
     },
   );
 
+  // --- Pause execution ---------------------------------------------------
   ipcMain.handle(IPC_CHANNELS.EXECUTION_PAUSE, async () => {
-    if (!currentExecution || currentExecution.status !== 'running') {
+    const eng = engine;
+    if (!eng || !eng.isActive()) {
       return { success: false, error: 'No running execution to pause' };
     }
-
-    currentExecution.status = 'paused';
-    const event = createEvent('execution_started', 'Execution paused');
-    currentExecution.events.push(event);
-
-    emitToRenderer(IPC_CHANNELS.EXECUTION_EVENT, event);
-    emitToRenderer(IPC_CHANNELS.EXECUTION_STATE_UPDATE, {
-      executionId: currentExecution.id,
-      status: 'paused',
-    });
-
+    eng.pause();
     return { success: true };
   });
 
+  // --- Resume execution --------------------------------------------------
   ipcMain.handle(IPC_CHANNELS.EXECUTION_RESUME, async () => {
-    if (!currentExecution || currentExecution.status !== 'paused') {
+    const eng = engine;
+    if (!eng) {
       return { success: false, error: 'No paused execution to resume' };
     }
-
-    currentExecution.status = 'running';
-    const event = createEvent('execution_started', 'Execution resumed');
-    currentExecution.events.push(event);
-
-    emitToRenderer(IPC_CHANNELS.EXECUTION_EVENT, event);
-    emitToRenderer(IPC_CHANNELS.EXECUTION_STATE_UPDATE, {
-      executionId: currentExecution.id,
-      status: 'running',
-    });
-
+    eng.resume();
     return { success: true };
   });
 
+  // --- Abort execution ---------------------------------------------------
   ipcMain.handle(IPC_CHANNELS.EXECUTION_ABORT, async () => {
-    if (!currentExecution) {
+    const eng = engine;
+    if (!eng) {
       return { success: false, error: 'No active execution to abort' };
     }
-
-    currentExecution.status = 'aborted';
-    currentExecution.completedAt = new Date().toISOString();
-
-    const event = createEvent('execution_aborted', 'Execution aborted by user');
-    currentExecution.events.push(event);
-
-    emitToRenderer(IPC_CHANNELS.EXECUTION_EVENT, event);
-    emitToRenderer(IPC_CHANNELS.EXECUTION_STATE_UPDATE, {
-      executionId: currentExecution.id,
-      status: 'aborted',
-    });
-
-    const id = currentExecution.id;
-    currentExecution = null;
-
-    return { success: true, executionId: id };
+    eng.abort();
+    const state = eng.getState();
+    return { success: true, executionId: state?.id };
   });
 
+  // --- Gate decision -----------------------------------------------------
   ipcMain.handle(
     IPC_CHANNELS.EXECUTION_GATE_DECISION,
     async (
       _event,
-      decision: { executionId: string; gateId: string; decision: string; comment?: string },
+      decision: {
+        executionId: string;
+        gateId: string;
+        nodeId: string;
+        decision: string;
+        comment?: string;
+      },
     ) => {
-      if (!currentExecution || currentExecution.id !== decision.executionId) {
+      const eng = engine;
+      if (!eng) {
+        return { success: false, error: 'No active execution' };
+      }
+
+      const state = eng.getState();
+      if (!state || state.id !== decision.executionId) {
         return { success: false, error: 'Execution not found' };
       }
 
-      const event = createEvent(
-        'gate_decided',
-        `Gate ${decision.gateId} decided: ${decision.decision}`,
-        undefined,
-        { gateId: decision.gateId, decision: decision.decision, comment: decision.comment },
-      );
-      currentExecution.events.push(event);
-
-      // Resume execution after gate decision
-      if (currentExecution.status === 'waiting_gate') {
-        currentExecution.status = 'running';
-      }
-
-      emitToRenderer(IPC_CHANNELS.EXECUTION_EVENT, event);
-      emitToRenderer(IPC_CHANNELS.EXECUTION_STATE_UPDATE, {
-        executionId: currentExecution.id,
-        status: currentExecution.status,
-      });
-
+      eng.submitGateDecision(decision.nodeId, decision.decision);
       return { success: true };
     },
   );
