@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "knowledge-store": {
+      "command": "node",
+      "args": ["/app/mcp-es-client.js"],
+      "env": {
+        "ELASTICSEARCH_URL": "http://elasticsearch:9200"
+      }
+    }
+  }
+}

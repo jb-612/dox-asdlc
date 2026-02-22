@@ -1,77 +1,11 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
+import { DEFAULT_SETTINGS } from '../../shared/types/settings';
 import { NODE_TYPE_METADATA } from '../../shared/constants';
 import WorkItemPickerDialog from '../components/workitems/WorkItemPickerDialog';
 import { useExecutionStore } from '../stores/executionStore';
-
-// ---------------------------------------------------------------------------
-// Mock saved workflows -- will come from IPC workflow:list
-// ---------------------------------------------------------------------------
-
-function createMockWorkflows(): WorkflowDefinition[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: 'wf-1',
-      metadata: {
-        name: 'TDD Pipeline',
-        description: 'Standard TDD cycle with review gate.',
-        version: '1.0.0',
-        createdAt: now,
-        updatedAt: now,
-        tags: ['tdd'],
-      },
-      nodes: [
-        { id: 'n1', type: 'utest', label: 'Unit Test', config: {}, inputs: [], outputs: [], position: { x: 0, y: 0 } },
-        { id: 'n2', type: 'coding', label: 'Coder', config: {}, inputs: [], outputs: [], position: { x: 200, y: 0 } },
-        { id: 'n3', type: 'reviewer', label: 'Reviewer', config: {}, inputs: [], outputs: [], position: { x: 400, y: 0 } },
-      ],
-      transitions: [
-        { id: 'e1', sourceNodeId: 'n1', targetNodeId: 'n2', condition: { type: 'always' } },
-        { id: 'e2', sourceNodeId: 'n2', targetNodeId: 'n3', condition: { type: 'on_success' } },
-      ],
-      gates: [
-        {
-          id: 'g1',
-          nodeId: 'n3',
-          gateType: 'approval',
-          prompt: 'Approve review?',
-          options: [
-            { label: 'Approve', value: 'approve', isDefault: true },
-            { label: 'Reject', value: 'reject' },
-          ],
-          required: true,
-        },
-      ],
-      variables: [
-        { name: 'target_branch', type: 'string', defaultValue: 'main', description: 'Branch to target', required: false },
-        { name: 'max_retries', type: 'number', defaultValue: 3, description: 'Max TDD retries', required: false },
-      ],
-    },
-    {
-      id: 'wf-2',
-      metadata: {
-        name: 'Security Scan',
-        description: 'Quick security-focused workflow with SAST and review.',
-        version: '1.0.0',
-        createdAt: now,
-        updatedAt: now,
-        tags: ['security'],
-      },
-      nodes: [
-        { id: 'n1', type: 'surveyor', label: 'Surveyor', config: {}, inputs: [], outputs: [], position: { x: 0, y: 0 } },
-        { id: 'n2', type: 'security', label: 'Security', config: {}, inputs: [], outputs: [], position: { x: 200, y: 0 } },
-      ],
-      transitions: [
-        { id: 'e1', sourceNodeId: 'n1', targetNodeId: 'n2', condition: { type: 'always' } },
-      ],
-      gates: [],
-      variables: [],
-    },
-  ];
-}
 
 // ---------------------------------------------------------------------------
 // Workflow Summary Card
@@ -210,7 +144,31 @@ export default function ExecutionPage(): JSX.Element {
   const navigate = useNavigate();
   const startExecution = useExecutionStore((s) => s.startExecution);
 
-  const [workflows] = useState<WorkflowDefinition[]>(createMockWorkflows);
+  const [mockMode, setMockMode] = useState<boolean>(DEFAULT_SETTINGS.executionMockMode);
+
+  // Load executionMockMode from persisted settings on mount
+  useEffect(() => {
+    window.electronAPI?.settings?.load().then((s) => {
+      setMockMode(s.executionMockMode ?? DEFAULT_SETTINGS.executionMockMode);
+    }).catch(() => {});
+  }, []);
+
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [workflowsLoading, setWorkflowsLoading] = useState(false);
+  const [workflowsError, setWorkflowsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setWorkflowsLoading(true);
+    window.electronAPI.workflow
+      .list()
+      .then((summaries) =>
+        Promise.all(summaries.map((s) => window.electronAPI.workflow.load(s.id)))
+      )
+      .then((loaded) => setWorkflows(loaded.filter(Boolean) as WorkflowDefinition[]))
+      .catch((err) => setWorkflowsError(err?.message ?? 'Failed to load workflows'))
+      .finally(() => setWorkflowsLoading(false));
+  }, []);
+
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDefinition | null>(null);
   const [selectedWorkItem, setSelectedWorkItem] = useState<WorkItemReference | null>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -238,9 +196,9 @@ export default function ExecutionPage(): JSX.Element {
 
   const handleStart = useCallback(async () => {
     if (!selectedWorkflow) return;
-    await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides);
+    await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides, mockMode);
     navigate('/execute/run');
-  }, [selectedWorkflow, selectedWorkItem, variableOverrides, startExecution, navigate]);
+  }, [selectedWorkflow, selectedWorkItem, variableOverrides, mockMode, startExecution, navigate]);
 
   const canStart = selectedWorkflow !== null;
 
@@ -263,6 +221,8 @@ export default function ExecutionPage(): JSX.Element {
               1. Select Workflow
             </h3>
             <div className="space-y-2">
+              {workflowsLoading && <p className="text-sm text-gray-400">Loading workflows…</p>}
+              {workflowsError && <p className="text-sm text-red-500">{workflowsError}</p>}
               {workflows.map((wf) => (
                 <WorkflowSummaryCard
                   key={wf.id}

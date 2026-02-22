@@ -38,6 +38,7 @@ export interface ExecutionEngineOptions {
   cliSpawner?: CLISpawner;
   redisClient?: RedisEventClient;
   nodeTimeoutMs?: number;
+  remoteAgentUrl?: string;
 }
 
 export class ExecutionEngine {
@@ -54,6 +55,8 @@ export class ExecutionEngine {
   private redisClient: RedisEventClient | null;
   /** Default timeout for CLI node execution in milliseconds. */
   private nodeTimeoutMs: number;
+  /** Optional URL for remote agent execution (e.g. Cursor agent container). */
+  private remoteAgentUrl: string | null;
 
   /** Pending gate resolvers keyed by nodeId. */
   private gateResolvers = new Map<string, (decision: string) => void>();
@@ -70,6 +73,7 @@ export class ExecutionEngine {
     this.cliSpawner = options?.cliSpawner ?? null;
     this.redisClient = options?.redisClient ?? null;
     this.nodeTimeoutMs = options?.nodeTimeoutMs ?? 300000; // 5 minute default
+    this.remoteAgentUrl = options?.remoteAgentUrl ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -163,7 +167,9 @@ export class ExecutionEngine {
       this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
       this.emitEvent('node_started', nodeId, `Started: ${node.label}`);
 
-      if (this.mockMode) {
+      if (node.config.backend === 'cursor') {
+        await this.executeNodeRemote(nodeId, node);
+      } else if (this.mockMode) {
         await this.executeNodeMock(nodeId);
       } else {
         await this.executeNodeReal(nodeId, node);
@@ -382,6 +388,98 @@ export class ExecutionEngine {
 
     // Clean up session tracking
     this.sessionToNode.delete(session.id);
+  }
+
+  /**
+   * Validate that a URL is safe to use as a remote agent endpoint.
+   * Accepts only http: and https: schemes to prevent SSRF via file://, etc.
+   */
+  private static isValidRemoteUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Execute a node by dispatching to a remote agent via HTTP POST.
+   * Used for backends like Cursor that run in a separate container.
+   */
+  private async executeNodeRemote(nodeId: string, node: AgentNode): Promise<void> {
+    if (!this.remoteAgentUrl || !ExecutionEngine.isValidRemoteUrl(this.remoteAgentUrl)) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: 'Invalid or missing remote agent URL',
+      });
+      this.emitEvent('node_failed', nodeId, 'Invalid remote agent URL');
+      return;
+    }
+
+    if (this.isAborted) return;
+
+    const body = {
+      prompt: node.description || `Execute ${node.type} agent: ${node.label}`,
+      model: node.config.model,
+      timeoutSeconds: node.config.timeoutSeconds ?? Math.floor(this.nodeTimeoutMs / 1000),
+      agentRole: node.type,
+      extraFlags: node.config.extraFlags,
+    };
+
+    const controller = new AbortController();
+    // Poll isAborted every 500 ms so a user abort cancels the in-flight fetch.
+    const abortPoller = setInterval(() => {
+      if (this.isAborted) controller.abort();
+    }, 500);
+
+    try {
+      const response = await fetch(`${this.remoteAgentUrl}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        this.updateNodeState(nodeId, 'failed', {
+          completedAt: new Date().toISOString(),
+          error: `Remote agent returned HTTP ${response.status}: ${errorText}`,
+        });
+        this.emitEvent('node_failed', nodeId, `Remote agent HTTP error: ${response.status}`);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.updateNodeState(nodeId, 'completed', {
+          completedAt: new Date().toISOString(),
+          output: result,
+        });
+        this.emitEvent('node_completed', nodeId, `Completed: ${node.label}`);
+      } else {
+        this.updateNodeState(nodeId, 'failed', {
+          completedAt: new Date().toISOString(),
+          error: result.error || 'Remote agent returned failure',
+        });
+        this.emitEvent('node_failed', nodeId, `Remote agent failed: ${result.error || 'unknown error'}`);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (this.isAborted) {
+        this.updateNodeState(nodeId, 'failed', { error: 'Execution aborted' });
+      } else {
+        this.updateNodeState(nodeId, 'failed', {
+          completedAt: new Date().toISOString(),
+          error: `Remote agent request failed: ${message}`,
+        });
+        this.emitEvent('node_failed', nodeId, `Remote agent unreachable: ${message}`);
+      }
+    } finally {
+      clearInterval(abortPoller);
+    }
   }
 
   /**

@@ -1,0 +1,89 @@
+%% File: docs/diagrams/31-cursor-agent-architecture.mmd
+%% Description: P14-F07 Cursor CLI Backend - Component Architecture and Security Controls
+%% Updated: 2026-02-21
+
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#E6F0FF', 'primaryTextColor': '#1e3a5f', 'primaryBorderColor': '#2563eb', 'lineColor': '#64748b'}}}%%
+
+flowchart TB
+    subgraph Electron["Electron Main Process"]
+        direction TB
+        Settings["AppSettings\ncursorAgentUrl: string"]
+        IPC["execution-handlers.ts\nregisterExecutionHandlers()"]
+
+        subgraph Engine["ExecutionEngine"]
+            direction TB
+            Dispatch{"executeNode()\nrouting"}
+            Validate["isValidRemoteUrl()\nhttp/https only"]
+            Remote["executeNodeRemote()\nfetch POST /execute"]
+            Abort["AbortController\n500ms abort poll"]
+            Mock["executeNodeMock()"]
+            Real["executeNodeReal()\nnode-pty + Claude CLI"]
+        end
+
+        Settings -->|remoteAgentUrl| IPC
+        IPC -->|new ExecutionEngine| Engine
+        Dispatch -->|backend === 'cursor'| Validate
+        Validate -->|valid URL| Remote
+        Validate -->|invalid / file://| Fail1["node → failed\n'Invalid URL'"]
+        Remote --> Abort
+        Dispatch -->|mockMode=true| Mock
+        Dispatch -->|claude / default| Real
+    end
+
+    subgraph Network["asdlc-network (Docker)"]
+        direction TB
+
+        subgraph Container["cursor-agent:8090  [profiles: cursor]"]
+            direction TB
+            Auth["requireAuth middleware\nBearer CURSOR_API_KEY"]
+            Health["GET /health\n(unauthenticated)"]
+            Execute["POST /execute"]
+            PathCheck["resolveWorkspacePath()\nreject outside /workspace"]
+            PermWrite["write .cursor/cli.json\n(dynamic permissions)"]
+            RulesCopy["copy .cursor/rules/{role}.mdc"]
+            CLI["execFile('agent', args)\nrestricted agentEnv\ntimeout enforced"]
+            Parse["parse JSON output\nfallback: raw stdout"]
+
+            Auth -->|401 if wrong token| Reject["HTTP 401"]
+            Auth -->|authorized| Execute
+            Execute --> PathCheck
+            PathCheck -->|traversal attempt| Fail2["HTTP 400\n'path outside /workspace'"]
+            PathCheck -->|valid| PermWrite
+            PermWrite --> RulesCopy
+            RulesCopy --> CLI
+            CLI --> Parse
+        end
+
+        Workspace["/workspace\n(mounted ../: rw)"]
+        ES["elasticsearch:9200"]
+        Redis["redis:6379"]
+
+        CLI -->|cwd| Workspace
+        Parse -->|ExecuteResponse JSON| Execute
+    end
+
+    subgraph PyWorker["Python Worker (optional)"]
+        direction LR
+        CLIBackend["CLIAgentBackend(cli='cursor')\n_CLI_BINARY: cursor → 'agent'\n--force  --output-format json\nNo --max-turns / --system-prompt"]
+    end
+
+    Remote -->|"POST /execute\n{prompt, model, timeoutSeconds,\nagentRole, permissions}"| Auth
+    Parse -->|"ExecuteResponse\n{success, result, sessionId}"| Remote
+    Abort -->|"AbortController.abort()\non engine.abort()"| Remote
+
+    Container -.->|mcp.json| ES
+    Container -.->|REDIS_URL env| Redis
+
+    classDef electron fill:#E0F2FE,stroke:#0284c7,stroke-width:2px
+    classDef container fill:#E6F0FF,stroke:#2563eb,stroke-width:2px
+    classDef security fill:#FEF3C7,stroke:#D97706,stroke-width:2px
+    classDef infra fill:#F3E8FF,stroke:#9333ea,stroke-width:2px
+    classDef failure fill:#FEE2E2,stroke:#dc2626,stroke-width:2px
+    classDef pyworker fill:#D1FAE5,stroke:#059669,stroke-width:2px
+
+    class Settings,IPC,Engine,Dispatch,Validate,Remote,Abort,Mock,Real electron
+    class Container,Auth,Health,Execute,CLI,Parse container
+    class PathCheck,PermWrite,RulesCopy security
+    class Workspace,ES,Redis infra
+    class Fail1,Fail2,Reject failure
+    class CLIBackend,PyWorker pyworker

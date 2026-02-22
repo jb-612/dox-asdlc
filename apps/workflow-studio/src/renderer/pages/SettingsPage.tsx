@@ -17,16 +17,17 @@ async function loadSettings(): Promise<AppSettings> {
   return { ...DEFAULT_SETTINGS };
 }
 
-async function saveSettings(settings: AppSettings): Promise<boolean> {
-  try {
-    if (window.electronAPI?.settings) {
-      const result = await window.electronAPI.settings.save(settings);
-      return result.success;
-    }
-  } catch {
-    // Fall through
+async function saveSettings(settings: AppSettings): Promise<{ ok: boolean; error?: string }> {
+  if (!window.electronAPI?.settings) {
+    return { ok: false, error: 'electronAPI.settings not available (preload not loaded?)' };
   }
-  return false;
+  try {
+    const result = await window.electronAPI.settings.save(settings);
+    if (result.success) return { ok: true };
+    return { ok: false, error: result.error ?? 'Handler returned success=false' };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ async function saveSettings(settings: AppSettings): Promise<boolean> {
 export default function SettingsPage(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS });
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   // Load settings on mount
@@ -69,10 +71,13 @@ export default function SettingsPage(): JSX.Element {
 
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
-    const success = await saveSettings(settings);
-    setSaveStatus(success ? 'saved' : 'error');
-    if (success) {
+    setSaveError(null);
+    const result = await saveSettings(settings);
+    setSaveStatus(result.ok ? 'saved' : 'error');
+    if (result.ok) {
       setTimeout(() => setSaveStatus('idle'), 2000);
+    } else {
+      setSaveError(result.error ?? null);
     }
   }, [settings]);
 
@@ -211,6 +216,24 @@ export default function SettingsPage(): JSX.Element {
             </div>
           </SettingsField>
 
+          {/* Execution Mode */}
+          <SettingsField
+            label="Execution Mode"
+            description="Mock mode simulates agent execution with artificial delays. Disable to run real Claude CLI processes."
+          >
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.executionMockMode}
+                onChange={(e) => updateField('executionMockMode', e.target.checked)}
+                className="w-4 h-4 accent-blue-500"
+              />
+              <span className="text-sm text-gray-300">
+                {settings.executionMockMode ? 'Mock mode (simulated)' : 'Real mode (live CLI)'}
+              </span>
+            </label>
+          </SettingsField>
+
           {/* Redis URL */}
           <SettingsField
             label="Redis Connection URL"
@@ -221,6 +244,21 @@ export default function SettingsPage(): JSX.Element {
               value={settings.redisUrl}
               onChange={(e) => updateField('redisUrl', e.target.value)}
               placeholder="redis://localhost:6379"
+              className="w-full text-sm bg-gray-900 text-gray-200 placeholder-gray-500 border border-gray-600 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none font-mono"
+            />
+          </SettingsField>
+
+          {/* Cursor Agent URL */}
+          <SettingsField
+            label="Cursor Agent URL"
+            description="HTTP endpoint for the Cursor CLI agent container (e.g. http://localhost:8090)."
+          >
+            <input
+              type="url"
+              value={settings.cursorAgentUrl}
+              onChange={(e) => updateField('cursorAgentUrl', e.target.value)}
+              placeholder="http://localhost:8090"
+              pattern="https?://.+"
               className="w-full text-sm bg-gray-900 text-gray-200 placeholder-gray-500 border border-gray-600 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none font-mono"
             />
           </SettingsField>
@@ -242,8 +280,8 @@ export default function SettingsPage(): JSX.Element {
             <span className="text-xs text-green-400">Settings saved.</span>
           )}
           {saveStatus === 'error' && (
-            <span className="text-xs text-red-400">
-              Failed to save. IPC settings handler may not be available.
+            <span className="text-xs text-red-400" title={saveError ?? undefined}>
+              {saveError ?? 'Failed to save.'} {saveError && '(hover for details)'}
             </span>
           )}
           <button

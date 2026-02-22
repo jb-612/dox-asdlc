@@ -153,6 +153,46 @@ services:
     networks:
       - asdlc-network
 
+  # Container 2c: Cursor CLI Agent
+  # - Stateless HTTP wrapper for Cursor CLI execution
+  # - Accepts targeted tasks via POST /execute
+  # - Returns JSON results for DAG traversal
+  # - Opt-in: start with `docker compose --profile cursor up`
+  # - Requires the Linux `agent` binary mounted at /usr/local/bin/agent
+  # - Place secrets in docker/cursor-agent/.env (loaded via dotenv at startup)
+  cursor-agent:
+    profiles: [cursor]
+    build:
+      context: ..
+      dockerfile: docker/cursor-agent/Dockerfile
+    container_name: asdlc-cursor-agent
+    hostname: cursor-agent
+    ports:
+      - "8090:8090"
+    environment:
+      - SERVICE_NAME=cursor-agent
+      - SERVICE_PORT=8090
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - REDIS_URL=redis://:changeme_redis_password_before_deployment@redis:6379
+    env_file:
+      - cursor-agent/.env
+    volumes:
+      - ../:/workspace:rw
+      - ./cursor-agent/.env:/app/.env:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - asdlc-network
+
   # Container 3: Redis
   # - Event streams and task state caches
   redis:

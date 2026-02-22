@@ -180,6 +180,69 @@ class TestCLIAgentBackendParseOutput:
         assert result.structured_output == {"features": [{"id": "F01"}]}
 
 
+class TestCursorCLIProfile:
+    """Tests for Cursor CLI profile (#273)."""
+
+    def test_cursor_cli_init(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        assert backend.backend_name == "cursor-cli"
+
+    def test_cursor_command_uses_agent_binary(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        cmd = backend._build_command("Do something", BackendConfig())
+        # Binary must be 'agent', not 'cursor'
+        assert cmd[0] == "agent"
+
+    def test_cursor_command_uses_force_flag(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        cmd = backend._build_command("Do something", BackendConfig())
+        assert "--force" in cmd
+        assert "--dangerously-skip-permissions" not in cmd
+
+    def test_cursor_command_has_json_output(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        cmd = backend._build_command("Do something", BackendConfig())
+        assert "--output-format" in cmd
+        idx = cmd.index("--output-format")
+        assert cmd[idx + 1] == "json"
+
+    def test_cursor_command_with_model(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        config = BackendConfig(model="claude-4")
+        cmd = backend._build_command("prompt", config)
+        assert "--model" in cmd
+        idx = cmd.index("--model")
+        assert cmd[idx + 1] == "claude-4"
+
+    def test_cursor_max_turns_not_added(self) -> None:
+        """Cursor CLI does not support --max-turns; the flag must be omitted."""
+        backend = CLIAgentBackend(cli="cursor")
+        config = BackendConfig(max_turns=10)
+        cmd = backend._build_command("prompt", config)
+        assert "--max-turns" not in cmd
+
+    def test_cursor_budget_not_added(self) -> None:
+        """Cursor CLI does not support --max-budget-usd; the flag must be omitted."""
+        backend = CLIAgentBackend(cli="cursor")
+        config = BackendConfig(max_budget_usd=5.0)
+        cmd = backend._build_command("prompt", config)
+        assert "--max-budget-usd" not in cmd
+
+    def test_cursor_system_prompt_not_added(self) -> None:
+        """Cursor uses .cursor/rules/ instead of --system-prompt."""
+        backend = CLIAgentBackend(cli="cursor")
+        config = BackendConfig(system_prompt="Be concise")
+        cmd = backend._build_command("prompt", config)
+        assert "--system-prompt" not in cmd
+
+    @pytest.mark.asyncio
+    async def test_cursor_health_check_returns_bool(self) -> None:
+        backend = CLIAgentBackend(cli="cursor")
+        # Returns False when 'agent' binary not on PATH in test environment
+        result = await backend.health_check()
+        assert isinstance(result, bool)
+
+
 class TestCLIAgentBackendHealthCheck:
     """Tests for health check."""
 

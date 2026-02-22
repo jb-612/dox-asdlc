@@ -26,15 +26,15 @@ function categoryForEventType(type: ExecutionEventType): FilterCategory[] {
   switch (type) {
     case 'node_started':
     case 'node_completed':
-    case 'node_failed':
     case 'node_skipped':
       return ['nodes'];
+    case 'node_failed':
+      return ['nodes', 'errors'];
     case 'gate_waiting':
     case 'gate_decided':
       return ['gates'];
     case 'execution_failed':
     case 'execution_aborted':
-    case 'node_failed':
     case 'cli_error':
       return ['errors'];
     default:

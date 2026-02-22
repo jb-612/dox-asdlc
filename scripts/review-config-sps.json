@@ -1,0 +1,78 @@
+{
+  "gemini_1": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Chrome Extension Security & Bugs",
+    "slug": "gemini-security",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "Chrome extension manifest.json permissions: are they minimal and correct for Manifest V3?",
+      "Content script injection safety: XSS vectors in DOM manipulation",
+      "Background service worker lifecycle: does it handle being terminated and restarted?",
+      "Message passing between content script, background, and popup: are there race conditions?",
+      "Storage API usage: chrome.storage vs localStorage correctness and quota handling",
+      "URL pattern matching in content_scripts: too broad or too narrow?",
+      "Error handling in async chrome API calls (chrome.runtime.lastError patterns)",
+      "CORS and fetch issues in background script when calling backend API",
+      "Popup script: event listeners, DOM ready timing, and state management bugs",
+      "Backend API authentication: JWT/token handling, session management vulnerabilities"
+    ]
+  },
+  "gemini_2": {
+    "cli": "gemini",
+    "model": "gemini-2.5-pro",
+    "focus": "Architecture & Data Flow",
+    "slug": "gemini-architecture",
+    "flags": "--sandbox permissive -o text",
+    "checklist": [
+      "Extension <-> Backend API contract: are endpoints, payloads, and auth consistent?",
+      "Frontend <-> Backend API contract: mismatched routes, missing error responses",
+      "Database models vs API response shapes: are there missing fields or type mismatches?",
+      "State management in frontend (Zustand stores): stale state, missing updates, race conditions",
+      "Backend router organization and middleware chain (CORS, auth, error handling)",
+      "Product scraping logic in content.js: fragile selectors, missing error handling",
+      "Collection/product relationship integrity in database models",
+      "Search implementation: SQL injection, missing indexes, query correctness",
+      "Docker Compose service wiring: port mapping, environment variables, dependencies",
+      "Frontend routing and navigation: dead routes, missing guards, broken links"
+    ]
+  },
+  "codex_1": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Code Quality & Error Handling",
+    "slug": "codex-quality",
+    "flags": "--full-auto",
+    "checklist": [
+      "Uncaught promise rejections and missing try/catch blocks in async code",
+      "Chrome extension popup.js: null reference errors when DOM elements missing",
+      "Backend Python exception handling: bare except, missing error responses",
+      "Frontend component error boundaries and loading/error states",
+      "Hardcoded URLs, API endpoints, or configuration values",
+      "Missing input validation on forms (login, register, product save)",
+      "Dead code, unused imports, unreachable branches",
+      "Memory leaks: event listeners not cleaned up, intervals not cleared",
+      "Inconsistent error message formats between backend and frontend",
+      "Missing loading states and user feedback for async operations"
+    ]
+  },
+  "codex_2": {
+    "cli": "codex",
+    "model": "gpt-5.3-codex",
+    "focus": "Chrome Extension Specific Bugs & Edge Cases",
+    "slug": "codex-testing",
+    "flags": "--full-auto",
+    "checklist": [
+      "Content script: does it correctly detect product pages across different site layouts?",
+      "Background script: message listener registration and response handling",
+      "Popup: does it correctly show saved products and handle empty states?",
+      "Extension-to-backend auth flow: token storage, refresh, expiration handling",
+      "What happens when backend is unreachable from extension? Timeout/retry/error UI?",
+      "Content script CSS conflicts with host page styles",
+      "Multiple tab handling: does saving from multiple tabs cause data corruption?",
+      "Extension update/reload behavior: does state persist correctly?",
+      "Backend database migrations: are there missing columns or constraint issues?",
+      "Price tracking: number parsing, currency handling, comparison logic correctness"
+    ]
+  }
+}

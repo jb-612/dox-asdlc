@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "permissions": {
+    "allow": [
+      "Shell(git status)",
+      "Shell(git diff)",
+      "Shell(git log)",
+      "Read(**)",
+      "Shell(npm test)",
+      "Shell(pytest)"
+    ],
+    "deny": [
+      "Shell(rm -rf)",
+      "Shell(git push --force)",
+      "Shell(git reset --hard)"
+    ]
+  }
+}

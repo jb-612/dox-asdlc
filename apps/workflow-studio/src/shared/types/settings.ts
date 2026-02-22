@@ -4,6 +4,8 @@ export interface AppSettings {
   autoSaveIntervalSeconds: number;
   cliDefaultCwd: string;
   redisUrl: string;
+  cursorAgentUrl: string;
+  executionMockMode: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -12,4 +14,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSaveIntervalSeconds: 30,
   cliDefaultCwd: '',
   redisUrl: 'redis://localhost:6379',
+  cursorAgentUrl: 'http://localhost:8090',
+  executionMockMode: true,
 };

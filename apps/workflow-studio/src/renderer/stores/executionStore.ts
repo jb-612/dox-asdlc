@@ -52,6 +52,7 @@ export interface ExecutionState {
     workflow: WorkflowDefinition,
     workItem?: WorkItemReference,
     variables?: Record<string, unknown>,
+    mockMode?: boolean,
   ) => Promise<void>;
 
   /** Pause the running execution. */
@@ -161,7 +162,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   // IPC controls
   // -----------------------------------------------------------------------
 
-  startExecution: async (workflow, workItem, variables) => {
+  startExecution: async (workflow, workItem, variables, mockMode = true) => {
     set({ lastError: null });
     try {
       const result = await window.electronAPI.execution.start({
@@ -169,6 +170,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         workflow,
         workItem,
         variables,
+        mockMode,
       });
       if (!result.success) {
         set({ lastError: result.error ?? 'Failed to start execution' });

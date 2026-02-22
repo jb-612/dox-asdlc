@@ -22,6 +22,13 @@ from src.workers.agents.backends.base import (
 logger = logging.getLogger(__name__)
 
 
+# Map profile name to actual binary name on PATH
+_CLI_BINARY: dict[str, str] = {
+    "claude": "claude",
+    "codex": "codex",
+    "cursor": "agent",
+}
+
 # CLI-specific flag mappings
 _CLI_PROFILES: dict[str, dict[str, Any]] = {
     "claude": {
@@ -39,6 +46,17 @@ _CLI_PROFILES: dict[str, dict[str, Any]] = {
         "print_flag": "exec",
         "output_flag": ["--json"],
         "skip_permissions": "--full-auto",
+        "max_turns_flag": None,
+        "budget_flag": None,
+        "model_flag": "--model",
+        "schema_flag": None,
+        "system_prompt_flag": None,
+        "allowed_tools_flag": None,
+    },
+    "cursor": {
+        "print_flag": "-p",
+        "output_flag": ["--output-format", "json"],
+        "skip_permissions": "--force",
         "max_turns_flag": None,
         "budget_flag": None,
         "model_flag": "--model",
@@ -73,7 +91,7 @@ class CLIAgentBackend:
         """Initialize CLI backend.
 
         Args:
-            cli: CLI tool name ("claude" or "codex").
+            cli: CLI tool name ("claude", "codex", or "cursor").
             skip_permissions: Auto-approve all tool operations.
         """
         if cli not in _CLI_PROFILES:
@@ -103,7 +121,7 @@ class CLIAgentBackend:
         Returns:
             Command as a list of strings.
         """
-        cmd = [self._cli]
+        cmd = [_CLI_BINARY.get(self._cli, self._cli)]
         profile = self._profile
 
         # Print/exec flag + prompt
@@ -303,4 +321,5 @@ class CLIAgentBackend:
         Returns:
             True if the CLI binary is found in PATH.
         """
-        return shutil.which(self._cli) is not None
+        binary = _CLI_BINARY.get(self._cli, self._cli)
+        return shutil.which(binary) is not None

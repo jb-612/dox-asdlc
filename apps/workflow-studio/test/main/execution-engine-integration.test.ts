@@ -318,4 +318,142 @@ describe('ExecutionEngine integration', () => {
       expect(execution.nodeStates['node-1'].error).toContain('timed out');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Remote dispatch (Cursor backend) — #273
+  // -------------------------------------------------------------------------
+
+  describe('remote agent dispatch', () => {
+    function createCursorWorkflow(): WorkflowDefinition {
+      return {
+        id: 'cursor-workflow-1',
+        metadata: {
+          name: 'Cursor Workflow',
+          version: '1.0.0',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tags: [],
+        },
+        nodes: [
+          {
+            id: 'cursor-node-1',
+            type: 'backend',
+            label: 'Cursor Backend',
+            config: { backend: 'cursor', timeoutSeconds: 5 },
+            inputs: [],
+            outputs: [],
+            position: { x: 0, y: 0 },
+            description: 'Run cursor agent task',
+          },
+        ],
+        transitions: [],
+        gates: [],
+        variables: [],
+      };
+    }
+
+    it('should fail node when remoteAgentUrl is not set', async () => {
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        // remoteAgentUrl intentionally omitted
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('failed');
+      expect(execution.nodeStates['cursor-node-1'].error).toContain(
+        'Invalid or missing remote agent URL',
+      );
+    });
+
+    it('should fail node when remoteAgentUrl has an invalid scheme', async () => {
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        remoteAgentUrl: 'file:///etc/passwd',
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('failed');
+      expect(execution.nodeStates['cursor-node-1'].error).toContain(
+        'Invalid or missing remote agent URL',
+      );
+    });
+
+    it('should POST to /execute and complete node on success response', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, result: 'done', durationMs: 100 }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        remoteAgentUrl: 'http://localhost:8090',
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8090/execute',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('completed');
+    });
+
+    it('should fail node when remote returns success: false', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: false, result: '', error: 'agent crashed' }),
+      }));
+
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        remoteAgentUrl: 'http://localhost:8090',
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('failed');
+      expect(execution.nodeStates['cursor-node-1'].error).toContain('agent crashed');
+    });
+
+    it('should fail node on HTTP 5xx response', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => 'Service Unavailable',
+      }));
+
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        remoteAgentUrl: 'http://localhost:8090',
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('failed');
+      expect(execution.nodeStates['cursor-node-1'].error).toContain('HTTP 503');
+    });
+
+    it('should fail node when fetch throws (unreachable host)', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+
+      const engine = new ExecutionEngine(mockMainWindow, {
+        mockMode: false,
+        remoteAgentUrl: 'http://localhost:8090',
+      });
+
+      const workflow = createCursorWorkflow();
+      const execution = await engine.start(workflow);
+
+      expect(execution.nodeStates['cursor-node-1'].status).toBe('failed');
+      expect(execution.nodeStates['cursor-node-1'].error).toContain('ECONNREFUSED');
+    });
+  });
 });

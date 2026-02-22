@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { app } from 'electron';
 import type { AppSettings } from '../../shared/types/settings';
+import { DEFAULT_SETTINGS } from '../../shared/types/settings';
 
 // ---------------------------------------------------------------------------
 // SettingsService
@@ -19,7 +20,9 @@ function getDefaultSettings(): AppSettings {
     templateDirectory: join(userDataPath, 'templates'),
     autoSaveIntervalSeconds: 60,
     cliDefaultCwd: process.cwd(),
-    redisUrl: 'redis://localhost:6379',
+    redisUrl: DEFAULT_SETTINGS.redisUrl,
+    cursorAgentUrl: DEFAULT_SETTINGS.cursorAgentUrl,
+    executionMockMode: DEFAULT_SETTINGS.executionMockMode,
   };
 }
 

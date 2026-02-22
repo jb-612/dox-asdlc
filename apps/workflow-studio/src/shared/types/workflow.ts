@@ -35,6 +35,7 @@ export interface AgentNodeConfig {
   systemPrompt?: string;
   timeoutSeconds?: number;
   extraFlags?: string[];
+  backend?: 'claude' | 'cursor' | 'codex';
 }
 
 export interface AgentNode {

@@ -5,7 +5,7 @@ import { builtinModules } from 'module';
 // Vite config for Electron preload script
 export default defineConfig({
   build: {
-    outDir: 'dist/preload',
+    outDir: resolve(__dirname, 'dist/preload'),
     lib: {
       entry: resolve(__dirname, 'src/preload/preload.ts'),
       formats: ['cjs'],

@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { ExecutionEngine } from '../services/execution-engine';
 import type { CLISpawner } from '../services/cli-spawner';
 import type { RedisEventClient } from '../services/redis-client';
+import type { SettingsService } from '../services/settings-service';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
 
@@ -23,6 +24,7 @@ let engine: ExecutionEngine | null = null;
 export interface ExecutionHandlerDeps {
   cliSpawner?: CLISpawner;
   redisClient?: RedisEventClient;
+  settingsService?: SettingsService;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,7 @@ export interface ExecutionHandlerDeps {
 export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
   const cliSpawner = deps?.cliSpawner;
   const redisClient = deps?.redisClient;
+  const settingsService = deps?.settingsService;
 
   // --- Start execution ---------------------------------------------------
   ipcMain.handle(
@@ -89,6 +92,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         mockMode: config.mockMode ?? true,
         cliSpawner: cliSpawner ?? undefined,
         redisClient: redisClient ?? undefined,
+        remoteAgentUrl: settingsService?.get().cursorAgentUrl || undefined,
       });
 
       // Start is async and runs in the background -- we return immediately
@@ -174,15 +178,10 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
   );
 
   // --- CLI Exit forwarding -----------------------------------------------
-  // Listen for CLI exit events and forward them to the engine so it can
-  // resolve pending node waits.
+  // CLISpawner sends CLI_EXIT via ipcMain when a pty process exits.
+  // Forward the exit to the active engine so it can resolve node waits.
   if (cliSpawner) {
-    // The CLI_EXIT event is sent by CLISpawner when a process exits.
-    // We intercept it here to notify the engine.
-    const originalSend = BrowserWindow.prototype?.webContents?.send;
-
-    // Register a listener for CLI exit events from the main window
-    ipcMain.on?.(IPC_CHANNELS.CLI_EXIT, (_event, data: { sessionId: string; exitCode: number }) => {
+    ipcMain.on(IPC_CHANNELS.CLI_EXIT, (_event, data: { sessionId: string; exitCode: number }) => {
       if (engine) {
         engine.handleCLIExit(data.sessionId, data.exitCode);
       }

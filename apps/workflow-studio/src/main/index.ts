@@ -147,7 +147,12 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  // Load the app
+}
+
+function loadWindowContent(): void {
+  if (!mainWindow) return;
+  // Load the app — called after IPC handlers are registered to avoid
+  // "No handler registered" errors from renderer startup IPC calls.
   if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
     const devServerUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
     mainWindow.loadURL(devServerUrl);
@@ -165,7 +170,7 @@ app.whenReady().then(async () => {
   // Load persisted settings
   const settings = await settingsService.load();
 
-  // Create the main window first so services can reference it
+  // Create the BrowserWindow (but don't load any URL yet)
   createWindow();
 
   // Instantiate services that depend on the BrowserWindow
@@ -175,13 +180,17 @@ app.whenReady().then(async () => {
   const workItemService = new WorkItemService(projectRoot);
   const workflowFileService = new WorkflowFileService(settings.workflowDirectory);
 
-  // Register all IPC handlers with live service instances
+  // Register all IPC handlers BEFORE loading the renderer URL so that
+  // startup IPC calls from the renderer are never met with "no handler".
   registerAllHandlers({
     cliSpawner,
     workItemService,
     workflowFileService,
     settingsService,
   });
+
+  // Now load the renderer — handlers are ready
+  loadWindowContent();
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked and no windows exist
