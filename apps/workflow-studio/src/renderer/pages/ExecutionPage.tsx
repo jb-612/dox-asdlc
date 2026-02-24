@@ -2,10 +2,25 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
+import type { RepoMount } from '../../shared/types/repo';
 import { DEFAULT_SETTINGS } from '../../shared/types/settings';
 import { NODE_TYPE_METADATA } from '../../shared/constants';
 import WorkItemPickerDialog from '../components/workitems/WorkItemPickerDialog';
+import RepoMountSection from '../components/execution/RepoMountSection';
 import { useExecutionStore } from '../stores/executionStore';
+
+// ---------------------------------------------------------------------------
+// Relative time helper
+// ---------------------------------------------------------------------------
+
+function relativeTime(isoDate: string | undefined): string {
+  if (!isoDate) return 'Never';
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days < 1) return 'Today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
 
 // ---------------------------------------------------------------------------
 // Workflow Summary Card
@@ -23,6 +38,7 @@ function WorkflowSummaryCard({ workflow, selected, onClick }: WorkflowSummaryPro
   return (
     <button
       type="button"
+      data-testid="template-card"
       onClick={handleClick}
       className={`
         w-full text-left p-4 rounded-lg border transition-colors
@@ -59,6 +75,10 @@ function WorkflowSummaryCard({ workflow, selected, onClick }: WorkflowSummaryPro
         {workflow.nodes.length > 8 && (
           <span className="text-[10px] text-gray-500">+{workflow.nodes.length - 8}</span>
         )}
+      </div>
+      {/* Last used display (T14) */}
+      <div data-testid="template-last-used" className="mt-1.5 text-[10px] text-gray-500">
+        Last used: {relativeTime(workflow.metadata.lastUsedAt)}
       </div>
     </button>
   );
@@ -132,12 +152,14 @@ function VariableOverridesForm({ workflow, values, onChange }: VariableOverrides
  * ExecutionPage -- launch page for starting workflow executions.
  *
  * Features:
+ *  - Template status filter: only active templates shown; paused count badge
+ *  - Template search input for filtering by name or tag
+ *  - Last used display on each template card
  *  - Workflow selector (card list of saved workflows)
  *  - Work item selector (opens WorkItemPickerDialog)
- *  - Selected workflow summary (name, node count, gate count)
- *  - Selected work item summary
+ *  - Repo mount section (local or GitHub clone)
  *  - Variable overrides form (if workflow defines variables)
- *  - "Start Execution" button (disabled if no workflow selected)
+ *  - "Start Execution" button (disabled until template + repo selected)
  *  - On start, navigates to /execute/run
  */
 export default function ExecutionPage(): JSX.Element {
@@ -153,26 +175,52 @@ export default function ExecutionPage(): JSX.Element {
     }).catch(() => {});
   }, []);
 
-  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  // ------ Template loading ------
+
+  const [allWorkflows, setAllWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [pausedCount, setPausedCount] = useState(0);
   const [workflowsLoading, setWorkflowsLoading] = useState(false);
   const [workflowsError, setWorkflowsError] = useState<string | null>(null);
 
   useEffect(() => {
     setWorkflowsLoading(true);
-    window.electronAPI.workflow
+    window.electronAPI.template
       .list()
-      .then((summaries) =>
-        Promise.all(summaries.map((s) => window.electronAPI.workflow.load(s.id)))
-      )
-      .then((loaded) => setWorkflows(loaded.filter(Boolean) as WorkflowDefinition[]))
-      .catch((err) => setWorkflowsError(err?.message ?? 'Failed to load workflows'))
+      .then((summaries) => {
+        // Count paused templates (T12)
+        const paused = summaries.filter((s) => s.status === 'paused').length;
+        setPausedCount(paused);
+
+        // Only load active templates
+        const active = summaries.filter((s) => (s.status ?? 'active') !== 'paused');
+        return Promise.all(active.map((s) => window.electronAPI.template.load(s.id)));
+      })
+      .then((loaded) => setAllWorkflows(loaded.filter(Boolean) as WorkflowDefinition[]))
+      .catch((err) => setWorkflowsError(err?.message ?? 'Failed to load templates'))
       .finally(() => setWorkflowsLoading(false));
   }, []);
+
+  // ------ Template search (T13) ------
+
+  const [templateSearch, setTemplateSearch] = useState('');
+
+  const workflows = useMemo(() => {
+    if (!templateSearch.trim()) return allWorkflows;
+    const query = templateSearch.toLowerCase();
+    return allWorkflows.filter(
+      (wf) =>
+        wf.metadata.name.toLowerCase().includes(query) ||
+        (wf.metadata.tags ?? []).some((tag) => tag.toLowerCase().includes(query)),
+    );
+  }, [allWorkflows, templateSearch]);
+
+  // ------ Selection state ------
 
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDefinition | null>(null);
   const [selectedWorkItem, setSelectedWorkItem] = useState<WorkItemReference | null>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [variableOverrides, setVariableOverrides] = useState<Record<string, unknown>>({});
+  const [repoMount, setRepoMount] = useState<RepoMount | null>(null);
 
   const handleSelectWorkflow = useCallback((wf: WorkflowDefinition) => {
     setSelectedWorkflow(wf);
@@ -195,12 +243,17 @@ export default function ExecutionPage(): JSX.Element {
   }, []);
 
   const handleStart = useCallback(async () => {
-    if (!selectedWorkflow) return;
+    if (!selectedWorkflow || !repoMount?.localPath) return;
     await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides, mockMode);
-    navigate('/execute/run');
-  }, [selectedWorkflow, selectedWorkItem, variableOverrides, mockMode, startExecution, navigate]);
 
-  const canStart = selectedWorkflow !== null;
+    // Touch the template to update lastUsedAt (T14)
+    window.electronAPI?.workflow?.touch?.(selectedWorkflow.id).catch(() => {});
+
+    navigate('/execute/run');
+  }, [selectedWorkflow, selectedWorkItem, variableOverrides, mockMode, repoMount, startExecution, navigate]);
+
+  // Require both template and repo mount with a valid localPath (T18)
+  const canStart = selectedWorkflow !== null && repoMount !== null && !!repoMount.localPath;
 
   return (
     <div className="h-full flex flex-col">
@@ -208,21 +261,48 @@ export default function ExecutionPage(): JSX.Element {
       <div className="px-6 py-4 border-b border-gray-700 shrink-0">
         <h2 className="text-xl font-bold text-gray-100">Execute Workflow</h2>
         <p className="text-sm text-gray-400 mt-0.5">
-          Select a workflow and work item, then start execution.
+          Select a template, mount a repository, and start execution.
         </p>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left column: Workflow selection */}
+          {/* Left column: Template selection */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-300 mb-3">
-              1. Select Workflow
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-300">
+                1. Select Template
+              </h3>
+              {pausedCount > 0 && (
+                <span data-testid="template-status-filter" className="text-[10px] px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-500 border border-yellow-700/40">
+                  {pausedCount} paused hidden
+                </span>
+              )}
+            </div>
+
+            {/* Search input (T13) */}
+            <div className="mb-3">
+              <input
+                type="text"
+                data-testid="template-search-input"
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                placeholder="Search templates..."
+                className="w-full text-xs bg-gray-900 text-gray-200 placeholder-gray-500 border border-gray-600 rounded-lg px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none"
+              />
+            </div>
+
             <div className="space-y-2">
-              {workflowsLoading && <p className="text-sm text-gray-400">Loading workflows…</p>}
+              {workflowsLoading && <p className="text-sm text-gray-400">Loading templates...</p>}
               {workflowsError && <p className="text-sm text-red-500">{workflowsError}</p>}
+              {!workflowsLoading && !workflowsError && workflows.length === 0 && (
+                <p className="text-sm text-gray-400 py-4 text-center">
+                  {templateSearch.trim()
+                    ? 'No templates match your search.'
+                    : 'No active templates. Visit the Templates tab to activate one.'}
+                </p>
+              )}
               {workflows.map((wf) => (
                 <WorkflowSummaryCard
                   key={wf.id}
@@ -234,7 +314,7 @@ export default function ExecutionPage(): JSX.Element {
             </div>
           </div>
 
-          {/* Right column: Work item + summary + variables */}
+          {/* Right column: Work item + repo + summary + variables */}
           <div className="space-y-6">
             {/* Work item selection */}
             <div>
@@ -277,11 +357,23 @@ export default function ExecutionPage(): JSX.Element {
               )}
             </div>
 
+            {/* Repo mount section (T18) */}
+            {selectedWorkflow && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">
+                  3. Mount Repository
+                </h3>
+                <div className="p-4 rounded-lg border border-gray-700 bg-gray-800">
+                  <RepoMountSection value={repoMount} onChange={setRepoMount} />
+                </div>
+              </div>
+            )}
+
             {/* Selected workflow summary */}
             {selectedWorkflow && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-300 mb-3">
-                  3. Review Configuration
+                  4. Review Configuration
                 </h3>
                 <div className="p-4 rounded-lg border border-gray-700 bg-gray-800">
                   <h4 className="text-sm font-medium text-gray-100 mb-2">

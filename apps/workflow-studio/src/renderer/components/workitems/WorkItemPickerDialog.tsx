@@ -1,40 +1,10 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { WorkItemReference, WorkItemType } from '../../../shared/types/workitem';
 import WorkItemCard from './WorkItemCard';
 
 // ---------------------------------------------------------------------------
-// Mock data -- will be replaced by IPC calls when backend is ready
+// Mock data for Issues and Ideas -- GitHub Issues wiring deferred
 // ---------------------------------------------------------------------------
-
-const MOCK_PRDS: WorkItemReference[] = [
-  {
-    id: 'prd-p01-f01',
-    type: 'prd',
-    source: 'filesystem',
-    title: 'P01-F01 Redis Event Bus',
-    description: 'Implement Redis Streams-based event bus for state transitions and task routing across agent clusters.',
-    path: '.workitems/P01-F01-redis-event-bus',
-    labels: ['backend', 'infrastructure'],
-  },
-  {
-    id: 'prd-p05-f01',
-    type: 'prd',
-    source: 'filesystem',
-    title: 'P05-F01 HITL Approval UI',
-    description: 'Build the human-in-the-loop approval interface for gate decisions during workflow execution.',
-    path: '.workitems/P05-F01-hitl-approval-ui',
-    labels: ['frontend', 'hitl'],
-  },
-  {
-    id: 'prd-p04-f01',
-    type: 'prd',
-    source: 'filesystem',
-    title: 'P04-F01 Review Swarm',
-    description: 'Multi-agent code review with heuristic diversity and consolidated review reports.',
-    path: '.workitems/P04-F01-review-swarm',
-    labels: ['governance', 'review'],
-  },
-];
 
 const MOCK_ISSUES: WorkItemReference[] = [
   {
@@ -121,11 +91,46 @@ export default function WorkItemPickerDialog({
   const [manualTitle, setManualTitle] = useState('');
   const [manualDescription, setManualDescription] = useState('');
 
+  // PRD items from IPC (P15-F03 T19)
+  const [fsPrds, setFsPrds] = useState<WorkItemReference[]>([]);
+  const [prdsLoading, setPrdsLoading] = useState(false);
+  const [prdsError, setPrdsError] = useState<string | null>(null);
+
+  // Fetch PRDs from filesystem when dialog opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setPrdsLoading(true);
+    setPrdsError(null);
+
+    // Load settings to get workItemDirectory, then fetch from filesystem
+    const fetchPrds = async () => {
+      try {
+        const settings = await window.electronAPI.settings.load();
+        const dir = settings.workItemDirectory;
+        if (!dir) {
+          setFsPrds([]);
+          setPrdsLoading(false);
+          return;
+        }
+        const items = await window.electronAPI.workitem.listFs(dir);
+        setFsPrds(items as WorkItemReference[]);
+      } catch (err: unknown) {
+        setPrdsError(err instanceof Error ? err.message : 'Failed to load work items');
+        setFsPrds([]);
+      } finally {
+        setPrdsLoading(false);
+      }
+    };
+
+    fetchPrds();
+  }, [isOpen]);
+
   // Get items for current tab
   const tabItems = useMemo((): WorkItemReference[] => {
     switch (activeTab) {
       case 'prds':
-        return MOCK_PRDS;
+        return fsPrds;
       case 'issues':
         return MOCK_ISSUES;
       case 'ideas':
@@ -133,7 +138,7 @@ export default function WorkItemPickerDialog({
       case 'manual':
         return [];
     }
-  }, [activeTab]);
+  }, [activeTab, fsPrds]);
 
   // Filter by search
   const filteredItems = useMemo(() => {
@@ -233,7 +238,16 @@ export default function WorkItemPickerDialog({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-3 min-h-[200px]">
-          {activeTab === 'manual' ? (
+          {activeTab === 'prds' && prdsLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
+              Loading work items...
+            </div>
+          ) : activeTab === 'prds' && prdsError ? (
+            <div className="flex items-center justify-center h-full text-red-400 text-sm">
+              {prdsError}
+            </div>
+          ) : activeTab === 'manual' ? (
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1">
@@ -264,9 +278,11 @@ export default function WorkItemPickerDialog({
             <div className="flex items-center justify-center h-full text-gray-500 text-sm">
               {searchQuery.trim()
                 ? 'No items match your search.'
-                : activeTab === 'ideas'
-                  ? 'No ideas yet. Use the Manual tab to create one.'
-                  : 'No items found.'}
+                : activeTab === 'prds'
+                  ? 'No work items found. Check Settings > Work Item Directory.'
+                  : activeTab === 'ideas'
+                    ? 'No ideas yet. Use the Manual tab to create one.'
+                    : 'No items found.'}
             </div>
           ) : (
             <div className="space-y-2">

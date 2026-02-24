@@ -5,6 +5,8 @@ import ExecutionPage from './pages/ExecutionPage';
 import ExecutionWalkthroughPage from './pages/ExecutionWalkthroughPage';
 import CLIManagerPage from './pages/CLIManagerPage';
 import SettingsPage from './pages/SettingsPage';
+import MonitoringPage from './pages/MonitoringPage';
+import StudioPage from './pages/StudioPage';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
@@ -35,11 +37,17 @@ function App(): JSX.Element {
             <NavLink to="/templates" className={navLinkClass}>
               Templates
             </NavLink>
+            <NavLink to="/studio" className={navLinkClass}>
+              Studio
+            </NavLink>
             <NavLink to="/execute" className={navLinkClass}>
               Execute
             </NavLink>
             <NavLink to="/cli" className={navLinkClass}>
               CLI Sessions
+            </NavLink>
+            <NavLink to="/monitoring" className={navLinkClass}>
+              Monitoring
             </NavLink>
           </div>
 
@@ -55,9 +63,11 @@ function App(): JSX.Element {
           <Routes>
             <Route path="/" element={<DesignerPage />} />
             <Route path="/templates" element={<TemplateManagerPage />} />
+            <Route path="/studio" element={<StudioPage />} />
             <Route path="/execute" element={<ExecutionPage />} />
             <Route path="/execute/run" element={<ExecutionWalkthroughPage />} />
             <Route path="/cli" element={<CLIManagerPage />} />
+            <Route path="/monitoring" element={<MonitoringPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

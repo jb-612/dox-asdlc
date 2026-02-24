@@ -1,13 +1,16 @@
 import { registerWorkflowHandlers, seedWorkflow } from './workflow-handlers';
+import { registerTemplateHandlers } from './template-handlers';
 import { registerExecutionHandlers } from './execution-handlers';
 import { registerWorkItemHandlers } from './workitem-handlers';
 import { registerCLIHandlers } from './cli-handlers';
 import { registerSettingsHandlers } from './settings-handlers';
 import { registerDialogHandlers } from './dialog-handlers';
+import { registerRepoHandlers } from './repo-handlers';
 import type { CLISpawner } from '../services/cli-spawner';
 import type { WorkItemService } from '../services/workitem-service';
 import type { WorkflowFileService } from '../services/workflow-file-service';
 import type { SettingsService } from '../services/settings-service';
+import type { SessionHistoryService } from '../services/session-history-service';
 import { v4 as uuidv4 } from 'uuid';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 
@@ -19,7 +22,9 @@ export interface IPCServiceDeps {
   cliSpawner: CLISpawner;
   workItemService: WorkItemService;
   workflowFileService: WorkflowFileService;
+  templateFileService: WorkflowFileService;
   settingsService: SettingsService;
+  sessionHistoryService: SessionHistoryService;
 }
 
 /**
@@ -31,11 +36,13 @@ export interface IPCServiceDeps {
  */
 export function registerAllHandlers(deps: IPCServiceDeps): void {
   registerWorkflowHandlers(deps.workflowFileService);
+  registerTemplateHandlers(deps.templateFileService);
   registerExecutionHandlers({ cliSpawner: deps.cliSpawner, settingsService: deps.settingsService });
   registerWorkItemHandlers(deps.workItemService);
-  registerCLIHandlers(deps.cliSpawner);
+  registerCLIHandlers(deps.cliSpawner, deps.sessionHistoryService);
   registerSettingsHandlers(deps.settingsService);
   registerDialogHandlers();
+  registerRepoHandlers();
 
   // Seed sample workflows so the UI has content on first launch
   seedSampleWorkflows();

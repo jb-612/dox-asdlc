@@ -164,6 +164,82 @@ export const NODE_TYPE_METADATA: Record<AgentNodeType, NodeTypeMetadata> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Block type metadata for Studio Block Composer (P15-F01)
+// ---------------------------------------------------------------------------
+
+export interface BlockTypeMetadata {
+  agentNodeType: AgentNodeType;
+  label: string;
+  description: string;
+  icon: string;
+  defaultSystemPromptPrefix: string;
+  defaultOutputChecklist: string[];
+  /** Phase in which this block becomes available in the palette. */
+  phase: number;
+}
+
+export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, BlockTypeMetadata> = {
+  plan: {
+    agentNodeType: 'planner',
+    label: 'Plan',
+    description: 'Interview the user, gather requirements, and produce a task plan',
+    icon: 'ClipboardDocumentListIcon',
+    defaultSystemPromptPrefix:
+      'You are a senior technical planner. Interview the user to gather requirements and context.\n' +
+      'Ask clarifying questions before producing any output. Focus on understanding goals,\n' +
+      'constraints, and success criteria.',
+    defaultOutputChecklist: [
+      'Requirements document with user stories',
+      'Acceptance criteria for each story',
+      'Task breakdown with estimates',
+      'Dependency map',
+    ],
+    phase: 1,
+  },
+  dev: {
+    agentNodeType: 'coding',
+    label: 'Dev',
+    description: 'Write implementation code following TDD',
+    icon: 'CodeBracketIcon',
+    defaultSystemPromptPrefix: '',
+    defaultOutputChecklist: [],
+    phase: 2,
+  },
+  test: {
+    agentNodeType: 'utest',
+    label: 'Test',
+    description: 'Write and run unit tests',
+    icon: 'BeakerIcon',
+    defaultSystemPromptPrefix: '',
+    defaultOutputChecklist: [],
+    phase: 2,
+  },
+  review: {
+    agentNodeType: 'reviewer',
+    label: 'Review',
+    description: 'Review code quality and security',
+    icon: 'EyeIcon',
+    defaultSystemPromptPrefix: '',
+    defaultOutputChecklist: [],
+    phase: 2,
+  },
+  devops: {
+    agentNodeType: 'deployment',
+    label: 'DevOps',
+    description: 'Generate deployment plans and infrastructure',
+    icon: 'RocketLaunchIcon',
+    defaultSystemPromptPrefix: '',
+    defaultOutputChecklist: [],
+    phase: 2,
+  },
+};
+
+/** Block types available in the current phase (Phase 1). */
+export const AVAILABLE_BLOCK_TYPES = (
+  Object.entries(BLOCK_TYPE_METADATA) as [import('./types/workflow').BlockType, BlockTypeMetadata][]
+).filter(([, meta]) => meta.phase <= 1).map(([type]) => type);
+
 export const NODE_CATEGORIES = [
   'discovery',
   'design',

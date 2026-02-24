@@ -73,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py session-start python3 scripts/hooks/session-start.py",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py session-start python3 scripts/hooks/session-start.py",
             "timeout": 10000
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py guardrails-enforce-edit python3 .claude/hooks/guardrails-enforce.py",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-enforce-edit python3 .claude/hooks/guardrails-enforce.py",
             "timeout": 5000
           }
         ]
@@ -95,7 +95,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py guardrails-enforce-write python3 .claude/hooks/guardrails-enforce.py",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-enforce-write python3 .claude/hooks/guardrails-enforce.py",
             "timeout": 5000
           }
         ]
@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py guardrails-inject python3 .claude/hooks/guardrails-inject.py",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-inject python3 .claude/hooks/guardrails-inject.py",
             "timeout": 10000
           }
         ]
@@ -119,7 +119,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py guardrails-subagent python3 .claude/hooks/guardrails-subagent.py",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-subagent python3 .claude/hooks/guardrails-subagent.py",
             "timeout": 10000
           }
         ]
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py post-tool-use echo '{}'",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py post-tool-use echo '{}'",
             "timeout": 5000
           }
         ]
@@ -143,7 +143,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py session-stop echo '{}'",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py session-stop echo '{}'",
             "timeout": 5000
           }
         ]
@@ -155,7 +155,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/hooks/hook-wrapper.py notification echo '{}'",
+            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py notification echo '{}'",
             "timeout": 5000
           }
         ]

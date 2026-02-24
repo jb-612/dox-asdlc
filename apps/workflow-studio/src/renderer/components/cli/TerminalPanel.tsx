@@ -16,6 +16,8 @@ export interface TerminalPanelProps {
   isRunning: boolean;
   /** Callback to send text to stdin of the session. */
   onWrite: (data: string) => void;
+  /** Callback to clear the terminal buffer (T09). */
+  onClear?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,7 @@ export default function TerminalPanel({
   hasSession,
   isRunning,
   onWrite,
+  onClear,
 }: TerminalPanelProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -108,7 +111,7 @@ export default function TerminalPanel({
     }
   }, [outputLines]);
 
-  // Reset written index when outputLines is replaced (e.g., session switch)
+  // Reset written index when outputLines is replaced (e.g., session switch or clear)
   useEffect(() => {
     if (outputLines.length === 0) {
       const terminal = terminalRef.current;
@@ -118,6 +121,27 @@ export default function TerminalPanel({
       writtenIndexRef.current = 0;
     }
   }, [outputLines.length === 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keyboard shortcut: Cmd+K / Ctrl+K to clear (T09)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        handleClear();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  const handleClear = useCallback(() => {
+    const terminal = terminalRef.current;
+    if (terminal) {
+      terminal.clear();
+    }
+    writtenIndexRef.current = 0;
+    onClear?.();
+  }, [onClear]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -146,6 +170,18 @@ export default function TerminalPanel({
 
   return (
     <div className="h-full flex flex-col bg-black">
+      {/* Toolbar with clear button (T09) */}
+      <div className="flex items-center justify-end px-2 py-1 border-b border-gray-800 shrink-0">
+        <button
+          type="button"
+          onClick={handleClear}
+          className="px-2 py-0.5 text-[10px] font-medium rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+          title="Clear terminal (Cmd+K)"
+        >
+          Clear
+        </button>
+      </div>
+
       {/* xterm.js terminal container */}
       <div ref={containerRef} className="flex-1 min-h-0" />
 

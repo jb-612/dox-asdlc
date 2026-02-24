@@ -4,6 +4,7 @@ import type {
   ExecutionEvent,
   ExecutionStatus,
   NodeExecutionState,
+  ScrutinyLevel,
 } from '../../shared/types/execution';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
@@ -31,6 +32,9 @@ export interface ExecutionState {
   /** Whether IPC listeners have been wired up. */
   subscribed: boolean;
 
+  /** Current scrutiny level for gate deliverable views (P15-F04). */
+  scrutinyLevel: ScrutinyLevel;
+
   // --- Actions ---
 
   /** Replace the full execution snapshot and sync derived flags. */
@@ -44,6 +48,12 @@ export interface ExecutionState {
 
   /** Reset store to idle state (no execution). */
   clearExecution: () => void;
+
+  /** Update the scrutiny level for deliverables view (P15-F04). */
+  setScrutinyLevel: (level: ScrutinyLevel) => void;
+
+  /** Send revision feedback for a block in gate mode (P15-F04). */
+  reviseBlock: (nodeId: string, feedback: string) => Promise<void>;
 
   // --- IPC controls ---
 
@@ -110,18 +120,26 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   isWaitingGate: false,
   lastError: null,
   subscribed: false,
+  scrutinyLevel: 'summary',
 
   // -----------------------------------------------------------------------
   // State mutations
   // -----------------------------------------------------------------------
 
-  setExecution: (execution) =>
-    set({
+  setExecution: (execution) => {
+    // If the workflow has a defaultScrutinyLevel, use it (T17)
+    const defaultLevel = execution.workflow?.defaultScrutinyLevel;
+    const updates: Partial<ExecutionState> = {
       execution,
       events: execution.events,
       lastError: null,
       ...deriveFlags(execution.status),
-    }),
+    };
+    if (defaultLevel) {
+      updates.scrutinyLevel = defaultLevel;
+    }
+    set(updates);
+  },
 
   addEvent: (event) =>
     set((state) => ({
@@ -156,7 +174,33 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       isPaused: false,
       isWaitingGate: false,
       lastError: null,
+      scrutinyLevel: 'summary',
     }),
+
+  setScrutinyLevel: (level) => set({ scrutinyLevel: level }),
+
+  reviseBlock: async (nodeId, feedback) => {
+    const { execution } = get();
+    if (!execution) {
+      set({ lastError: 'No active execution' });
+      return;
+    }
+
+    set({ lastError: null });
+    try {
+      const result = await window.electronAPI.execution.revise({
+        executionId: execution.id,
+        nodeId,
+        feedback,
+      });
+      if (!result.success) {
+        set({ lastError: result.error ?? 'Failed to revise block' });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ lastError: message });
+    }
+  },
 
   // -----------------------------------------------------------------------
   // IPC controls

@@ -24,9 +24,13 @@ export const AGENT_NODE_TYPES = [
   'deployment',
   'monitor',
   'release',
+  'cursor',
 ] as const;
 
 export const AgentNodeTypeSchema = z.enum(AGENT_NODE_TYPES);
+
+export const GATE_MODES = ['auto_continue', 'gate'] as const;
+export const GateModeSchema = z.enum(GATE_MODES);
 
 export const AgentNodeConfigSchema = z.object({
   model: z.string().optional(),
@@ -34,8 +38,12 @@ export const AgentNodeConfigSchema = z.object({
   maxBudgetUsd: z.number().positive().optional(),
   allowedTools: z.array(z.string()).optional(),
   systemPrompt: z.string().optional(),
+  systemPromptPrefix: z.string().optional(),
+  outputChecklist: z.array(z.string()).optional(),
   timeoutSeconds: z.number().positive().optional(),
   extraFlags: z.array(z.string()).optional(),
+  backend: z.enum(['claude', 'cursor', 'codex']).optional(),
+  gateMode: GateModeSchema.optional(),
 });
 
 export const PortSchemaSchema = z.object({
@@ -116,6 +124,8 @@ export const WorkflowVariableSchema = z.object({
   required: z.boolean(),
 });
 
+export const WORKFLOW_STATUSES = ['active', 'paused'] as const;
+
 export const WorkflowMetadataSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -124,6 +134,15 @@ export const WorkflowMetadataSchema = z.object({
   updatedAt: z.string(),
   createdBy: z.string().optional(),
   tags: z.array(z.string()),
+  status: z.enum(WORKFLOW_STATUSES).optional(),
+  lastUsedAt: z.string().optional(),
+});
+
+export const ParallelGroupSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string().min(1),
+  laneNodeIds: z.array(z.string().uuid()),
+  dormancyTimeoutMs: z.number().positive().optional(),
 });
 
 export const WorkflowDefinitionSchema = z.object({
@@ -133,6 +152,8 @@ export const WorkflowDefinitionSchema = z.object({
   transitions: z.array(TransitionSchema),
   gates: z.array(HITLGateDefinitionSchema),
   variables: z.array(WorkflowVariableSchema),
+  parallelGroups: z.array(ParallelGroupSchema).optional(),
+  rules: z.array(z.string()).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -142,3 +163,4 @@ export const WorkflowDefinitionSchema = z.object({
 export type ValidatedWorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 export type ValidatedAgentNode = z.infer<typeof AgentNodeSchema>;
 export type ValidatedTransition = z.infer<typeof TransitionSchema>;
+export type ValidatedParallelGroup = z.infer<typeof ParallelGroupSchema>;

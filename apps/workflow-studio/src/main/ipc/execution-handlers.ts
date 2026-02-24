@@ -6,6 +6,7 @@ import type { RedisEventClient } from '../services/redis-client';
 import type { SettingsService } from '../services/settings-service';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
+import type { RepoMount } from '../../shared/types/repo';
 
 // ---------------------------------------------------------------------------
 // Execution IPC handlers
@@ -49,6 +50,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         workflowId: string;
         workflow?: WorkflowDefinition;
         workItem?: WorkItemReference;
+        repoMount?: RepoMount;
         variables?: Record<string, unknown>;
         mockMode?: boolean;
       },
@@ -93,6 +95,9 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         cliSpawner: cliSpawner ?? undefined,
         redisClient: redisClient ?? undefined,
         remoteAgentUrl: settingsService?.get().cursorAgentUrl || undefined,
+        workingDirectory: config.repoMount?.localPath || undefined,
+        fileRestrictions: config.repoMount?.fileRestrictions || undefined,
+        readOnly: config.repoMount?.readOnly || undefined,
       });
 
       // Start is async and runs in the background -- we return immediately
@@ -174,6 +179,37 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
 
       eng.submitGateDecision(decision.nodeId, decision.selectedOption);
       return { success: true };
+    },
+  );
+
+  // --- Revise block (P15-F04) --------------------------------------------
+  ipcMain.handle(
+    IPC_CHANNELS.EXECUTION_REVISE,
+    async (
+      _event,
+      config: {
+        executionId: string;
+        nodeId: string;
+        feedback: string;
+      },
+    ) => {
+      const eng = engine;
+      if (!eng) {
+        return { success: false, error: 'No active execution' };
+      }
+
+      const state = eng.getState();
+      if (!state || state.id !== config.executionId) {
+        return { success: false, error: 'Execution not found' };
+      }
+
+      try {
+        eng.reviseBlock(config.nodeId, config.feedback);
+        return { success: true };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { success: false, error: message };
+      }
     },
   );
 

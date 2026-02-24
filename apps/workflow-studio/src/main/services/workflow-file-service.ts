@@ -20,6 +20,7 @@ export interface WorkflowSummary {
   updatedAt: string;
   nodeCount: number;
   tags?: string[];
+  status?: 'active' | 'paused';
 }
 
 export class WorkflowFileService {
@@ -57,6 +58,7 @@ export class WorkflowFileService {
           updatedAt: workflow.metadata?.updatedAt || '',
           nodeCount: workflow.nodes?.length || 0,
           tags: workflow.metadata?.tags,
+          status: workflow.metadata?.status,
         });
       } catch {
         /* skip invalid or unreadable files */

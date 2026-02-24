@@ -104,6 +104,35 @@ export function registerWorkflowHandlers(fileService: WorkflowFileService | null
     },
   );
 
+  // --- Touch (update lastUsedAt) ------------------------------------------
+  ipcMain.handle(
+    IPC_CHANNELS.WORKFLOW_TOUCH,
+    async (_event, id: string) => {
+      const now = new Date().toISOString();
+
+      // Try file service first
+      if (fileService) {
+        const workflow = await fileService.load(id);
+        if (workflow) {
+          workflow.metadata.lastUsedAt = now;
+          workflow.metadata.updatedAt = now;
+          await fileService.save(workflow);
+          return { success: true, lastUsedAt: now };
+        }
+      }
+
+      // Fall back to memory cache
+      const cached = memoryCache.get(id);
+      if (cached) {
+        cached.metadata.lastUsedAt = now;
+        cached.metadata.updatedAt = now;
+        return { success: true, lastUsedAt: now };
+      }
+
+      return { success: false, error: 'Workflow not found' };
+    },
+  );
+
   // --- Delete -------------------------------------------------------------
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_DELETE,

@@ -39,6 +39,12 @@ export interface ExecutionEngineOptions {
   redisClient?: RedisEventClient;
   nodeTimeoutMs?: number;
   remoteAgentUrl?: string;
+  /** Working directory for CLI spawner (from repoMount.localPath) */
+  workingDirectory?: string;
+  /** File restriction glob patterns (from repoMount.fileRestrictions) */
+  fileRestrictions?: string[];
+  /** Whether the repo is mounted read-only (T23) */
+  readOnly?: boolean;
 }
 
 export class ExecutionEngine {
@@ -57,6 +63,12 @@ export class ExecutionEngine {
   private nodeTimeoutMs: number;
   /** Optional URL for remote agent execution (e.g. Cursor agent container). */
   private remoteAgentUrl: string | null;
+  /** Working directory for CLI spawner (repo mount path). */
+  private workingDirectory: string | null;
+  /** File restriction patterns for the execution. */
+  private fileRestrictions: string[];
+  /** Whether the repo is mounted read-only. */
+  private readOnly: boolean;
 
   /** Pending gate resolvers keyed by nodeId. */
   private gateResolvers = new Map<string, (decision: string) => void>();
@@ -74,6 +86,9 @@ export class ExecutionEngine {
     this.redisClient = options?.redisClient ?? null;
     this.nodeTimeoutMs = options?.nodeTimeoutMs ?? 300000; // 5 minute default
     this.remoteAgentUrl = options?.remoteAgentUrl ?? null;
+    this.workingDirectory = options?.workingDirectory ?? null;
+    this.fileRestrictions = options?.fileRestrictions ?? [];
+    this.readOnly = options?.readOnly ?? false;
   }
 
   // -----------------------------------------------------------------------
@@ -179,11 +194,23 @@ export class ExecutionEngine {
       if (this.isAborted) break;
     }
 
+    // Check if any node failed during execution
+    const hasFailedNodes = this.execution.nodeStates &&
+      Object.values(this.execution.nodeStates).some((ns) => ns.status === 'failed');
+
     // Final status
     if (this.isAborted) {
       this.setStatus('aborted');
       this.execution.completedAt = new Date().toISOString();
       this.emitEvent('execution_aborted', undefined, 'Execution aborted by user');
+    } else if (hasFailedNodes) {
+      this.setStatus('failed');
+      this.execution.completedAt = new Date().toISOString();
+      this.emitEvent(
+        'execution_failed',
+        undefined,
+        'Execution failed due to node failure(s)',
+      );
     } else if (this.execution.status !== 'failed') {
       this.setStatus('completed');
       this.execution.completedAt = new Date().toISOString();
@@ -269,6 +296,57 @@ export class ExecutionEngine {
     }
   }
 
+  /**
+   * Revise a block that is currently in waiting_gate status (P15-F04).
+   *
+   * Increments the revisionCount, emits a block_revision event, and
+   * re-queues the node for execution by resolving its gate with a
+   * special '__revise__' sentinel. The engine loop then re-executes
+   * the node.
+   *
+   * @param nodeId   The node to revise.
+   * @param feedback User feedback to append to the node prompt.
+   * @throws Error if no execution is active, node is not in waiting_gate,
+   *         or revisionCount >= 10.
+   */
+  reviseBlock(nodeId: string, feedback: string): void {
+    if (!this.execution) {
+      throw new Error('No active execution');
+    }
+
+    const nodeState = this.execution.nodeStates[nodeId];
+    if (!nodeState || nodeState.status !== 'waiting_gate') {
+      throw new Error(`Node ${nodeId} is not in waiting_gate status`);
+    }
+
+    const revisionCount = nodeState.revisionCount ?? 0;
+    if (revisionCount >= 10) {
+      throw new Error(
+        'Maximum revisions (10) reached. Please Continue or Abort.',
+      );
+    }
+
+    // Increment revision count
+    nodeState.revisionCount = revisionCount + 1;
+
+    // Emit block_revision event
+    this.emitEvent(
+      'block_revision',
+      nodeId,
+      `Block revised (revision ${nodeState.revisionCount}): ${feedback.slice(0, 100)}`,
+      { feedback, revisionCount: nodeState.revisionCount },
+    );
+
+    this.sendStateUpdate();
+
+    // Resolve the gate with a revise sentinel so the engine re-executes the node
+    const resolver = this.gateResolvers.get(nodeId);
+    if (resolver) {
+      resolver('__revise__');
+      this.gateResolvers.delete(nodeId);
+    }
+  }
+
   /** Return the current execution snapshot (or null if not started). */
   getState(): Execution | null {
     return this.execution;
@@ -282,6 +360,62 @@ export class ExecutionEngine {
       this.execution.status === 'paused' ||
       this.execution.status === 'waiting_gate'
     );
+  }
+
+  // -----------------------------------------------------------------------
+  // Prompt harness assembly (P15-F01)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Build the full system prompt for a node by composing workflow rules,
+   * systemPromptPrefix, task instruction, and output checklist.
+   *
+   * Assembly order:
+   *   1. Workflow-level rules (from WorkflowDefinition.rules)
+   *   2. Block systemPromptPrefix (from AgentNodeConfig.systemPromptPrefix)
+   *   3. Agent task instruction (the node's description / primary task text)
+   *   4. Output checklist (from AgentNodeConfig.outputChecklist, numbered)
+   *
+   * Backward compatible: if no harness fields are present, returns the
+   * original task instruction unchanged.
+   */
+  buildSystemPrompt(node: AgentNode, workflowRules?: string[]): string {
+    const parts: string[] = [];
+
+    // 1. Workflow-level rules
+    if (workflowRules && workflowRules.length > 0) {
+      const rulesList = workflowRules.map((r) => `- ${r}`).join('\n');
+      parts.push(`Rules:\n${rulesList}`);
+    }
+
+    // 2. System prompt prefix
+    if (node.config.systemPromptPrefix) {
+      parts.push(node.config.systemPromptPrefix);
+    }
+
+    // 3. Task instruction (node description or systemPrompt)
+    const taskInstruction = node.description || node.config.systemPrompt || `Execute ${node.type} agent: ${node.label}`;
+    parts.push(taskInstruction);
+
+    // 4. Output checklist
+    if (node.config.outputChecklist && node.config.outputChecklist.length > 0) {
+      const checklist = node.config.outputChecklist
+        .map((item, i) => `${i + 1}. ${item}`)
+        .join('\n');
+      parts.push(`You must produce:\n${checklist}`);
+    }
+
+    // 5. File restrictions (P15-F03)
+    if (this.fileRestrictions.length > 0) {
+      parts.push(`Only modify files matching: ${this.fileRestrictions.join(', ')}`);
+    }
+
+    // 6. Read-only mount instruction (P15-F03, T23)
+    if (this.readOnly) {
+      parts.push('This repository is mounted read-only. Do not attempt to write files.');
+    }
+
+    return parts.join('\n\n');
   }
 
   // -----------------------------------------------------------------------
@@ -339,7 +473,7 @@ export class ExecutionEngine {
     const session = this.cliSpawner.spawn({
       command: 'claude',
       args,
-      cwd: process.cwd(),
+      cwd: this.workingDirectory || process.cwd(),
       instanceId: `${this.execution?.id ?? 'unknown'}-${nodeId}`,
     });
 
@@ -349,11 +483,16 @@ export class ExecutionEngine {
     // Update node state with CLI session reference
     this.updateNodeState(nodeId, 'running', { cliSessionId: session.id });
 
-    // Send work item context as initial prompt if available
+    // Build composed system prompt including harness fields
+    const systemPrompt = this.buildSystemPrompt(node, this.execution?.workflow?.rules);
+
+    // Send work item context and composed prompt as initial prompt
+    const promptParts: string[] = [];
     if (this.execution?.workItem) {
-      const prompt = `Working on: ${this.execution.workItem.id} - ${this.execution.workItem.title ?? ''}\n`;
-      this.cliSpawner.write(session.id, prompt);
+      promptParts.push(`Working on: ${this.execution.workItem.id} - ${this.execution.workItem.title ?? ''}`);
     }
+    promptParts.push(systemPrompt);
+    this.cliSpawner.write(session.id, promptParts.join('\n') + '\n');
 
     // Wait for CLI exit or timeout
     const timeoutMs = (node.config.timeoutSeconds ?? 0) * 1000 || this.nodeTimeoutMs;
@@ -419,8 +558,10 @@ export class ExecutionEngine {
 
     if (this.isAborted) return;
 
+    const composedPrompt = this.buildSystemPrompt(node, this.execution?.workflow?.rules);
+
     const body = {
-      prompt: node.description || `Execute ${node.type} agent: ${node.label}`,
+      prompt: composedPrompt,
       model: node.config.model,
       timeoutSeconds: node.config.timeoutSeconds ?? Math.floor(this.nodeTimeoutMs / 1000),
       agentRole: node.type,
@@ -542,6 +683,36 @@ export class ExecutionEngine {
     // Check if aborted while waiting
     if (decision === '__aborted__' || this.isAborted) {
       return false;
+    }
+
+    // Handle revise: re-execute the node (P15-F04)
+    if (decision === '__revise__') {
+      this.setStatus('running');
+      this.sendStateUpdate();
+
+      // Re-execute the node
+      const node = this.execution?.workflow.nodes.find((n) => n.id === nodeId);
+      if (node) {
+        this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
+        this.emitEvent('node_started', nodeId, `Re-executing: ${node.label} (revision)`);
+
+        if (node.config.backend === 'cursor') {
+          await this.executeNodeRemote(nodeId, node);
+        } else if (this.mockMode) {
+          await this.executeNodeMock(nodeId);
+        } else {
+          await this.executeNodeReal(nodeId, node);
+        }
+
+        if (this.isAborted) return false;
+
+        // After re-execution, if the node has gateMode 'gate', show gate again
+        if (node.config.gateMode === 'gate') {
+          return this.handleGate(gate, nodeId);
+        }
+      }
+
+      return true;
     }
 
     this.emitEvent(

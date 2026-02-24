@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CLISession, CLISpawnConfig } from '../../shared/types/cli';
+import type { CLISession, CLISpawnConfig, SessionHistoryEntry } from '../../shared/types/cli';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +18,9 @@ export interface CLIState {
   outputBuffers: Map<string, string[]>;
   selectedSessionId: string | null;
 
+  /** Session history entries from persistent storage (P15-F06). */
+  history: SessionHistoryEntry[];
+
   /** Whether IPC listeners have been wired up. */
   subscribed: boolean;
 
@@ -30,12 +33,16 @@ export interface CLIState {
   updateStatus: (sessionId: string, status: CLISession['status'], exitCode?: number) => void;
   appendOutput: (sessionId: string, data: string) => void;
   selectSession: (sessionId: string | null) => void;
+  /** Clear the terminal output buffer for a session (T09). */
+  clearOutput: (sessionId: string) => void;
 
   // --- IPC actions ---
   spawnSession: (config: CLISpawnConfig) => Promise<void>;
   killSession: (sessionId: string) => Promise<void>;
   writeToSession: (sessionId: string, data: string) => Promise<void>;
   loadSessions: () => Promise<void>;
+  /** Load session history from persistent storage (T10). */
+  loadHistory: (limit?: number) => Promise<void>;
 
   // --- Subscription management ---
   subscribe: () => void;
@@ -50,6 +57,7 @@ export const useCLIStore = create<CLIState>((set, get) => ({
   sessions: new Map(),
   outputBuffers: new Map(),
   selectedSessionId: null,
+  history: [],
   subscribed: false,
   lastError: null,
 
@@ -109,6 +117,13 @@ export const useCLIStore = create<CLIState>((set, get) => ({
 
   selectSession: (sessionId) => set({ selectedSessionId: sessionId }),
 
+  clearOutput: (sessionId) =>
+    set((state) => {
+      const outputBuffers = new Map(state.outputBuffers);
+      outputBuffers.set(sessionId, []);
+      return { outputBuffers };
+    }),
+
   // -----------------------------------------------------------------------
   // IPC actions
   // -----------------------------------------------------------------------
@@ -124,6 +139,8 @@ export const useCLIStore = create<CLIState>((set, get) => ({
           status: 'running',
           pid: result.pid,
           startedAt: new Date().toISOString(),
+          mode: config.mode ?? 'local',
+          context: config.context,
         };
         get().addSession(session);
         get().selectSession(session.id);
@@ -175,6 +192,15 @@ export const useCLIStore = create<CLIState>((set, get) => ({
     }
   },
 
+  loadHistory: async (limit?: number) => {
+    try {
+      const history = await window.electronAPI.cli.getHistory(limit);
+      set({ history });
+    } catch {
+      // silently ignore
+    }
+  },
+
   // -----------------------------------------------------------------------
   // IPC event subscription
   // -----------------------------------------------------------------------
@@ -200,6 +226,11 @@ export const useCLIStore = create<CLIState>((set, get) => ({
         const payload = args[0] as { sessionId: string; exitCode?: number } | null;
         if (payload) {
           get().updateStatus(payload.sessionId, 'exited', payload.exitCode);
+          // Auto-save to history on exit
+          const session = get().sessions.get(payload.sessionId);
+          if (session) {
+            window.electronAPI.cli.saveSession(session).catch(() => {});
+          }
         }
       },
     );

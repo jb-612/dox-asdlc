@@ -4,6 +4,7 @@ import type { CLISpawnConfig } from '../../shared/types/cli';
 import CLISessionList from '../components/cli/CLISessionList';
 import TerminalPanel from '../components/cli/TerminalPanel';
 import SpawnDialog from '../components/cli/SpawnDialog';
+import SessionHistoryPanel from '../components/cli/SessionHistoryPanel';
 
 // ---------------------------------------------------------------------------
 // Main Page
@@ -13,7 +14,7 @@ import SpawnDialog from '../components/cli/SpawnDialog';
  * CLIManagerPage -- manage and interact with Claude CLI sessions.
  *
  * Layout:
- *  - Left panel (~300px): session list with status badges
+ *  - Left panel (~300px): session list with history panel below
  *  - Right panel (flex-1): terminal output for selected session
  *
  * Features:
@@ -21,6 +22,8 @@ import SpawnDialog from '../components/cli/SpawnDialog';
  *  - Click session to view its terminal output
  *  - Kill button on running sessions
  *  - Stdin input for running sessions
+ *  - Session history with re-run (P15-F06)
+ *  - Terminal clear (Cmd+K) (P15-F06)
  */
 export default function CLIManagerPage(): JSX.Element {
   const sessions = useCLIStore((s) => s.sessions);
@@ -30,21 +33,26 @@ export default function CLIManagerPage(): JSX.Element {
   const spawnSession = useCLIStore((s) => s.spawnSession);
   const killSession = useCLIStore((s) => s.killSession);
   const writeToSession = useCLIStore((s) => s.writeToSession);
+  const clearOutput = useCLIStore((s) => s.clearOutput);
   const subscribe = useCLIStore((s) => s.subscribe);
   const unsubscribe = useCLIStore((s) => s.unsubscribe);
   const loadSessions = useCLIStore((s) => s.loadSessions);
+  const loadHistory = useCLIStore((s) => s.loadHistory);
+  const history = useCLIStore((s) => s.history);
   const lastError = useCLIStore((s) => s.lastError);
 
   const [isSpawnOpen, setIsSpawnOpen] = useState(false);
+  const [prefillConfig, setPrefillConfig] = useState<Partial<CLISpawnConfig> | undefined>();
 
   // Subscribe to IPC events on mount
   useEffect(() => {
     subscribe();
     loadSessions();
+    loadHistory();
     return () => {
       unsubscribe();
     };
-  }, [subscribe, unsubscribe, loadSessions]);
+  }, [subscribe, unsubscribe, loadSessions, loadHistory]);
 
   // Convert Map to sorted array for the session list
   const sessionList = useMemo(() => {
@@ -94,6 +102,30 @@ export default function CLIManagerPage(): JSX.Element {
     [selectedSessionId, writeToSession],
   );
 
+  const handleClear = useCallback(() => {
+    if (selectedSessionId) {
+      clearOutput(selectedSessionId);
+    }
+  }, [selectedSessionId, clearOutput]);
+
+  const handleRerun = useCallback(
+    (config: Partial<CLISpawnConfig>) => {
+      setPrefillConfig(config);
+      setIsSpawnOpen(true);
+    },
+    [],
+  );
+
+  const handleClearHistory = useCallback(() => {
+    // Clear history is a local action — just reset the store state
+    useCLIStore.setState({ history: [] });
+  }, []);
+
+  const handleCloseSpawn = useCallback(() => {
+    setIsSpawnOpen(false);
+    setPrefillConfig(undefined);
+  }, []);
+
   return (
     <div className="h-full flex flex-col">
       {/* Error banner */}
@@ -105,14 +137,21 @@ export default function CLIManagerPage(): JSX.Element {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: Session list */}
-        <div className="w-[300px] bg-gray-800 border-r border-gray-700 shrink-0">
-          <CLISessionList
-            sessions={sessionList}
-            selectedSessionId={selectedSessionId}
-            onSelect={selectSession}
-            onKill={handleKill}
-            onNewSession={() => setIsSpawnOpen(true)}
+        {/* Left: Session list + History */}
+        <div className="w-[300px] bg-gray-800 border-r border-gray-700 shrink-0 flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <CLISessionList
+              sessions={sessionList}
+              selectedSessionId={selectedSessionId}
+              onSelect={selectSession}
+              onKill={handleKill}
+              onNewSession={() => setIsSpawnOpen(true)}
+            />
+          </div>
+          <SessionHistoryPanel
+            history={history}
+            onRerun={handleRerun}
+            onClearAll={handleClearHistory}
           />
         </div>
 
@@ -123,6 +162,7 @@ export default function CLIManagerPage(): JSX.Element {
             hasSession={selectedSessionId !== null}
             isRunning={selectedSession?.status === 'running' || selectedSession?.status === 'starting'}
             onWrite={handleWrite}
+            onClear={handleClear}
           />
         </div>
       </div>
@@ -130,8 +170,9 @@ export default function CLIManagerPage(): JSX.Element {
       {/* Spawn dialog */}
       <SpawnDialog
         isOpen={isSpawnOpen}
-        onClose={() => setIsSpawnOpen(false)}
+        onClose={handleCloseSpawn}
         onSpawn={handleSpawn}
+        prefillConfig={prefillConfig}
       />
     </div>
   );
