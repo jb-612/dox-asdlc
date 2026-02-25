@@ -14,6 +14,7 @@ export type {
   WorkflowVariable,
   WorkflowStatus,
   WorkflowMetadata,
+  BlockType,
   WorkflowDefinition,
 } from './workflow';
 
@@ -27,7 +28,15 @@ export type {
   BlockDeliverables,
   PlanBlockDeliverables,
   CodeBlockDeliverables,
+  TestBlockDeliverables,
+  ReviewBlockDeliverables,
+  DevopsBlockDeliverables,
   GenericBlockDeliverables,
+  FileEntry,
+  FileDiff,
+  BlockResult,
+  ContainerState,
+  ContainerRecord,
   Execution,
 } from './execution';
 
@@ -64,6 +73,7 @@ export type {
 } from './repo';
 
 export type {
+  TokenUsage,
   TelemetryEventType,
   TelemetryEvent,
   AgentSessionStatus,

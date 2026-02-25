@@ -51,6 +51,8 @@ export interface AgentNodeConfig {
   timeoutSeconds?: number;
   extraFlags?: string[];
   backend?: 'claude' | 'cursor' | 'codex';
+  /** High-level block type for the Studio block composer (P15-F01) */
+  blockType?: BlockType;
   /** Per-block gate mode for multi-step UX (P15-F04) */
   gateMode?: GateMode;
 }

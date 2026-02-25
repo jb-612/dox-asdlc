@@ -224,7 +224,9 @@ describe('Studio workflow round-trip', () => {
       });
 
       const prompt = engine.buildSystemPrompt(node, []);
-      expect(prompt).toBe('Just run the planner');
+      expect(prompt).toContain('Just run the planner');
+      // Agent contract always appends output deliverables instruction
+      expect(prompt).toContain('.output/block-');
     });
 
     it('should prepend workflow rules before everything else', () => {

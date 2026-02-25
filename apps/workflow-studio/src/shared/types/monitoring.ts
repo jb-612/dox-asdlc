@@ -1,3 +1,10 @@
+/** Token usage and cost data for a single AI interaction (P15-F07). */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd?: number;
+}
+
 export type TelemetryEventType =
   | 'agent_start'
   | 'agent_complete'
@@ -23,7 +30,7 @@ export interface TelemetryEvent {
   /** Specific workflow node that produced this event */
   nodeId?: string;
   /** Token usage and cost for this event (if applicable) */
-  tokenUsage?: { input: number; output: number; estimatedCostUsd: number };
+  tokenUsage?: TokenUsage;
 }
 
 export type AgentSessionStatus = 'running' | 'completed' | 'failed';

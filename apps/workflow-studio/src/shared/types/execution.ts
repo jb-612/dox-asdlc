@@ -90,6 +90,26 @@ export interface CodeBlockDeliverables {
   diffSummary?: string;
 }
 
+export interface TestBlockDeliverables {
+  blockType: 'test';
+  testResults?: { passed: number; failed: number; skipped: number };
+  summary?: string;
+}
+
+export interface ReviewBlockDeliverables {
+  blockType: 'review';
+  findings?: string[];
+  approved?: boolean;
+  summary?: string;
+}
+
+export interface DevopsBlockDeliverables {
+  blockType: 'devops';
+  operations?: string[];
+  status?: string;
+  summary?: string;
+}
+
 export interface GenericBlockDeliverables {
   blockType: 'generic';
   summary?: string;
@@ -98,6 +118,9 @@ export interface GenericBlockDeliverables {
 export type BlockDeliverables =
   | PlanBlockDeliverables
   | CodeBlockDeliverables
+  | TestBlockDeliverables
+  | ReviewBlockDeliverables
+  | DevopsBlockDeliverables
   | GenericBlockDeliverables;
 
 // ---------------------------------------------------------------------------
@@ -116,6 +139,46 @@ export interface FileDiff {
   oldContent?: string;
   newContent?: string;
   hunks?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Block results (P15-F04 / F05)
+// ---------------------------------------------------------------------------
+
+/** Outcome of a single block execution within a workflow run. */
+export interface BlockResult {
+  blockId: string;
+  nodeId: string;
+  status: 'success' | 'failed' | 'skipped';
+  deliverables?: BlockDeliverables;
+  /** Path to the serialised output file, e.g. .output/block-<id>.json */
+  outputPath?: string;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Container tracking (P15-F05 parallel execution)
+// ---------------------------------------------------------------------------
+
+/** Lifecycle state of a Docker container managed by the execution engine. */
+export type ContainerState =
+  | 'creating'
+  | 'running'
+  | 'paused'
+  | 'stopped'
+  | 'removing'
+  | 'error';
+
+/** Record tracking a single Docker container used during parallel execution. */
+export interface ContainerRecord {
+  containerId: string;
+  state: ContainerState;
+  nodeId?: string;
+  laneIndex?: number;
+  createdAt: string;
+  startedAt?: string;
+  stoppedAt?: string;
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------

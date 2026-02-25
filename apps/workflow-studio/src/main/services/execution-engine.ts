@@ -1,7 +1,10 @@
 import { BrowserWindow } from 'electron';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type { WorkflowDefinition, HITLGateDefinition, AgentNode } from '../../shared/types/workflow';
 import type {
+  BlockResult,
   Execution,
   ExecutionStatus,
   NodeExecutionStatus,
@@ -368,18 +371,31 @@ export class ExecutionEngine {
 
   /**
    * Build the full system prompt for a node by composing workflow rules,
-   * systemPromptPrefix, task instruction, and output checklist.
+   * systemPromptPrefix, task instruction, output checklist, deliverables
+   * instructions, and prior block context.
    *
    * Assembly order:
    *   1. Workflow-level rules (from WorkflowDefinition.rules)
    *   2. Block systemPromptPrefix (from AgentNodeConfig.systemPromptPrefix)
    *   3. Agent task instruction (the node's description / primary task text)
    *   4. Output checklist (from AgentNodeConfig.outputChecklist, numbered)
+   *   5. Output deliverables instruction (write to .output/block-<nodeId>.json)
+   *   6. Previous block results summary (for sequential state passing)
+   *   7. File restrictions (P15-F03)
+   *   8. Read-only mount instruction (P15-F03, T23)
    *
    * Backward compatible: if no harness fields are present, returns the
    * original task instruction unchanged.
+   *
+   * @param node The agent node to build the prompt for.
+   * @param workflowRules Optional workflow-level rules to inject.
+   * @param previousResults Optional array of prior block results for context.
    */
-  buildSystemPrompt(node: AgentNode, workflowRules?: string[]): string {
+  buildSystemPrompt(
+    node: AgentNode,
+    workflowRules?: string[],
+    previousResults?: BlockResult[],
+  ): string {
     const parts: string[] = [];
 
     // 1. Workflow-level rules
@@ -405,17 +421,63 @@ export class ExecutionEngine {
       parts.push(`You must produce:\n${checklist}`);
     }
 
-    // 5. File restrictions (P15-F03)
+    // 5. Output deliverables instruction
+    parts.push(
+      `When you finish, write a JSON summary of your deliverables to .output/block-${node.id}.json in the working directory.`,
+    );
+
+    // 6. Previous block results (sequential state passing)
+    if (previousResults && previousResults.length > 0) {
+      const summaries = previousResults.map((r) => {
+        const deliverableInfo = r.deliverables
+          ? ` | deliverables: ${JSON.stringify(r.deliverables)}`
+          : '';
+        return `- Block ${r.nodeId}: ${r.status}${deliverableInfo}`;
+      }).join('\n');
+      parts.push(`Previous block results:\n${summaries}`);
+    }
+
+    // 7. File restrictions (P15-F03)
     if (this.fileRestrictions.length > 0) {
       parts.push(`Only modify files matching: ${this.fileRestrictions.join(', ')}`);
     }
 
-    // 6. Read-only mount instruction (P15-F03, T23)
+    // 8. Read-only mount instruction (P15-F03, T23)
     if (this.readOnly) {
       parts.push('This repository is mounted read-only. Do not attempt to write files.');
     }
 
     return parts.join('\n\n');
+  }
+
+  // -----------------------------------------------------------------------
+  // Block result reading (stateless agent contract)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Read the structured output produced by a block agent.
+   *
+   * After a block completes, the agent is expected to write a JSON file at
+   * `<workingDirectory>/.output/block-<nodeId>.json` containing a
+   * {@link BlockResult} object with deliverables. This method reads and
+   * parses that file.
+   *
+   * @param workingDirectory Absolute path to the repo working directory.
+   * @param nodeId The node ID whose output to read.
+   * @returns The parsed BlockResult, or null if the file does not exist or
+   *          cannot be parsed.
+   */
+  readBlockResult(workingDirectory: string, nodeId: string): BlockResult | null {
+    const outputPath = join(workingDirectory, '.output', `block-${nodeId}.json`);
+    if (!existsSync(outputPath)) {
+      return null;
+    }
+    try {
+      const raw = readFileSync(outputPath, 'utf-8');
+      return JSON.parse(raw) as BlockResult;
+    } catch {
+      return null;
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -483,8 +545,15 @@ export class ExecutionEngine {
     // Update node state with CLI session reference
     this.updateNodeState(nodeId, 'running', { cliSessionId: session.id });
 
-    // Build composed system prompt including harness fields
-    const systemPrompt = this.buildSystemPrompt(node, this.execution?.workflow?.rules);
+    // Gather results from previously completed blocks for context
+    const previousResults = this.collectPreviousBlockResults(nodeId);
+
+    // Build composed system prompt including harness fields and prior context
+    const systemPrompt = this.buildSystemPrompt(
+      node,
+      this.execution?.workflow?.rules,
+      previousResults,
+    );
 
     // Send work item context and composed prompt as initial prompt
     const promptParts: string[] = [];
@@ -512,9 +581,17 @@ export class ExecutionEngine {
       });
       this.emitEvent('node_failed', nodeId, `Node timed out after ${timeoutMs}ms`);
     } else if (exitCode === 0) {
+      // Read block deliverables produced by the agent (stateless contract)
+      const workDir = this.workingDirectory || process.cwd();
+      const blockResult = this.readBlockResult(workDir, nodeId);
+      const output: Record<string, unknown> = { cliSessionId: session.id, exitCode };
+      if (blockResult) {
+        output.blockResult = blockResult;
+      }
+
       this.updateNodeState(nodeId, 'completed', {
         completedAt: new Date().toISOString(),
-        output: { cliSessionId: session.id, exitCode },
+        output,
       });
       this.emitEvent('node_completed', nodeId, `Completed: ${node.label}`);
     } else {
@@ -648,6 +725,42 @@ export class ExecutionEngine {
   // -----------------------------------------------------------------------
   // Private helpers
   // -----------------------------------------------------------------------
+
+  /**
+   * Collect BlockResult objects from all previously completed nodes.
+   *
+   * Reads each completed node's output for a stored blockResult, and also
+   * attempts to read from the `.output/` directory on disk as a fallback.
+   * Returns results in insertion order (which matches topological execution
+   * order for sequential workflows).
+   *
+   * @param currentNodeId The node about to execute (excluded from results).
+   * @returns Array of BlockResult from prior completed blocks.
+   */
+  private collectPreviousBlockResults(currentNodeId: string): BlockResult[] {
+    if (!this.execution) return [];
+
+    const results: BlockResult[] = [];
+    for (const [nid, state] of Object.entries(this.execution.nodeStates)) {
+      if (nid === currentNodeId) continue;
+      if (state.status !== 'completed') continue;
+
+      // Check if blockResult was already stored in the output
+      const output = state.output as Record<string, unknown> | undefined;
+      if (output?.blockResult) {
+        results.push(output.blockResult as BlockResult);
+        continue;
+      }
+
+      // Fallback: try reading from disk
+      const workDir = this.workingDirectory || process.cwd();
+      const diskResult = this.readBlockResult(workDir, nid);
+      if (diskResult) {
+        results.push(diskResult);
+      }
+    }
+    return results;
+  }
 
   /**
    * Handle a HITL gate for the given node. Transitions the node and
