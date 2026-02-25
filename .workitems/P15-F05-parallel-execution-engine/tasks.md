@@ -3,7 +3,7 @@ id: P15-F05
 parent_id: P15
 type: tasks
 version: 1
-status: draft
+status: in_progress
 created_by: planner
 created_at: "2026-02-22T00:00:00Z"
 updated_at: "2026-02-22T00:00:00Z"
@@ -18,10 +18,10 @@ tags:
 
 ## Progress
 
-- Started: —
-- Tasks Complete: 0/34
-- Percentage: 0%
-- Status: PLANNED
+- Started: 2026-02-22
+- Tasks Complete: 0/34 (2 partial)
+- Percentage: 3%
+- Status: IN_PROGRESS
 
 ---
 
@@ -140,10 +140,11 @@ tags:
 
 ### T14: Register IPC channels for pool status and lane events
 
-- [ ] Estimate: 1hr
+- [~] Estimate: 1hr
 - [ ] Tests: Integration test (with mocked pool) — state transitions cause `CONTAINER_POOL_STATUS` to be sent to renderer; `execution:lane-start` and `execution:lane-complete` are emitted at correct moments
-- [ ] Dependencies: T10, T11
-- [ ] Notes: In `apps/workflow-studio/src/main/ipc/execution-handlers.ts`, register `ipcMain.handle(IPC_CHANNELS.CONTAINER_POOL_STATUS, ...)` returning `pool.snapshot()`. Wire `ContainerPool` state-change callback to emit `mainWindow.webContents.send(IPC_CHANNELS.CONTAINER_POOL_STATUS, pool.snapshot())` on every transition. Add `execution:lane-start`, `execution:lane-complete`, `execution:block-error`, and `execution:aborted` channels. Use the committed `CONTAINER_POOL_STATUS` constant from `ipc-channels.ts`.
+- [~] Dependencies: T10, T11
+- [~] Notes: In `apps/workflow-studio/src/main/ipc/execution-handlers.ts`, register `ipcMain.handle(IPC_CHANNELS.CONTAINER_POOL_STATUS, ...)` returning `pool.snapshot()`. Wire `ContainerPool` state-change callback to emit `mainWindow.webContents.send(IPC_CHANNELS.CONTAINER_POOL_STATUS, pool.snapshot())` on every transition. Add `execution:lane-start`, `execution:lane-complete`, `execution:block-error`, and `execution:aborted` channels. Use the committed `CONTAINER_POOL_STATUS` constant from `ipc-channels.ts`.
+- [~] Status: PARTIAL — IPC channels defined in ipc-channels.ts, but handlers not yet registered in execution-handlers.ts
 
 ### T15: Implement ContainerPoolPanel React component
 
@@ -285,10 +286,11 @@ tags:
 
 ### T33: Docker image pull progress reporting
 
-- [ ] Estimate: 1.5hr
+- [~] Estimate: 1.5hr
 - [ ] Tests: Unit test — pull progress events forwarded to renderer via `container:pull-progress` IPC; progress includes layer count and percentage
-- [ ] Dependencies: T04, T14
-- [ ] Notes: When `DockerClient.pullImage()` is called, stream pull progress events from dockerode and forward them to the renderer via a `container:pull-progress` IPC event. Show progress in the ContainerPoolPanel UI. Useful for first-time image pulls which can take minutes.
+- [~] Dependencies: T04, T14
+- [~] Notes: When `DockerClient.pullImage()` is called, stream pull progress events from dockerode and forward them to the renderer via a `container:pull-progress` IPC event. Show progress in the ContainerPoolPanel UI. Useful for first-time image pulls which can take minutes.
+- [~] Status: PARTIAL — IPC channel defined in ipc-channels.ts, but no DockerClient or progress streaming implementation
 
 ### T34: Lazy pre-warming — defer warming closer to parallel lane
 

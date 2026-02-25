@@ -3,7 +3,7 @@ id: P15-F02
 parent_id: P15
 type: tasks
 version: 1
-status: draft
+status: in_progress
 constraints_hash: null
 created_by: planner
 created_at: "2026-02-22T00:00:00Z"
@@ -19,40 +19,40 @@ tags:
 
 ## Progress
 
-- Started: Not yet started
-- Tasks Complete: 0/13
-- Percentage: 0%
-- Status: NOT_STARTED
+- Started: Yes
+- Tasks Complete: 5/13
+- Percentage: 38%
+- Status: IN_PROGRESS
 
 ---
 
 ## Phase 1: Data Model (T01–T02)
 
-### T01: Add `status` to WorkflowMetadata + Zod schema
+### T01: Add `status` to WorkflowMetadata + Zod schema — DONE
 
-- [ ] Estimate: 30min
-- [ ] Tests: `tsc --noEmit` clean; existing schema tests unaffected
-- [ ] Dependencies: None
-- [ ] Notes: In `apps/workflow-studio/src/shared/types/workflow.ts`, add `status?: 'active' | 'paused'` to `WorkflowMetadata`. In `apps/workflow-studio/src/main/schemas/workflow-schema.ts`, add `status: z.enum(['active', 'paused']).optional()` to `WorkflowMetadataSchema`. Undefined status treated as `'active'` at runtime (no default needed in schema). Verify existing tests still pass.
+- [x] Estimate: 30min
+- [x] Tests: `tsc --noEmit` clean; existing schema tests unaffected
+- [x] Dependencies: None
+- [x] Notes: In `apps/workflow-studio/src/shared/types/workflow.ts`, add `status?: 'active' | 'paused'` to `WorkflowMetadata`. In `apps/workflow-studio/src/main/schemas/workflow-schema.ts`, add `status: z.enum(['active', 'paused']).optional()` to `WorkflowMetadataSchema`. Undefined status treated as `'active'` at runtime (no default needed in schema). Verify existing tests still pass.
 
 ---
 
-### T02: Add template IPC channel constants
+### T02: Add template IPC channel constants — DONE
 
-- [ ] Estimate: 15min
-- [ ] Tests: TypeScript compiles; constants match handler registrations
-- [ ] Dependencies: T01
-- [ ] Notes: In `apps/workflow-studio/src/shared/ipc-channels.ts`, add: `TEMPLATE_LIST: 'template:list'`, `TEMPLATE_LOAD: 'template:load'`, `TEMPLATE_SAVE: 'template:save'`, `TEMPLATE_DELETE: 'template:delete'`, `TEMPLATE_TOGGLE_STATUS: 'template:toggle-status'`, `TEMPLATE_DUPLICATE: 'template:duplicate'`.
+- [x] Estimate: 15min
+- [x] Tests: TypeScript compiles; constants match handler registrations
+- [x] Dependencies: T01
+- [x] Notes: In `apps/workflow-studio/src/shared/ipc-channels.ts`, add: `TEMPLATE_LIST: 'template:list'`, `TEMPLATE_LOAD: 'template:load'`, `TEMPLATE_SAVE: 'template:save'`, `TEMPLATE_DELETE: 'template:delete'`, `TEMPLATE_TOGGLE_STATUS: 'template:toggle-status'`, `TEMPLATE_DUPLICATE: 'template:duplicate'`.
 
 ---
 
 ## Phase 2: Backend IPC (T03–T05)
 
-### T03: Implement template IPC handlers
+### T03: Implement template IPC handlers — DONE
 
-- [ ] Estimate: 1.5hr
-- [ ] Tests: `test/main/template-handlers.test.ts` — list, load, save, delete, toggle-status, duplicate (≥ 1 test per handler)
-- [ ] Dependencies: T01, T02
+- [x] Estimate: 1.5hr
+- [x] Tests: `test/main/template-handlers.test.ts` — list, load, save, delete, toggle-status, duplicate (≥ 1 test per handler)
+- [x] Dependencies: T01, T02
 - [ ] Notes: Create `apps/workflow-studio/src/main/ipc/template-handlers.ts`. Export `registerTemplateHandlers(fileService: WorkflowFileService)`. Handlers:
   - `template:list` — calls `fileService.list()`, maps `status` from metadata (default `'active'`), returns `TemplateListItem[]`
   - `template:load` — delegates to `fileService.load(id)`
@@ -63,20 +63,20 @@ tags:
 
 ---
 
-### T04: Wire template file service in main/ipc/index.ts and main/index.ts
+### T04: Wire template file service in main/ipc/index.ts and main/index.ts — DONE
 
-- [ ] Estimate: 30min
-- [ ] Tests: App starts without errors; `template:list` returns empty array before any templates saved
-- [ ] Dependencies: T03
+- [x] Estimate: 30min
+- [x] Tests: App starts without errors; `template:list` returns empty array before any templates saved
+- [x] Dependencies: T03
 - [ ] Notes: In `main/ipc/index.ts`, add `templateFileService: WorkflowFileService` to `IPCServiceDeps` and call `registerTemplateHandlers(deps.templateFileService)`. In `main/index.ts`, instantiate a second `WorkflowFileService` with `settings.templateDirectory || path.join(app.getPath('userData'), 'templates')`. Pass as `templateFileService` dep. The default path ensures the feature works without user configuring `templateDirectory`.
 
 ---
 
-### T05: Expose template API in preload + type declarations
+### T05: Expose template API in preload + type declarations — DONE
 
-- [ ] Estimate: 30min
-- [ ] Tests: `tsc --noEmit` clean; renderer can call `window.electronAPI.template.list()`
-- [ ] Dependencies: T02, T04
+- [x] Estimate: 30min
+- [x] Tests: `tsc --noEmit` clean; renderer can call `window.electronAPI.template.list()`
+- [x] Dependencies: T02, T04
 - [ ] Notes: In `preload/preload.ts`, add `template` namespace with 6 methods (list, load, save, delete, toggleStatus, duplicate). In `preload/electron-api.d.ts`, add matching type declarations using `TemplateListItem` interface (id, name, description, tags, updatedAt, nodeCount, status).
 
 ---
@@ -110,22 +110,22 @@ tags:
 
 ---
 
-### T09: Update ExecutionPage to load Active templates
+### T09: Update ExecutionPage to load Active templates — PARTIAL
 
-- [ ] Estimate: 1hr
+- [~] Estimate: 1hr
 - [ ] Tests: Manual test: Paused templates absent from Execute picker; Active templates present
-- [ ] Dependencies: T05
+- [~] Dependencies: T05
 - [ ] Notes: In `ExecutionPage.tsx`, replace `window.electronAPI.workflow.list()` / `workflow.load()` chain with `window.electronAPI.template.list()` filtered to `item.status !== 'paused'`, then `template.load()` for the selected one. Update section heading to "1. Select Template". Add empty state message when no Active templates: "No active templates. Visit the Templates tab to activate one." The `WorkflowSummaryCard` component is reused unchanged (it only needs a `WorkflowDefinition`, which `template.load()` returns).
 
 ---
 
 ## Phase 4: Tests + QA (T10–T11)
 
-### T10: Unit tests for template IPC handlers
+### T10: Unit tests for template IPC handlers — PARTIAL
 
-- [ ] Estimate: 1hr
-- [ ] Tests: `test/main/template-handlers.test.ts` — 8 tests minimum
-- [ ] Dependencies: T03
+- [~] Estimate: 1hr
+- [~] Tests: `test/main/template-handlers.test.ts` — 8 tests minimum
+- [~] Dependencies: T03
 - [ ] Notes: Test cases: (1) `template:list` returns TemplateListItem with status defaulting to 'active'; (2) `template:save` with invalid schema returns error; (3) `template:toggle-status` flips active→paused; (4) `template:toggle-status` flips paused→active; (5) `template:duplicate` creates new id, new name with "(Copy)", status always 'active'; (6) `template:delete` returns `{ success: false }` for unknown id; (7) `template:list` empty when no files. Use tmp directories to avoid polluting real storage.
 
 ---

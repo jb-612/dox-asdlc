@@ -1,7 +1,7 @@
 # P15-F03: Execute — Workflow Launcher — Tasks
 
 **Feature ID:** P15-F03
-**Status:** Planning
+**Status:** In Progress
 **Date:** 2026-02-22
 **Total Tasks:** 24
 **Estimated Total:** ~22.75 hours
@@ -15,24 +15,24 @@
 > Goal: Lock the shared types and IPC channel names before any implementation begins.
 > All downstream phases depend on these.
 
-#### T01 — Add `status` and `lastUsedAt` to `WorkflowMetadata`
+#### T01 — Add `status` and `lastUsedAt` to `WorkflowMetadata` — DONE
 - **File:** `apps/workflow-studio/src/shared/types/workflow.ts`
 - **Change:** Add `status?: 'active' | 'paused'` and `lastUsedAt?: string`
 - **Constraint:** Both fields optional; existing JSON files remain valid
 - **Stories:** US-01, US-03
 - **Estimate:** 30min
 - **Dependencies:** None
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T02 — Add `RepoMount` type
+#### T02 — Add `RepoMount` type — DONE
 - **File:** `apps/workflow-studio/src/shared/types/repo.ts` (new file)
 - **Change:** Export `RepoMount { source: RepoSource, localPath?, githubUrl?, fileRestrictions? }` where `RepoSource = 'local' | 'github'`. Note: `localPath` is optional (not required) per committed type.
 - **Stories:** US-04, US-05, US-06, US-08
 - **Estimate:** 20min
 - **Dependencies:** None
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T03 — Add new IPC channel constants
+#### T03 — Add new IPC channel constants — DONE
 - **File:** `apps/workflow-studio/src/shared/ipc-channels.ts`
 - **Changes:**
   - `DIALOG_OPEN_DIRECTORY` (already committed), `REPO_CLONE`, `REPO_VALIDATE_PATH`, `REPO_CLONE_CANCEL`, `REPO_CLONE_PROGRESS`
@@ -42,7 +42,7 @@
 - **Stories:** US-04, US-05, US-03, US-09
 - **Estimate:** 20min
 - **Dependencies:** None
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -51,7 +51,7 @@
 > Goal: Implement the Electron main process handlers for repo browsing and cloning.
 > These are pure Node.js / Electron logic with no UI.
 
-#### T04 — Implement `DIALOG_OPEN_DIRECTORY` handler
+#### T04 — Implement `DIALOG_OPEN_DIRECTORY` handler — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/repo-handlers.ts` (new file)
 - **Logic:** `dialog.showOpenDialog({ properties: ['openDirectory'] })` → return `{ path }` or `{ canceled: true }`
 - **Register in:** `main/ipc/index.ts`
@@ -59,9 +59,9 @@
 - **Stories:** US-04
 - **Estimate:** 1hr
 - **Dependencies:** T03
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T05 — Implement `REPO_CLONE` handler
+#### T05 — Implement `REPO_CLONE` handler — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/repo-handlers.ts`
 - **Logic:**
   - Validate `https://` scheme only; reject `file://`, `ssh://`, `git://` → 400-style error
@@ -76,9 +76,9 @@
 - **Stories:** US-05
 - **Estimate:** 1.5hr
 - **Dependencies:** T03
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T06 — Implement `REPO_VALIDATE_PATH` handler
+#### T06 — Implement `REPO_VALIDATE_PATH` handler — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/repo-handlers.ts`
 - **Logic:**
   - `fs.stat(path)` → if not directory, return `{ valid: false }`
@@ -87,7 +87,7 @@
 - **Stories:** US-04
 - **Estimate:** 45min
 - **Dependencies:** T03
-- **Status:** [ ]
+- **Status:** [x]
 
 #### T07 — Implement `WORKFLOW_TOUCH` handler
 - **File:** `apps/workflow-studio/src/main/ipc/workflow-handlers.ts` (existing, add new case)
@@ -104,7 +104,7 @@
 
 > Goal: Replace mock data in WorkItemPickerDialog with real filesystem reads.
 
-#### T08 — Implement `WORKITEM_LIST_FS` and `WORKITEM_LOAD_FS` handlers
+#### T08 — Implement `WORKITEM_LIST_FS` and `WORKITEM_LOAD_FS` handlers — PARTIAL
 - **File:** `apps/workflow-studio/src/main/ipc/workitem-handlers.ts` (existing, add new handlers)
 - **Logic for LIST_FS:**
   - Read `settings.workflowDirectory` (or a to-be-added `workItemDirectory` setting)
@@ -118,7 +118,7 @@
 - **Stories:** US-09
 - **Estimate:** 1hr
 - **Dependencies:** T03
-- **Status:** [ ]
+- **Status:** [~]
 
 ---
 
@@ -126,7 +126,7 @@
 
 > Goal: Plumb repoMount through to ExecutionEngine and CLISpawner.
 
-#### T09 — Update `EXECUTION_START` handler to accept `repoMount`
+#### T09 — Update `EXECUTION_START` handler to accept `repoMount` — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/execution-handlers.ts`
 - **Change:** Add `repoMount?: RepoMount` to `StartPayload`; pass `repoMount.localPath` as
   `workingDirectory` to `ExecutionEngine` constructor; pass `repoMount.fileRestrictions` as
@@ -134,9 +134,9 @@
 - **Stories:** US-08
 - **Estimate:** 30min
 - **Dependencies:** T02, T03
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T10 — Update `ExecutionEngine` to accept `workingDirectory` and `fileRestrictions`
+#### T10 — Update `ExecutionEngine` to accept `workingDirectory` and `fileRestrictions` — DONE
 - **File:** `apps/workflow-studio/src/main/services/execution-engine.ts`
 - **Changes:**
   - Add `workingDirectory?: string` and `fileRestrictions?: string[]` to `ExecutionEngineOptions`
@@ -146,7 +146,7 @@
 - **Stories:** US-08
 - **Estimate:** 1hr
 - **Dependencies:** T09
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -154,7 +154,7 @@
 
 > Goal: Expose new IPC calls to the renderer with full TypeScript types.
 
-#### T11 — Update preload.ts and electron-api.d.ts for repo + workitem APIs
+#### T11 — Update preload.ts and electron-api.d.ts for repo + workitem APIs — DONE
 - **Files:**
   - `apps/workflow-studio/src/preload/preload.ts`
   - `apps/workflow-studio/src/preload/electron-api.d.ts`
@@ -165,7 +165,7 @@
 - **Stories:** US-10
 - **Estimate:** 30min
 - **Dependencies:** T03, T04, T05, T06, T07, T08
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -173,7 +173,7 @@
 
 > Goal: Add status filtering, search, and lastUsedAt display to the Execute page.
 
-#### T12 — Add template status filter to ExecutionPage
+#### T12 — Add template status filter to ExecutionPage — PARTIAL
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - Filter `workflows` to only those where `status === 'active' || !status`
@@ -182,7 +182,7 @@
 - **Stories:** US-01
 - **Estimate:** 30min
 - **Dependencies:** T01, T11
-- **Status:** [ ]
+- **Status:** [~]
 
 #### T13 — Add template search input to ExecutionPage
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
@@ -196,7 +196,7 @@
 - **Dependencies:** T12
 - **Status:** [ ]
 
-#### T14 — Add lastUsedAt display to WorkflowSummaryCard + touch after launch
+#### T14 — Add lastUsedAt display to WorkflowSummaryCard + touch after launch — PARTIAL
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - `WorkflowSummaryCard`: show `"Last used: N days ago"` or `"Never"` below node dots
@@ -204,7 +204,7 @@
 - **Stories:** US-03
 - **Estimate:** 30min
 - **Dependencies:** T07, T11, T13
-- **Status:** [ ]
+- **Status:** [~]
 
 ---
 
@@ -212,7 +212,7 @@
 
 > Goal: Build the new repository mounting UI as a self-contained component.
 
-#### T15 — Build `RepoMountSection` component skeleton (tabs)
+#### T15 — Build `RepoMountSection` component skeleton (tabs) — DONE
 - **File:** `apps/workflow-studio/src/renderer/components/execution/RepoMountSection.tsx` (new)
 - **Structure:**
   - Tab bar: [Local Directory] [GitHub Repo]
@@ -224,9 +224,9 @@
 - **Stories:** US-04, US-05
 - **Estimate:** 1.5hr
 - **Dependencies:** T02, T11
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T16 — Add `REPO_VALIDATE` feedback to RepoMountSection (LocalDirectoryTab)
+#### T16 — Add `REPO_VALIDATE` feedback to RepoMountSection (LocalDirectoryTab) — DONE
 - **File:** `apps/workflow-studio/src/renderer/components/execution/RepoMountSection.tsx`
 - **Changes:**
   - After path selected, call `window.electronAPI.repo.validate(path)`
@@ -234,9 +234,9 @@
 - **Stories:** US-04
 - **Estimate:** 30min
 - **Dependencies:** T15
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T17 — Add `FileRestrictionsEditor` to RepoMountSection
+#### T17 — Add `FileRestrictionsEditor` to RepoMountSection — DONE
 - **File:** `apps/workflow-studio/src/renderer/components/execution/RepoMountSection.tsx`
 - **Changes:**
   - Shown below tab panel once a path/clone is set
@@ -247,7 +247,7 @@
 - **Stories:** US-06
 - **Estimate:** 45min
 - **Dependencies:** T15
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -255,7 +255,7 @@
 
 > Goal: Wire RepoMountSection into ExecutionPage and update validation + IPC call.
 
-#### T18 — Integrate RepoMountSection into ExecutionPage
+#### T18 — Integrate RepoMountSection into ExecutionPage — DONE
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - Add `repoMount: RepoMount | null` state
@@ -266,9 +266,9 @@
 - **Stories:** US-07, US-08
 - **Estimate:** 45min
 - **Dependencies:** T15, T16, T17, T12, T13, T14
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T19 — Wire PRDs tab to real IPC in WorkItemPickerDialog
+#### T19 — Wire PRDs tab to real IPC in WorkItemPickerDialog — PARTIAL
 - **File:** `apps/workflow-studio/src/renderer/components/workitems/WorkItemPickerDialog.tsx`
 - **Changes:**
   - On dialog open (useEffect on `isOpen`), call `window.electronAPI.workitem.listFs()`
@@ -279,7 +279,7 @@
 - **Stories:** US-09
 - **Estimate:** 1hr
 - **Dependencies:** T08, T11
-- **Status:** [ ]
+- **Status:** [~]
 
 ---
 
@@ -303,7 +303,7 @@
 - **Dependencies:** T10
 - **Status:** [ ]
 
-#### T21 — Implement clone cancellation backend
+#### T21 — Implement clone cancellation backend — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/repo-handlers.ts`
 - **Logic:**
   - `REPO_CLONE_CANCEL` IPC channel is already declared in `ipc-channels.ts`
@@ -314,7 +314,7 @@
 - **Stories:** US-05
 - **Estimate:** 1hr
 - **Dependencies:** T05
-- **Status:** [ ]
+- **Status:** [x]
 
 #### T22 — Temp directory cleanup on app quit
 - **File:** `apps/workflow-studio/src/main/index.ts`
@@ -327,7 +327,7 @@
 - **Dependencies:** T05
 - **Status:** [ ]
 
-#### T23 — Read-only mounts (`:ro` flag) for review-only workflows
+#### T23 — Read-only mounts (`:ro` flag) for review-only workflows — PARTIAL
 - **File:** `apps/workflow-studio/src/shared/types/repo.ts`, `execution-engine.ts`
 - **Logic:**
   - Add `readOnly?: boolean` field to `RepoMount`
@@ -336,16 +336,16 @@
 - **Tests:** Unit test — readOnly mount produces `:ro` suffix in Docker args
 - **Estimate:** 30min
 - **Dependencies:** T02, T10
-- **Status:** [ ]
+- **Status:** [~]
 
-#### T24 — Add `WORKFLOW_TOUCH` IPC channel to committed ipc-channels.ts
+#### T24 — Add `WORKFLOW_TOUCH` IPC channel to committed ipc-channels.ts — DONE
 - **File:** `apps/workflow-studio/src/shared/ipc-channels.ts`
 - **Logic:**
   - Add `WORKFLOW_TOUCH: 'workflow:touch'` to the IPC_CHANNELS object
   - This channel is referenced in T07 but not yet in committed code
 - **Estimate:** 15min
 - **Dependencies:** None
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -353,16 +353,16 @@
 
 | Phase | Tasks | Done | Status |
 |-------|-------|------|--------|
-| 1: Types & Contracts | T01–T03 | 0/3 | Pending |
-| 2: Repo Handlers | T04–T07 | 0/4 | Pending |
-| 3: WorkItem FS Handlers | T08 | 0/1 | Pending |
-| 4: Execution Integration | T09–T10 | 0/2 | Pending |
-| 5: Preload & Types | T11 | 0/1 | Pending |
-| 6: Template Enhancements | T12–T14 | 0/3 | Pending |
-| 7: RepoMountSection | T15–T17 | 0/3 | Pending |
-| 8: Page Integration | T18–T19 | 0/2 | Pending |
-| 9: Security & Robustness | T20–T24 | 0/5 | Pending |
-| **Total** | **24** | **0/24** | **Pending** |
+| 1: Types & Contracts | T01–T03 | 3/3 | DONE |
+| 2: Repo Handlers | T04–T07 | 3/4 | In Progress (T07 not started) |
+| 3: WorkItem FS Handlers | T08 | 0/1 | PARTIAL |
+| 4: Execution Integration | T09–T10 | 2/2 | DONE |
+| 5: Preload & Types | T11 | 1/1 | DONE |
+| 6: Template Enhancements | T12–T14 | 0/3 | PARTIAL (T12, T14 partial; T13 not started) |
+| 7: RepoMountSection | T15–T17 | 3/3 | DONE |
+| 8: Page Integration | T18–T19 | 1/2 | In Progress (T19 partial) |
+| 9: Security & Robustness | T20–T24 | 2/5 | In Progress (T21, T24 done; T23 partial; T20, T22 not started) |
+| **Total** | **24** | **15/24 done, 5 partial, 4 not started** | **In Progress** |
 
 ---
 

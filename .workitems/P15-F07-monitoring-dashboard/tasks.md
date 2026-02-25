@@ -14,13 +14,13 @@ updated_at: "2026-02-22T00:00:00Z"
 
 ## Progress
 
-- [ ] T01 Update shared telemetry types (monitoring.ts already exists — UPDATE, not create)
+- [x] T01 Update shared telemetry types (monitoring.ts already exists — UPDATE, not create)
 - [ ] T02 TelemetryReceiver HTTP server
 - [ ] T03 MonitoringStore (in-memory ring buffer)
 - [ ] T04 IPC handlers for monitoring queries
 - [ ] T05 Wire receiver + store into main process startup/shutdown
-- [ ] T06 Zustand monitoringStore (renderer)
-- [ ] T07 MonitoringPage layout + navigation wiring
+- [~] T06 Zustand monitoringStore (renderer) — **PARTIAL**: Store file exists but missing IPC listener setup and hydration
+- [~] T07 MonitoringPage layout + navigation wiring — **PARTIAL**: MonitoringPage exists as stub placeholder only
 - [ ] T08 SummaryCards component
 - [ ] T09 EventStream component
 - [ ] T10 AgentSelector component
@@ -32,7 +32,7 @@ updated_at: "2026-02-22T00:00:00Z"
 
 ## Phase 1: Backend Foundation (T01–T05)
 
-### T01 — Update shared telemetry types (monitoring.ts already exists)
+### T01 — Update shared telemetry types (monitoring.ts already exists) --- DONE
 
 **File:** `apps/workflow-studio/src/shared/types/monitoring.ts`
 
@@ -126,9 +126,11 @@ Register handler in `src/main/ipc/index.ts`.
 
 ## Phase 2: Renderer (T06–T12)
 
-### T06 — Zustand monitoringStore (renderer)
+### T06 — Zustand monitoringStore (renderer) --- PARTIAL
 
 **File:** `apps/workflow-studio/src/renderer/stores/monitoringStore.ts`
+
+**Status:** PARTIAL -- Store file exists but missing IPC listener setup and hydration.
 
 Create a Zustand store that:
 - Subscribes to `ipcRenderer.on('monitoring:event', ...)` and appends to local `events[]`
@@ -144,7 +146,9 @@ Create a Zustand store that:
 
 ---
 
-### T07 — MonitoringPage layout + navigation wiring
+### T07 — MonitoringPage layout + navigation wiring --- PARTIAL
+
+**Status:** PARTIAL -- MonitoringPage exists as a stub placeholder only. Full two-column layout and navigation wiring not yet implemented.
 
 **Files:**
 - `apps/workflow-studio/src/renderer/pages/MonitoringPage.tsx`
@@ -329,7 +333,7 @@ Also update `docker/*/Dockerfile` base images to copy this script into
 
 ## Phase 4: Design Review Findings
 
-### T16 — Reconcile monitoring.ts types with committed code (CRITICAL)
+### T16 — Reconcile monitoring.ts types with committed code (CRITICAL) --- DONE
 
 **File:** `apps/workflow-studio/src/shared/types/monitoring.ts`
 
