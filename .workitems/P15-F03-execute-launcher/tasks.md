@@ -89,14 +89,14 @@
 - **Dependencies:** T03
 - **Status:** [x]
 
-#### T07 — Implement `WORKFLOW_TOUCH` handler
+#### T07 — Implement `WORKFLOW_TOUCH` handler — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/workflow-handlers.ts` (existing, add new case)
 - **Logic:** Load workflow JSON → set `metadata.lastUsedAt = new Date().toISOString()` → save → return `{ success: true }`
-- **Tests:** mock file read/write, assert lastUsedAt set
+- **Tests:** 4 tests in `test/main/workflow-touch.test.ts`
 - **Stories:** US-03
 - **Estimate:** 45min
 - **Dependencies:** T01, T03
-- **Status:** [ ]
+- **Status:** [x]
 
 ---
 
@@ -173,38 +173,41 @@
 
 > Goal: Add status filtering, search, and lastUsedAt display to the Execute page.
 
-#### T12 — Add template status filter to ExecutionPage — PARTIAL
+#### T12 — Add template status filter to ExecutionPage — DONE
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - Filter `workflows` to only those where `status === 'active' || !status`
   - Compute `pausedCount = workflows.filter(w => w.metadata.status === 'paused').length`
   - Show badge "N paused hidden" in section header when `pausedCount > 0`
+- **Tests:** Verified by ExecutionPage tests (status filter, paused count badge)
 - **Stories:** US-01
 - **Estimate:** 30min
 - **Dependencies:** T01, T11
-- **Status:** [~]
+- **Status:** [x]
 
-#### T13 — Add template search input to ExecutionPage
+#### T13 — Add template search input to ExecutionPage — DONE
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - Add `templateSearch: string` state
   - Add search `<input>` above card list
   - Filter cards by `name.toLowerCase().includes(query)` OR any tag includes query
   - Show "No templates match" when 0 results
+- **Tests:** Verified by ExecutionPage tests (search input, name/tag filtering)
 - **Stories:** US-02
 - **Estimate:** 30min
 - **Dependencies:** T12
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T14 — Add lastUsedAt display to WorkflowSummaryCard + touch after launch — PARTIAL
+#### T14 — Add lastUsedAt display to WorkflowSummaryCard + touch after launch — DONE
 - **File:** `apps/workflow-studio/src/renderer/pages/ExecutionPage.tsx`
 - **Changes:**
   - `WorkflowSummaryCard`: show `"Last used: N days ago"` or `"Never"` below node dots
   - After `startExecution` success: call `window.electronAPI.workflow.touch(selectedWorkflow.id)`
+- **Tests:** Verified by ExecutionPage tests (lastUsedAt display, touch after launch)
 - **Stories:** US-03
 - **Estimate:** 30min
 - **Dependencies:** T07, T11, T13
-- **Status:** [~]
+- **Status:** [x]
 
 ---
 
@@ -268,7 +271,7 @@
 - **Dependencies:** T15, T16, T17, T12, T13, T14
 - **Status:** [x]
 
-#### T19 — Wire PRDs tab to real IPC in WorkItemPickerDialog — PARTIAL
+#### T19 — Wire PRDs tab to real IPC in WorkItemPickerDialog — DONE
 - **File:** `apps/workflow-studio/src/renderer/components/workitems/WorkItemPickerDialog.tsx`
 - **Changes:**
   - On dialog open (useEffect on `isOpen`), call `window.electronAPI.workitem.listFs()`
@@ -276,10 +279,11 @@
   - Replace `MOCK_PRDS` with fetched data
   - On error or empty response, show "No work items found" with settings hint
   - Keep MOCK_ISSUES and MOCK_IDEAS unchanged (GitHub Issues deferred)
+- **Tests:** 6 tests in `test/renderer/components/workitems/WorkItemPickerDialog.test.tsx`
 - **Stories:** US-09
 - **Estimate:** 1hr
 - **Dependencies:** T08, T11
-- **Status:** [~]
+- **Status:** [x]
 
 ---
 
@@ -289,7 +293,7 @@
 
 > Goal: Address security findings and operational robustness gaps.
 
-#### T20 — Implement file-restriction PreToolUse hook for containers
+#### T20 — Implement file-restriction PreToolUse hook for containers — DONE
 - **File:** `apps/workflow-studio/resources/hooks/file-restriction-hook.py` (new file)
 - **Logic:**
   - Container-side `file-restriction-hook.py` reads `FILE_RESTRICTIONS` env var (JSON array of glob patterns)
@@ -297,11 +301,11 @@
   - If no match: exit 2 (BLOCK) with reason on stderr
   - If match: exit 0 (allow)
   - Modeled on existing `guardrails-enforce.py`
-- **Tests:** Unit test — blocked path returns exit 2; allowed path returns exit 0; empty restrictions allows all
+- **Tests:** 12 Python tests in `resources/hooks/test_file_restriction_hook.py`
 - **Stories:** US-06, US-08
 - **Estimate:** 2hr
 - **Dependencies:** T10
-- **Status:** [ ]
+- **Status:** [x]
 
 #### T21 — Implement clone cancellation backend — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/repo-handlers.ts`
@@ -316,27 +320,27 @@
 - **Dependencies:** T05
 - **Status:** [x]
 
-#### T22 — Temp directory cleanup on app quit
-- **File:** `apps/workflow-studio/src/main/index.ts`
+#### T22 — Temp directory cleanup on app quit — DONE
+- **File:** `apps/workflow-studio/src/main/temp-cleanup.ts` (new module) + `src/main/index.ts` (wired on before-quit)
 - **Logic:**
   - On `app.on('before-quit')`, scan `os.tmpdir()` for dirs matching `wf-repo-*` pattern
   - Delete each matching directory via `fs.rm(dir, { recursive: true, force: true })`
   - Log cleanup count to console
-- **Tests:** Mock `fs.readdir` and `fs.rm` — verify matching dirs are cleaned
+- **Tests:** 7 tests in `test/main/temp-cleanup.test.ts`
 - **Estimate:** 30min
 - **Dependencies:** T05
-- **Status:** [ ]
+- **Status:** [x]
 
-#### T23 — Read-only mounts (`:ro` flag) for review-only workflows — PARTIAL
-- **File:** `apps/workflow-studio/src/shared/types/repo.ts`, `execution-engine.ts`
+#### T23 — Read-only mounts (`:ro` flag) for review-only workflows — DONE
+- **File:** `apps/workflow-studio/src/shared/types/cli.ts` (readOnly on CLISessionContext), `src/main/services/cli-spawner.ts` (:ro bind mount + system prompt)
 - **Logic:**
-  - Add `readOnly?: boolean` field to `RepoMount`
+  - Add `readOnly?: boolean` field to `CLISessionContext`
   - When `readOnly === true` and Docker mode is used, append `:ro` to the bind mount flag
   - System prompt gets additional instruction: "This repository is mounted read-only. Do not attempt to write files."
-- **Tests:** Unit test — readOnly mount produces `:ro` suffix in Docker args
+- **Tests:** 5 tests in `test/main/cli-spawner-readonly.test.ts`
 - **Estimate:** 30min
 - **Dependencies:** T02, T10
-- **Status:** [~]
+- **Status:** [x]
 
 #### T24 — Add `WORKFLOW_TOUCH` IPC channel to committed ipc-channels.ts — DONE
 - **File:** `apps/workflow-studio/src/shared/ipc-channels.ts`
@@ -354,15 +358,15 @@
 | Phase | Tasks | Done | Status |
 |-------|-------|------|--------|
 | 1: Types & Contracts | T01–T03 | 3/3 | DONE |
-| 2: Repo Handlers | T04–T07 | 3/4 | In Progress (T07 not started) |
+| 2: Repo Handlers | T04–T07 | 4/4 | DONE |
 | 3: WorkItem FS Handlers | T08 | 0/1 | PARTIAL |
 | 4: Execution Integration | T09–T10 | 2/2 | DONE |
 | 5: Preload & Types | T11 | 1/1 | DONE |
-| 6: Template Enhancements | T12–T14 | 0/3 | PARTIAL (T12, T14 partial; T13 not started) |
+| 6: Template Enhancements | T12–T14 | 3/3 | DONE |
 | 7: RepoMountSection | T15–T17 | 3/3 | DONE |
-| 8: Page Integration | T18–T19 | 1/2 | In Progress (T19 partial) |
-| 9: Security & Robustness | T20–T24 | 2/5 | In Progress (T21, T24 done; T23 partial; T20, T22 not started) |
-| **Total** | **24** | **15/24 done, 5 partial, 4 not started** | **In Progress** |
+| 8: Page Integration | T18–T19 | 2/2 | DONE |
+| 9: Security & Robustness | T20–T24 | 5/5 | DONE |
+| **Total** | **24** | **23/24 done, 1 partial** | **Near Complete (T08 partial)** |
 
 ---
 

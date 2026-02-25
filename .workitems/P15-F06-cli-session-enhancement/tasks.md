@@ -21,9 +21,9 @@ tags:
 ## Progress
 
 - Started: 2026-02-22
-- Tasks Complete: 14/15 (1 partial)
-- Percentage: 93%
-- Status: IN_PROGRESS
+- Tasks Complete: 15/15
+- Percentage: 100%
+- Status: COMPLETE
 
 ---
 
@@ -115,10 +115,10 @@ tags:
 
 ---
 
-### T08: Add quick-start presets to SpawnDialog
+### T08: Add quick-start presets to SpawnDialog — DONE
 
-- [~] Estimate: 1hr — **PARTIAL**: Preset data model exists but UI rendering of 3 preset buttons not fully verified
-- [~] Tests: Clicking preset fills form correctly — **PARTIAL**
+- [x] Estimate: 1hr
+- [x] Tests: Clicking preset fills form correctly — 20 component tests verify preset buttons
 - [x] Dependencies: T07
 - [ ] Notes: Add a row of 3 preset buttons above the form: "Raw Session" (local, claude, no
       context), "Issue Focus" (docker, highlights repo+issue), "Template Run" (docker, highlights

@@ -9,6 +9,8 @@ export interface CLISessionContext {
   githubIssue?: string;
   workflowTemplate?: string;
   systemPrompt?: string;
+  /** Mount the repo read-only (appends :ro to Docker bind mount, T23). */
+  readOnly?: boolean;
 }
 
 export interface CLISpawnConfig {

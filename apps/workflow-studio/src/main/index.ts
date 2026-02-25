@@ -1,13 +1,13 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { registerAllHandlers } from './ipc';
 import { CLISpawner } from './services/cli-spawner';
 import { WorkItemService } from './services/workitem-service';
 import { WorkflowFileService } from './services/workflow-file-service';
 import { SettingsService } from './services/settings-service';
 import { SessionHistoryService } from './services/session-history-service';
+import { cleanupTempRepoDirs } from './temp-cleanup';
 
 // ---------------------------------------------------------------------------
 // Window bounds persistence
@@ -226,26 +226,5 @@ app.on('window-all-closed', () => {
 // ---------------------------------------------------------------------------
 
 app.on('before-quit', () => {
-  try {
-    const tempDir = tmpdir();
-    const entries = readdirSync(tempDir);
-    let cleaned = 0;
-
-    for (const entry of entries) {
-      if (entry.startsWith('wf-repo-')) {
-        try {
-          rmSync(join(tempDir, entry), { recursive: true, force: true });
-          cleaned++;
-        } catch {
-          // Best effort cleanup -- ignore individual failures
-        }
-      }
-    }
-
-    if (cleaned > 0) {
-      console.log(`[Cleanup] Removed ${cleaned} temporary repo directories`);
-    }
-  } catch {
-    // Do not crash on cleanup failure
-  }
+  cleanupTempRepoDirs();
 });

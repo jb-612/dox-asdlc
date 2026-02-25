@@ -158,9 +158,10 @@ export class CLISpawner {
     // Linux host networking workaround
     dockerArgs.push('--add-host=host.docker.internal:host-gateway');
 
-    // Mount repo if provided
+    // Mount repo if provided (append :ro for read-only mounts, T23)
     if (config.context?.repoPath) {
-      dockerArgs.push('-v', `${config.context.repoPath}:/workspace`);
+      const mountSuffix = config.context.readOnly ? ':ro' : '';
+      dockerArgs.push('-v', `${config.context.repoPath}:/workspace${mountSuffix}`);
       dockerArgs.push('-w', '/workspace');
     }
 
@@ -188,9 +189,18 @@ export class CLISpawner {
       dockerArgs.push(...config.args);
     }
 
-    // Append system prompt if provided via context
-    if (config.context?.systemPrompt) {
-      dockerArgs.push('--system-prompt', config.context.systemPrompt);
+    // Build and append system prompt (with read-only instruction if T23)
+    {
+      const parts: string[] = [];
+      if (config.context?.readOnly) {
+        parts.push('This repository is mounted read-only. Do not attempt to write files.');
+      }
+      if (config.context?.systemPrompt) {
+        parts.push(config.context.systemPrompt);
+      }
+      if (parts.length > 0) {
+        dockerArgs.push('--system-prompt', parts.join('\n\n'));
+      }
     }
 
     const ptyProcess = pty.spawn('docker', dockerArgs, {
