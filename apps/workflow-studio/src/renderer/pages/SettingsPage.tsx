@@ -155,7 +155,7 @@ export default function SettingsPage(): JSX.Element {
           const result = await window.electronAPI.settings.testProvider(provider);
           setTestResults((prev) => ({
             ...prev,
-            [provider]: { ok: result.success, latencyMs: result.latencyMs, error: result.error },
+            [provider]: { ok: result.ok, latencyMs: result.latencyMs, error: result.error },
           }));
         }
       } catch (err: unknown) {
