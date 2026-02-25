@@ -258,13 +258,9 @@ export default function TemplateManagerPage(): JSX.Element {
     }
   }, [setWorkflow, navigate]);
 
-  const handleEdit = useCallback(async (id: string) => {
-    const wf = await window.electronAPI.template.load(id);
-    if (wf) {
-      setWorkflow(wf);
-      navigate('/');
-    }
-  }, [setWorkflow, navigate]);
+  const handleEdit = useCallback((id: string) => {
+    navigate(`/studio?templateId=${encodeURIComponent(id)}`);
+  }, [navigate]);
 
   const handleEditInStudio = useCallback((id: string) => {
     navigate(`/studio?templateId=${encodeURIComponent(id)}`);
@@ -273,7 +269,7 @@ export default function TemplateManagerPage(): JSX.Element {
   const handleNewTemplate = useCallback(() => {
     const newWorkflow = useWorkflowStore.getState().newWorkflow;
     newWorkflow();
-    navigate('/');
+    navigate('/studio');
   }, [navigate]);
 
   // ---- Render ----
