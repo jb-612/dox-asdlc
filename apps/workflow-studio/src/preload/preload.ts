@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     abort: () => ipcRenderer.invoke('execution:abort'),
     gateDecision: (decision: unknown) =>
       ipcRenderer.invoke('execution:gate-decision', decision),
+    /** P15-F04: Send revision feedback for a block in gate mode */
+    revise: (config: { executionId: string; nodeId: string; feedback: string }) =>
+      ipcRenderer.invoke('execution:revise', config),
   },
 
   /** Work item access */

@@ -300,6 +300,53 @@ export class ExecutionEngine {
   }
 
   /**
+   * Register a mapping from a CLI session ID to a node ID.
+   *
+   * This is useful when the execution-handlers layer needs to associate
+   * CLI output events (which carry a sessionId) with the workflow node
+   * that spawned the session.
+   *
+   * @param sessionId The CLI session identifier.
+   * @param nodeId    The workflow node that owns this session.
+   */
+  registerSessionNode(sessionId: string, nodeId: string): void {
+    this.sessionToNode.set(sessionId, nodeId);
+  }
+
+  /**
+   * Handle raw CLI output data (P15-F04 T08).
+   *
+   * Called when the CLISpawner emits CLI_OUTPUT for a session managed by
+   * this execution. Parses newline-delimited JSON from Claude CLI
+   * `--output-format json` and emits structured `tool_call` and
+   * `bash_command` events when tool use content blocks are detected.
+   *
+   * Malformed lines or non-tool output are silently ignored.
+   *
+   * @param sessionId The CLI session that produced the output.
+   * @param data      Raw string data from the PTY.
+   */
+  handleCLIOutput(sessionId: string, data: string): void {
+    if (!this.execution) return;
+
+    const nodeId = this.sessionToNode.get(sessionId);
+    const toolCalls = this.parseToolCalls(data);
+
+    for (const tc of toolCalls) {
+      this.emitEvent('tool_call', nodeId, `Tool: ${tc.tool} -> ${tc.target}`, {
+        tool: tc.tool,
+        target: tc.target,
+      });
+
+      if (tc.tool === 'Bash') {
+        this.emitEvent('bash_command', nodeId, `$ ${tc.target}`, {
+          command: tc.target,
+        });
+      }
+    }
+  }
+
+  /**
    * Revise a block that is currently in waiting_gate status (P15-F04).
    *
    * Increments the revisionCount, emits a block_revision event, and
@@ -725,6 +772,120 @@ export class ExecutionEngine {
   // -----------------------------------------------------------------------
   // Private helpers
   // -----------------------------------------------------------------------
+
+  /**
+   * Parse a raw CLI output string for tool_use content blocks.
+   *
+   * Supports two JSON shapes emitted by Claude CLI:
+   *
+   *   1. **Message format**: `{ type: "assistant", message: { content: [{ type: "tool_use", name, input }] } }`
+   *   2. **Streaming format**: `{ type: "content_block_start", content_block: { type: "tool_use", name, input } }`
+   *
+   * Returns an array of `{ tool, target }` objects for each tool_use block
+   * found. The `target` is extracted heuristically from the tool's input:
+   *   - `file_path` for file-based tools (Read, Write, Edit)
+   *   - `command` for Bash
+   *   - `pattern` for Grep/Glob
+   *   - First string value from input as fallback
+   *
+   * Malformed or non-matching lines return an empty array.
+   */
+  private parseToolCalls(data: string): Array<{ tool: string; target: string }> {
+    const results: Array<{ tool: string; target: string }> = [];
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return results;
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return results;
+    }
+
+    const obj = parsed as Record<string, unknown>;
+
+    // Collect tool_use content blocks from both formats
+    const toolBlocks: Array<{ name: string; input: Record<string, unknown> }> = [];
+
+    // Format 1: { type: "assistant", message: { content: [...] } }
+    if (obj.type === 'assistant' && obj.message && typeof obj.message === 'object') {
+      const msg = obj.message as Record<string, unknown>;
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (
+            block &&
+            typeof block === 'object' &&
+            (block as Record<string, unknown>).type === 'tool_use' &&
+            typeof (block as Record<string, unknown>).name === 'string'
+          ) {
+            toolBlocks.push({
+              name: (block as Record<string, unknown>).name as string,
+              input: ((block as Record<string, unknown>).input as Record<string, unknown>) ?? {},
+            });
+          }
+        }
+      }
+    }
+
+    // Format 2: { type: "content_block_start", content_block: { type: "tool_use", ... } }
+    if (obj.type === 'content_block_start' && obj.content_block && typeof obj.content_block === 'object') {
+      const block = obj.content_block as Record<string, unknown>;
+      if (block.type === 'tool_use' && typeof block.name === 'string') {
+        toolBlocks.push({
+          name: block.name as string,
+          input: (block.input as Record<string, unknown>) ?? {},
+        });
+      }
+    }
+
+    // Extract target from each tool block
+    for (const { name, input } of toolBlocks) {
+      const target = this.extractToolTarget(name, input);
+      results.push({ tool: name, target });
+    }
+
+    return results;
+  }
+
+  /**
+   * Extract the most relevant target identifier from a tool's input object.
+   *
+   * @param toolName The tool name (e.g. "Edit", "Bash", "Grep").
+   * @param input    The tool's input parameters.
+   * @returns A string identifying the target (file path, command, pattern, etc.).
+   */
+  private extractToolTarget(toolName: string, input: Record<string, unknown>): string {
+    // file_path is the primary target for Read, Write, Edit
+    if (typeof input.file_path === 'string') {
+      return input.file_path;
+    }
+
+    // command for Bash
+    if (typeof input.command === 'string') {
+      return input.command;
+    }
+
+    // pattern for Grep and Glob
+    if (typeof input.pattern === 'string') {
+      return input.pattern;
+    }
+
+    // path for tools that use path as primary input
+    if (typeof input.path === 'string') {
+      return input.path;
+    }
+
+    // Fallback: first string value from input
+    for (const value of Object.values(input)) {
+      if (typeof value === 'string') {
+        return value;
+      }
+    }
+
+    return toolName;
+  }
 
   /**
    * Collect BlockResult objects from all previously completed nodes.

@@ -2,12 +2,24 @@ import { useState, useMemo } from 'react';
 import type {
   Execution,
   NodeExecutionState,
-  ExecutionStatus,
+  BlockDeliverables,
 } from '../../../shared/types/execution';
-import type { AgentNode, HITLGateDefinition } from '../../../shared/types/workflow';
+import type { AgentNode } from '../../../shared/types/workflow';
 import { NODE_TYPE_METADATA } from '../../../shared/constants';
 import ExecutionEventList from './ExecutionEventList';
-import GateDecisionForm from './GateDecisionForm';
+import StepGatePanel from './StepGatePanel';
+
+// ---------------------------------------------------------------------------
+// Type guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Runtime check that `v` has the shape of a BlockDeliverables object.
+ * Returns false for null, undefined, non-objects, and objects without `blockType`.
+ */
+function isBlockDeliverables(v: unknown): v is BlockDeliverables {
+  return v != null && typeof v === 'object' && 'blockType' in v;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -16,7 +28,8 @@ import GateDecisionForm from './GateDecisionForm';
 export interface ExecutionDetailsPanelProps {
   execution: Execution;
   selectedNodeId: string | null;
-  onGateDecision: (gateId: string, selectedOption: string, reason?: string) => void;
+  onGateContinue?: () => void;
+  onGateRevise?: (feedback: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,12 +285,13 @@ function VariablesTab({ variables }: { variables: Record<string, unknown> }): JS
  * - Current Node: node type, label, status, ports, start/end time
  * - Event Log: embeds ExecutionEventList
  * - Variables: runtime key-value pairs
- * - Gate Decision: visible only when status is 'waiting_gate', embeds GateDecisionForm
+ * - Gate Decision: visible only when status is 'waiting_gate', embeds StepGatePanel
  */
 export default function ExecutionDetailsPanel({
   execution,
   selectedNodeId,
-  onGateDecision,
+  onGateContinue,
+  onGateRevise,
 }: ExecutionDetailsPanelProps): JSX.Element {
   const isWaitingGate = execution.status === 'waiting_gate';
 
@@ -295,12 +309,6 @@ export default function ExecutionDetailsPanel({
 
   const [activeTab, setActiveTab] = useState<TabId>('current_node');
 
-  // Auto-switch to gate tab when gate is reached
-  const prevWaitingGate = useMemo(() => isWaitingGate, [isWaitingGate]);
-  if (isWaitingGate && activeTab !== 'gate_decision' && prevWaitingGate) {
-    // This is intentionally not in useEffect to be synchronous on render
-  }
-
   // Find the selected agent node and its state
   const selectedAgentNode = useMemo(
     () => execution.workflow.nodes.find((n) => n.id === selectedNodeId),
@@ -312,13 +320,17 @@ export default function ExecutionDetailsPanel({
     [execution.nodeStates, selectedNodeId],
   );
 
-  // Find current gate if waiting
-  const currentGate: HITLGateDefinition | undefined = useMemo(() => {
-    if (!isWaitingGate) return undefined;
-    return execution.workflow.gates.find(
-      (g) => g.nodeId === execution.currentNodeId,
-    );
-  }, [isWaitingGate, execution.workflow.gates, execution.currentNodeId]);
+  // Gate node state and label for StepGatePanel
+  const gateNodeState = useMemo(
+    () => execution.currentNodeId ? execution.nodeStates[execution.currentNodeId] : undefined,
+    [execution.nodeStates, execution.currentNodeId],
+  );
+
+  const gateNodeLabel = useMemo(() => {
+    if (!execution.currentNodeId) return '';
+    const node = execution.workflow.nodes.find((n) => n.id === execution.currentNodeId);
+    return node?.label ?? execution.currentNodeId;
+  }, [execution.workflow.nodes, execution.currentNodeId]);
 
   // Fallback active tab if gate tab was selected but gate cleared
   const effectiveTab = activeTab === 'gate_decision' && !isWaitingGate
@@ -369,19 +381,17 @@ export default function ExecutionDetailsPanel({
           <VariablesTab variables={execution.variables} />
         )}
 
-        {effectiveTab === 'gate_decision' && currentGate && (
-          <div className="p-3 overflow-y-auto h-full">
-            <GateDecisionForm
-              gateId={currentGate.id}
-              prompt={currentGate.prompt}
-              options={currentGate.options}
-              timeoutSeconds={currentGate.timeoutSeconds}
-              onSubmit={onGateDecision}
-            />
-          </div>
+        {effectiveTab === 'gate_decision' && gateNodeState && (
+          <StepGatePanel
+            node={gateNodeState}
+            nodeLabel={gateNodeLabel}
+            deliverables={isBlockDeliverables(gateNodeState.output) ? gateNodeState.output : null}
+            onContinue={onGateContinue ?? (() => {})}
+            onRevise={onGateRevise ?? (() => {})}
+          />
         )}
 
-        {effectiveTab === 'gate_decision' && !currentGate && (
+        {effectiveTab === 'gate_decision' && !gateNodeState && (
           <div className="flex items-center justify-center h-full text-gray-500 text-xs">
             No gate decision pending
           </div>

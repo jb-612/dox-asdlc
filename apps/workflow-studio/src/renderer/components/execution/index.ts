@@ -22,8 +22,8 @@ export type { ExecutionHeaderProps } from './ExecutionHeader';
 export { default as ExecutionEventList } from './ExecutionEventList';
 export type { ExecutionEventListProps } from './ExecutionEventList';
 
-export { default as GateDecisionForm } from './GateDecisionForm';
-export type { GateDecisionFormProps } from './GateDecisionForm';
+export { default as StepGatePanel } from './StepGatePanel';
+export type { StepGatePanelProps } from './StepGatePanel';
 
 export { default as ExecutionDetailsPanel } from './ExecutionDetailsPanel';
 export type { ExecutionDetailsPanelProps } from './ExecutionDetailsPanel';

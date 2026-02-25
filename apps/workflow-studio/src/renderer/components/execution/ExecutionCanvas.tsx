@@ -1,9 +1,10 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   ReactFlowProvider,
+  useReactFlow,
   type Node,
   type Edge,
   type NodeTypes,
@@ -13,13 +14,13 @@ import 'reactflow/dist/style.css';
 
 import type { Execution, NodeExecutionStatus } from '../../../shared/types/execution';
 import type { AgentNode, Transition } from '../../../shared/types/workflow';
-import { NODE_TYPE_METADATA } from '../../../shared/constants';
 import type { AgentNodeData } from '../designer/AgentNodeComponent';
 import type { GateNodeData } from '../designer/GateNodeComponent';
 import type { TransitionEdgeData } from '../designer/TransitionEdge';
 import ExecutionAgentNode from './ExecutionAgentNode';
 import ExecutionGateNode from './ExecutionGateNode';
 import ExecutionTransitionEdge from './ExecutionTransitionEdge';
+import { computeDagreLayout } from './executionLayout';
 
 // ---------------------------------------------------------------------------
 // Custom node / edge registries for execution mode
@@ -71,14 +72,22 @@ function borderClassForStatus(status: NodeExecutionStatus): string {
 function buildNodes(execution: Execution): Node[] {
   const { workflow, nodeStates } = execution;
 
+  // Compute automatic layout positions via dagre
+  const layoutPositions = computeDagreLayout(
+    workflow.nodes,
+    workflow.transitions,
+    workflow.gates,
+  );
+
   const agentNodes: Node<AgentNodeData & { executionStatus: NodeExecutionStatus; statusClass: string }>[] =
     workflow.nodes.map((agentNode: AgentNode) => {
       const nodeState = nodeStates[agentNode.id];
       const status: NodeExecutionStatus = nodeState?.status ?? 'pending';
+      const layoutPos = layoutPositions.get(agentNode.id);
       return {
         id: agentNode.id,
         type: 'agent',
-        position: agentNode.position,
+        position: layoutPos ?? agentNode.position,
         draggable: false,
         connectable: false,
         data: {
@@ -94,15 +103,17 @@ function buildNodes(execution: Execution): Node[] {
 
   const gateNodes: Node<GateNodeData & { executionStatus: NodeExecutionStatus; statusClass: string }>[] =
     workflow.gates.map((gate) => {
-      const parentNode = workflow.nodes.find((n) => n.id === gate.nodeId);
       const nodeState = nodeStates[gate.nodeId];
       const status: NodeExecutionStatus = nodeState?.status ?? 'pending';
+      const layoutPos = layoutPositions.get(gate.id);
+      const fallbackParent = workflow.nodes.find((n) => n.id === gate.nodeId);
       return {
         id: gate.id,
         type: 'gate',
-        position: parentNode
-          ? { x: parentNode.position.x + 200, y: parentNode.position.y }
-          : { x: 0, y: 0 },
+        position: layoutPos
+          ?? (fallbackParent
+            ? { x: fallbackParent.position.x + 200, y: fallbackParent.position.y }
+            : { x: 0, y: 0 }),
         draggable: false,
         connectable: false,
         data: {
@@ -160,8 +171,32 @@ function buildEdges(execution: Execution): Edge<TransitionEdgeData & { isActive:
 // ---------------------------------------------------------------------------
 
 function CanvasInner({ execution, onNodeSelect }: ExecutionCanvasProps): JSX.Element {
+  const { fitView } = useReactFlow();
   const nodes = useMemo(() => buildNodes(execution), [execution]);
   const edges = useMemo(() => buildEdges(execution), [execution]);
+
+  // Center viewport on the currently active node when it changes
+  const prevCurrentNodeId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const { currentNodeId } = execution;
+    if (!currentNodeId) return;
+    if (currentNodeId === prevCurrentNodeId.current) return;
+    prevCurrentNodeId.current = currentNodeId;
+
+    // Small timeout so the layout settles before we pan
+    const timer = setTimeout(() => {
+      const activeNode = nodes.find((n) => n.id === currentNodeId);
+      if (activeNode) {
+        fitView({
+          nodes: [{ id: activeNode.id }],
+          duration: 300,
+          padding: 0.3,
+        });
+      }
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [execution.currentNodeId, nodes, fitView]);
 
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {

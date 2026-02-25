@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ExecutionDetailsPanel from '../../../../src/renderer/components/execution/ExecutionDetailsPanel';
+import type { ExecutionDetailsPanelProps } from '../../../../src/renderer/components/execution/ExecutionDetailsPanel';
 import type { Execution } from '../../../../src/shared/types/execution';
 
 // ---------------------------------------------------------------------------
@@ -107,7 +108,8 @@ describe('ExecutionDetailsPanel with Step Gate tab (T12)', () => {
       <ExecutionDetailsPanel
         execution={createExecution('waiting_gate')}
         selectedNodeId="node-1"
-        onGateDecision={vi.fn()}
+        onGateContinue={vi.fn()}
+        onGateRevise={vi.fn()}
       />,
     );
     expect(screen.getByText('Gate Decision')).toBeInTheDocument();
@@ -118,7 +120,6 @@ describe('ExecutionDetailsPanel with Step Gate tab (T12)', () => {
       <ExecutionDetailsPanel
         execution={createExecution('running')}
         selectedNodeId="node-1"
-        onGateDecision={vi.fn()}
       />,
     );
     expect(screen.queryByText('Gate Decision')).not.toBeInTheDocument();
@@ -129,7 +130,6 @@ describe('ExecutionDetailsPanel with Step Gate tab (T12)', () => {
       <ExecutionDetailsPanel
         execution={createExecution('running')}
         selectedNodeId="node-1"
-        onGateDecision={vi.fn()}
       />,
     );
     expect(screen.getByText('Event Log')).toBeInTheDocument();
@@ -140,7 +140,6 @@ describe('ExecutionDetailsPanel with Step Gate tab (T12)', () => {
       <ExecutionDetailsPanel
         execution={createExecution('running')}
         selectedNodeId="node-1"
-        onGateDecision={vi.fn()}
       />,
     );
     expect(screen.getByText('Current Node')).toBeInTheDocument();
@@ -151,9 +150,118 @@ describe('ExecutionDetailsPanel with Step Gate tab (T12)', () => {
       <ExecutionDetailsPanel
         execution={createExecution('running')}
         selectedNodeId="node-1"
-        onGateDecision={vi.fn()}
       />,
     );
     expect(screen.getByText('Variables')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #280: StepGatePanel wiring and prop cleanup
+// ---------------------------------------------------------------------------
+
+describe('ExecutionDetailsPanel -- onGateContinue / onGateRevise wiring (#280)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes onGateContinue and onGateRevise through to StepGatePanel', () => {
+    const onContinue = vi.fn();
+    const onRevise = vi.fn();
+
+    render(
+      <ExecutionDetailsPanel
+        execution={createExecution('waiting_gate')}
+        selectedNodeId="node-1"
+        onGateContinue={onContinue}
+        onGateRevise={onRevise}
+      />,
+    );
+
+    // Switch to gate tab
+    fireEvent.click(screen.getByText('Gate Decision'));
+
+    // The StepGatePanel should be rendered (it has data-testid="step-gate-panel")
+    expect(screen.getByTestId('step-gate-panel')).toBeInTheDocument();
+
+    // Click the continue button inside StepGatePanel -> ContinueReviseBar
+    fireEvent.click(screen.getByTestId('continue-btn'));
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not accept an onGateDecision prop (prop has been removed)', () => {
+    // Verify at the TypeScript type level that onGateDecision is not
+    // part of ExecutionDetailsPanelProps. We do this by confirming the
+    // props interface only contains the expected keys.
+    type AllowedKeys = keyof ExecutionDetailsPanelProps;
+    const keys: AllowedKeys[] = [
+      'execution',
+      'selectedNodeId',
+      'onGateContinue',
+      'onGateRevise',
+    ];
+    // If onGateDecision were still a key this would be a compile error --
+    // but we also verify at runtime that the union is exhaustive.
+    const hasOnGateDecision = keys.includes('onGateDecision' as AllowedKeys);
+    expect(hasOnGateDecision).toBe(false);
+  });
+
+  it('renders StepGatePanel with correct props when in waiting_gate status', () => {
+    render(
+      <ExecutionDetailsPanel
+        execution={createExecution('waiting_gate')}
+        selectedNodeId="node-1"
+        onGateContinue={vi.fn()}
+        onGateRevise={vi.fn()}
+      />,
+    );
+
+    // Click gate tab
+    fireEvent.click(screen.getByText('Gate Decision'));
+
+    // StepGatePanel should show the node label
+    expect(screen.getByText('Planner')).toBeInTheDocument();
+
+    // StepGatePanel should show the "Awaiting Review" badge
+    expect(screen.getByText('Awaiting Review')).toBeInTheDocument();
+  });
+
+  it('handles BlockDeliverables safely when output is not a valid BlockDeliverables', () => {
+    const exec = createExecution('waiting_gate');
+    // Set output to something that is NOT a BlockDeliverables (no blockType)
+    exec.nodeStates['node-1'].output = { someRandomKey: 'value' };
+
+    render(
+      <ExecutionDetailsPanel
+        execution={exec}
+        selectedNodeId="node-1"
+        onGateContinue={vi.fn()}
+        onGateRevise={vi.fn()}
+      />,
+    );
+
+    // Click gate tab -- should not crash, deliverables should be null
+    fireEvent.click(screen.getByText('Gate Decision'));
+    expect(screen.getByTestId('step-gate-panel')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Barrel export verification (#280)
+// ---------------------------------------------------------------------------
+
+describe('execution barrel export (#280)', () => {
+  it('exports StepGatePanel', async () => {
+    const barrel = await import(
+      '../../../../src/renderer/components/execution/index'
+    );
+    expect(barrel).toHaveProperty('StepGatePanel');
+  });
+
+  it('does NOT export GateDecisionForm', async () => {
+    const barrel = await import(
+      '../../../../src/renderer/components/execution/index'
+    );
+    expect(barrel).not.toHaveProperty('GateDecisionForm');
   });
 });

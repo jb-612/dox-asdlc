@@ -3,7 +3,7 @@ id: P15-F04
 parent_id: P15
 type: tasks
 version: 1
-status: in_progress
+status: complete
 constraints_hash: null
 created_by: planner
 created_at: "2026-02-22T00:00:00Z"
@@ -22,9 +22,10 @@ tags:
 ## Progress
 
 - Started: 2026-02-22
-- Tasks Complete: 15/17 (2 partial)
-- Percentage: 88%
-- Status: IN_PROGRESS
+- Completed: 2026-02-25
+- Tasks Complete: 17/17
+- Percentage: 100%
+- Status: COMPLETE
 
 ---
 
@@ -123,14 +124,14 @@ tags:
 
 ### T08: Emit tool_call and bash_command events from execution engine
 
-- [~] Estimate: 1hr
-- [ ] Tests: Unit test — mock agent output containing a tool use produces a `tool_call` event in the engine
-- [~] Dependencies: T01
-- [~] Notes: `main/services/execution-engine.ts` — parse `cli_output` event data for structured
+- [x] Estimate: 1hr
+- [x] Tests: Unit test — mock agent output containing a tool use produces a `tool_call` event in the engine
+- [x] Dependencies: T01
+- [x] Notes: `main/services/execution-engine.ts` — parse `cli_output` event data for structured
        tool call patterns (JSON lines from Claude CLI `--output-format json`). When a tool use is
        detected in the stream, emit a `tool_call` event with `{tool, target}` extracted from the
        tool use JSON. Similarly emit `bash_command` for `Bash` tool calls.
-- [~] Status: PARTIAL — Event emission framework exists but not fully wired to CLI output parsing
+- [x] Status: DONE
 
 ---
 
@@ -188,15 +189,15 @@ tags:
 
 ### T13: Enhance ExecutionCanvas — status colors, pulse, parallel layout
 
-- [~] Estimate: 1.5hr
-- [ ] Tests: Render test — active node has pulse class; completed node has green color; two parallel nodes rendered side by side
-- [~] Dependencies: None
-- [~] Notes: `renderer/components/execution/ExecutionCanvas.tsx` — add CSS keyframe for pulse
+- [x] Estimate: 1.5hr
+- [x] Tests: Render test — active node has pulse class; completed node has green color; two parallel nodes rendered side by side
+- [x] Dependencies: None
+- [x] Notes: `renderer/components/execution/ExecutionCanvas.tsx` — add CSS keyframe for pulse
        animation (Tailwind `animate-pulse` or custom). Map `NodeExecutionStatus` to border/fill
        colors. Detect parallel branches from workflow edges (nodes with same target sharing a fork
        source) and apply dagre layout columns. Add `centerOnActiveNode` effect via React Flow
        `fitView` with `nodes` filter.
-- [~] Status: PARTIAL — Canvas exists with status colors and pulse, but parallel layout (dagre columns) is incomplete
+- [x] Status: DONE
 
 ---
 

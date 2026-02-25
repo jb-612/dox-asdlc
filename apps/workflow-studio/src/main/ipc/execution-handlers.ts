@@ -222,5 +222,14 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         engine.handleCLIExit(data.sessionId, data.exitCode);
       }
     });
+
+    // --- CLI Output forwarding (P15-F04 T08) --------------------------------
+    // Forward raw CLI output to the execution engine for tool_call / bash_command
+    // event parsing. The engine silently ignores non-tool output lines.
+    ipcMain.on(IPC_CHANNELS.CLI_OUTPUT, (_event, data: { sessionId: string; data: string }) => {
+      if (engine) {
+        engine.handleCLIOutput(data.sessionId, data.data);
+      }
+    });
   }
 }

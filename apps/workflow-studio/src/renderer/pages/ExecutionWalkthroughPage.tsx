@@ -56,6 +56,7 @@ export default function ExecutionWalkthroughPage(): JSX.Element {
   const resumeExecution = useExecutionStore((s) => s.resumeExecution);
   const abortExecution = useExecutionStore((s) => s.abortExecution);
   const submitGateDecision = useExecutionStore((s) => s.submitGateDecision);
+  const reviseBlock = useExecutionStore((s) => s.reviseBlock);
 
   // --- Local UI state ---
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -95,12 +96,18 @@ export default function ExecutionWalkthroughPage(): JSX.Element {
     setSelectedNodeId(nodeId);
   }, []);
 
-  const handleGateDecision = useCallback(
-    (gateId: string, selectedOption: string, reason?: string) => {
+  const handleGateContinue = useCallback(() => {
+    if (!execution?.currentNodeId) return;
+    // Submit a gate decision with 'continue' as the selected option
+    void submitGateDecision(execution.currentNodeId, 'default', 'continue');
+  }, [execution?.currentNodeId, submitGateDecision]);
+
+  const handleGateRevise = useCallback(
+    (feedback: string) => {
       if (!execution?.currentNodeId) return;
-      void submitGateDecision(execution.currentNodeId, gateId, selectedOption, reason);
+      void reviseBlock(execution.currentNodeId, feedback);
     },
-    [execution?.currentNodeId, submitGateDecision],
+    [execution?.currentNodeId, reviseBlock],
   );
 
   const formatElapsed = useCallback((seconds: number): string => {
@@ -233,7 +240,8 @@ export default function ExecutionWalkthroughPage(): JSX.Element {
           <ExecutionDetailsPanel
             execution={execution}
             selectedNodeId={selectedNodeId}
-            onGateDecision={handleGateDecision}
+            onGateContinue={handleGateContinue}
+            onGateRevise={handleGateRevise}
           />
         </div>
       </div>
