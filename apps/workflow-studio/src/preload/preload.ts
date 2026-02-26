@@ -85,6 +85,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVersion: () => ipcRenderer.invoke('settings:get-version'),
   },
 
+  /** Container pool operations (P15-F05) */
+  containerPool: {
+    /** Get current pool snapshot */
+    getStatus: () => ipcRenderer.invoke('container:pool-status'),
+    /** Pre-warm containers for parallel execution */
+    start: (count: number) => ipcRenderer.invoke('container:pool-start', { count }),
+    /** Teardown all containers */
+    stop: () => ipcRenderer.invoke('container:pool-stop'),
+  },
+
   /** Repository operations (P15-F03) */
   repo: {
     /** Clone a GitHub repo into a temp directory */

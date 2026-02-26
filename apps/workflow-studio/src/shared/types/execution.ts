@@ -160,25 +160,46 @@ export interface BlockResult {
 // Container tracking (P15-F05 parallel execution)
 // ---------------------------------------------------------------------------
 
-/** Lifecycle state of a Docker container managed by the execution engine. */
+/** Lifecycle state of a Docker container managed by the parallel execution engine. */
 export type ContainerState =
-  | 'creating'
+  | 'starting'
+  | 'idle'
   | 'running'
-  | 'paused'
-  | 'stopped'
-  | 'removing'
-  | 'error';
+  | 'dormant'
+  | 'terminated';
 
 /** Record tracking a single Docker container used during parallel execution. */
 export interface ContainerRecord {
-  containerId: string;
+  /** Docker container ID */
+  id: string;
   state: ContainerState;
-  nodeId?: string;
-  laneIndex?: number;
-  createdAt: string;
-  startedAt?: string;
-  stoppedAt?: string;
+  /** Currently assigned block (null when idle/dormant) */
+  blockId: string | null;
+  /** Host port mapped to the container agent */
+  port: number;
+  /** Agent endpoint URL, e.g. http://localhost:<port> */
+  agentUrl: string;
+  /** Timestamp (Date.now()) when container was created */
+  createdAt: number;
+  /** Timestamp when container entered dormant state, null otherwise */
+  dormantSince: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Parallel block result (P15-F05)
+// ---------------------------------------------------------------------------
+
+/**
+ * Outcome of a single block execution inside a parallel lane.
+ * Distinguished from {@link BlockResult} which tracks deliverables for the
+ * gate/review workflow (P15-F04).
+ */
+export interface ParallelBlockResult {
+  blockId: string;
+  success: boolean;
+  output: unknown;
   error?: string;
+  durationMs: number;
 }
 
 // ---------------------------------------------------------------------------

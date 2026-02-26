@@ -94,6 +94,35 @@ export interface ParallelGroup {
 }
 
 // ---------------------------------------------------------------------------
+// Workflow plan (P15-F05 parallel execution)
+// ---------------------------------------------------------------------------
+
+/** How parallel lanes are executed: one container per lane or shared. */
+export type ParallelismModel = 'multi-container' | 'single-container';
+
+/** How failures in parallel lanes are handled. */
+export type FailureMode = 'strict' | 'lenient';
+
+/** Strategy for merging outputs from parallel lanes. */
+export type MergeStrategy = 'concatenate' | 'workspace' | 'custom';
+
+/** A lane containing multiple nodes that execute as a parallel group. */
+export interface ParallelLane {
+  nodeIds: string[];
+  mergeStrategy?: MergeStrategy;
+}
+
+/**
+ * Computed execution plan derived from a WorkflowDefinition.
+ * Lanes are either a single sequential block ID (string) or a ParallelLane.
+ */
+export interface WorkflowPlan {
+  lanes: (string | ParallelLane)[];
+  parallelismModel: ParallelismModel;
+  failureMode: FailureMode;
+}
+
+// ---------------------------------------------------------------------------
 // Transitions
 // ---------------------------------------------------------------------------
 

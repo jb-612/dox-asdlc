@@ -15,6 +15,11 @@ export type {
   WorkflowStatus,
   WorkflowMetadata,
   BlockType,
+  ParallelismModel,
+  FailureMode,
+  MergeStrategy,
+  ParallelLane,
+  WorkflowPlan,
   WorkflowDefinition,
 } from './workflow';
 
@@ -37,6 +42,7 @@ export type {
   BlockResult,
   ContainerState,
   ContainerRecord,
+  ParallelBlockResult,
   Execution,
 } from './execution';
 
@@ -71,6 +77,13 @@ export type {
   RepoSource,
   RepoMount,
 } from './repo';
+
+export {
+  ValidationError,
+  PortExhaustedError,
+  DockerClientError,
+  WakeFailedError,
+} from './errors';
 
 export type {
   TokenUsage,

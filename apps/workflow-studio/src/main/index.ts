@@ -8,6 +8,7 @@ import { WorkflowFileService } from './services/workflow-file-service';
 import { SettingsService } from './services/settings-service';
 import { SessionHistoryService } from './services/session-history-service';
 import { cleanupTempRepoDirs } from './temp-cleanup';
+import { registerShutdownHooks } from './services/container-pool-shutdown';
 
 // ---------------------------------------------------------------------------
 // Window bounds persistence
@@ -98,6 +99,13 @@ function ensureBoundsVisible(bounds: WindowBounds): WindowBounds {
 let mainWindow: BrowserWindow | null = null;
 let cliSpawner: CLISpawner | null = null;
 const settingsService = new SettingsService();
+
+// ---------------------------------------------------------------------------
+// Container pool (P15-F05) — module-level reference for shutdown hooks
+// ---------------------------------------------------------------------------
+
+/** Set by initContainerPool() once Docker is available. */
+let containerPoolTeardown: (() => Promise<void>) | null = null;
 
 function createWindow(): void {
   const savedBounds = loadWindowBounds();
@@ -198,6 +206,23 @@ app.whenReady().then(async () => {
     sessionHistoryService,
   });
 
+  // ---------------------------------------------------------------------------
+  // Container pool shutdown hooks (P15-F05, T23)
+  //
+  // The container pool is created lazily when the user starts a parallel
+  // execution. Once created, its teardown is wired here so that all managed
+  // containers are stopped on app shutdown.
+  // ---------------------------------------------------------------------------
+
+  registerShutdownHooks(
+    async () => {
+      if (containerPoolTeardown) {
+        await containerPoolTeardown();
+      }
+    },
+    app,
+  );
+
   // Now load the renderer — handlers are ready
   loadWindowContent();
 
@@ -228,3 +253,17 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   cleanupTempRepoDirs();
 });
+
+// ---------------------------------------------------------------------------
+// Container pool registration (P15-F05, T23)
+//
+// Called by parallel execution engine after creating the container pool.
+// ---------------------------------------------------------------------------
+
+/**
+ * Register the container pool teardown function for app shutdown.
+ * Call this after creating a ContainerPool instance.
+ */
+export function setContainerPoolTeardown(teardown: () => Promise<void>): void {
+  containerPoolTeardown = teardown;
+}
