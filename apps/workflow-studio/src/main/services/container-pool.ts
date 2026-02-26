@@ -349,6 +349,10 @@ export class ContainerPool {
     const createOpts: CreateContainerOptions = {
       Image: this.options.image,
       Labels: { 'asdlc.managed': 'true' },
+      Env: [
+        'TELEMETRY_ENABLED=1',
+        'TELEMETRY_URL=http://host.docker.internal:9292/telemetry',
+      ],
       ExposedPorts: { '3000/tcp': {} },
       HostConfig: {
         PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },

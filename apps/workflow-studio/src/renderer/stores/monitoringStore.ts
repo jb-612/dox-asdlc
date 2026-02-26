@@ -7,6 +7,11 @@ import type {
 
 const MAX_EVENTS = 1000;
 
+// ---------------------------------------------------------------------------
+// IPC channel constant — must match the preload registration
+// ---------------------------------------------------------------------------
+const MONITORING_EVENT_CHANNEL = 'monitoring:event';
+
 export interface MonitoringState {
   events: TelemetryEvent[];
   sessions: Map<string, AgentSession>;
@@ -79,3 +84,77 @@ export const useMonitoringStore = create<MonitoringState>((set, get) => ({
       selectedSessionId: null,
     }),
 }));
+
+// ---------------------------------------------------------------------------
+// IPC listener setup
+// ---------------------------------------------------------------------------
+
+/**
+ * Subscribe to live telemetry push events from the main process.
+ * Returns a cleanup function that removes the listener when called.
+ *
+ * Usage:
+ *   const cleanup = initMonitoringListeners();
+ *   // on unmount:
+ *   cleanup();
+ */
+export function initMonitoringListeners(): () => void {
+  window.electronAPI.monitoring.onEvent((event: unknown) => {
+    useMonitoringStore.getState().pushEvent(event as TelemetryEvent);
+  });
+
+  return () => {
+    window.electronAPI.removeListener(MONITORING_EVENT_CHANNEL);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Store hydration
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the initial snapshot of events, sessions, and stats from the main
+ * process and populate the store.  Call once after the renderer mounts.
+ */
+export async function hydrateMonitoringStore(): Promise<void> {
+  const store = useMonitoringStore.getState();
+
+  const [events, sessionsArray, stats] = await Promise.all([
+    window.electronAPI.monitoring.getEvents() as Promise<TelemetryEvent[]>,
+    window.electronAPI.monitoring.getSessions() as Promise<AgentSession[]>,
+    window.electronAPI.monitoring.getStats() as Promise<TelemetryStats>,
+  ]);
+
+  if (Array.isArray(events)) {
+    store.pushEvents(events);
+  }
+
+  if (Array.isArray(sessionsArray)) {
+    for (const session of sessionsArray) {
+      store.upsertSession(session);
+    }
+  }
+
+  if (stats != null) {
+    store.setStats(stats);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Derived selectors
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the filtered events list.
+ * When selectedAgentId is set, only events for that agent are returned.
+ * When selectedAgentId is null, all events are returned.
+ *
+ * Usage with React:
+ *   const events = useMonitoringStore(selectFilteredEvents);
+ */
+export function selectFilteredEvents(state: MonitoringState): TelemetryEvent[] {
+  if (state.selectedAgentId === null) {
+    return state.events;
+  }
+  return state.events.filter((e) => e.agentId === state.selectedAgentId);
+}

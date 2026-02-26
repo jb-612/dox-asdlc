@@ -1,33 +1,65 @@
-/**
- * MonitoringPage — stub for P15-F07 (Monitoring Dashboard).
- *
- * Phase 0 Foundation PR: registers the route and shows a placeholder.
- * Full implementation is delivered in P15-F07.
- */
+import { useEffect } from 'react';
+import { useMonitoringStore, hydrateMonitoringStore, initMonitoringListeners } from '../stores/monitoringStore';
+import SummaryCards from '../components/monitoring/SummaryCards';
+import AgentSelector from '../components/monitoring/AgentSelector';
+import SessionList from '../components/monitoring/SessionList';
+import EventStream from '../components/monitoring/EventStream';
+import WorkflowView from '../components/monitoring/WorkflowView';
+
 export default function MonitoringPage(): JSX.Element {
+  const receiverActive = useMonitoringStore((s) => s.receiverActive);
+
+  useEffect(() => {
+    hydrateMonitoringStore().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const cleanup = initMonitoringListeners();
+    return cleanup;
+  }, []);
+
   return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center space-y-3">
-        <div className="w-16 h-16 mx-auto rounded-full bg-gray-700 flex items-center justify-center">
-          {/* Chart bars icon */}
-          <svg
-            className="w-8 h-8 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
-            />
-          </svg>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-gray-700 shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-100">Monitoring Dashboard</h2>
+          <p className="text-sm text-gray-400 mt-0.5">Agent telemetry, session tracking, and live event streaming.</p>
         </div>
-        <h2 className="text-lg font-semibold text-gray-200">Monitoring Dashboard</h2>
-        <p className="text-sm text-gray-400 max-w-xs">
-          Agent telemetry, session tracking, and live event streaming — coming in P15-F07.
-        </p>
+        <span
+          className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+            receiverActive
+              ? 'bg-green-900/40 text-green-400 border border-green-700/40'
+              : 'bg-gray-800 text-gray-500 border border-gray-700'
+          }`}
+        >
+          {receiverActive ? 'Live' : 'Offline'}
+        </span>
+      </div>
+
+      {/* Two-column body */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Left sidebar (300px) */}
+        <div
+          className="shrink-0 flex flex-col gap-4 p-4 border-r border-gray-700 overflow-y-auto"
+          style={{ width: 300 }}
+        >
+          <SummaryCards />
+          <AgentSelector />
+          <div className="flex-1 overflow-y-auto">
+            <SessionList />
+          </div>
+        </div>
+
+        {/* Right main area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 border-b border-gray-700 overflow-y-auto">
+            <EventStream />
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <WorkflowView />
+          </div>
+        </div>
       </div>
     </div>
   );

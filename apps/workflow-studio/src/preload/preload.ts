@@ -111,6 +111,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openDirectory: () => ipcRenderer.invoke('dialog:open-directory'),
   },
 
+  /** Monitoring / telemetry queries (P15-F07) */
+  monitoring: {
+    getEvents: (filter?: unknown) => ipcRenderer.invoke('monitoring:get-events', filter),
+    getSessions: () => ipcRenderer.invoke('monitoring:get-sessions'),
+    getStats: () => ipcRenderer.invoke('monitoring:get-stats'),
+    startReceiver: () => ipcRenderer.invoke('monitoring:start-receiver'),
+    stopReceiver: () => ipcRenderer.invoke('monitoring:stop-receiver'),
+    onEvent: (callback: (...args: unknown[]) => void) =>
+      ipcRenderer.on('monitoring:event', (_event, ...args) => callback(...args)),
+  },
+
   /** Subscribe to push events from the main process */
   onEvent: (channel: string, callback: (...args: unknown[]) => void) => {
     ipcRenderer.on(channel, (_event, ...args) => callback(...args));

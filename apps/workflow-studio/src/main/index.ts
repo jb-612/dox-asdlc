@@ -9,6 +9,9 @@ import { SettingsService } from './services/settings-service';
 import { SessionHistoryService } from './services/session-history-service';
 import { cleanupTempRepoDirs } from './temp-cleanup';
 import { registerShutdownHooks } from './services/container-pool-shutdown';
+import { MonitoringStore } from './services/monitoring-store';
+import { TelemetryReceiver } from './services/telemetry-receiver';
+import { registerMonitoringHandlers, setupMonitoringPush } from './ipc/monitoring-handlers';
 
 // ---------------------------------------------------------------------------
 // Window bounds persistence
@@ -99,6 +102,7 @@ function ensureBoundsVisible(bounds: WindowBounds): WindowBounds {
 let mainWindow: BrowserWindow | null = null;
 let cliSpawner: CLISpawner | null = null;
 const settingsService = new SettingsService();
+let telemetryReceiver: TelemetryReceiver | null = null;
 
 // ---------------------------------------------------------------------------
 // Container pool (P15-F05) — module-level reference for shutdown hooks
@@ -223,6 +227,19 @@ app.whenReady().then(async () => {
     app,
   );
 
+  // ---------------------------------------------------------------------------
+  // Monitoring (P15-F07, T05) — telemetry store + receiver + IPC
+  // ---------------------------------------------------------------------------
+
+  const monitoringStore = new MonitoringStore();
+  telemetryReceiver = new TelemetryReceiver(
+    settings.telemetryReceiverPort ?? 9292,
+    (event) => monitoringStore.append(event),
+  );
+  registerMonitoringHandlers(monitoringStore, telemetryReceiver);
+  setupMonitoringPush(monitoringStore);
+  await telemetryReceiver.start();
+
   // Now load the renderer — handlers are ready
   loadWindowContent();
 
@@ -250,8 +267,11 @@ app.on('window-all-closed', () => {
 // Clean up wf-repo-* directories in the system temp dir on quit.
 // ---------------------------------------------------------------------------
 
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   cleanupTempRepoDirs();
+  if (telemetryReceiver) {
+    await telemetryReceiver.stop();
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -86,6 +86,8 @@ export interface AppSettings {
   agentTimeoutSeconds?: number;
   /** Application log level */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  /** Port for the telemetry HTTP receiver (default: 9292) */
+  telemetryReceiverPort?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

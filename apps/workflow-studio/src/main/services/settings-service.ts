@@ -73,6 +73,9 @@ function migrateSettings(raw: Record<string, unknown>): Record<string, unknown> 
   if (!('agentTimeoutSeconds' in migrated)) {
     migrated.agentTimeoutSeconds = DEFAULT_SETTINGS.agentTimeoutSeconds;
   }
+  if (!('telemetryReceiverPort' in migrated)) {
+    migrated.telemetryReceiverPort = 9292;
+  }
 
   return migrated;
 }
