@@ -91,7 +91,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
       }
 
       engine = new ExecutionEngine(mainWindow, {
-        mockMode: config.mockMode ?? true,
+        mockMode: config.mockMode ?? false,
         cliSpawner: cliSpawner ?? undefined,
         redisClient: redisClient ?? undefined,
         remoteAgentUrl: settingsService?.get().cursorAgentUrl || undefined,
@@ -111,9 +111,13 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
       }
 
       // Do not await -- let the traversal run in the background
-      executionPromise.catch((err: unknown) => {
-        console.error('[ExecutionEngine] Unexpected error:', err);
-      });
+      executionPromise
+        .catch((err: unknown) => {
+          console.error('[ExecutionEngine] Unexpected error:', err);
+        })
+        .finally(() => {
+          engine = null;
+        });
 
       return {
         success: true,
@@ -149,6 +153,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
       return { success: false, error: 'No active execution to abort' };
     }
     eng.abort();
+    engine = null;
     const state = eng.getState();
     return { success: true, executionId: state?.id };
   });

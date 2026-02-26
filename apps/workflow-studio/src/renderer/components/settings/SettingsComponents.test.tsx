@@ -382,14 +382,14 @@ describe('EnvironmentSection (T09)', () => {
 
   it('Execution mode checkbox toggles and calls onChange', () => {
     const onChange = vi.fn();
-    // DEFAULT_SETTINGS has executionMockMode: true
+    // DEFAULT_SETTINGS has executionMockMode: false
     render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
 
     const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toBeChecked();
+    expect(checkbox).not.toBeChecked();
 
     fireEvent.click(checkbox);
-    expect(onChange).toHaveBeenCalledWith('executionMockMode', false);
+    expect(onChange).toHaveBeenCalledWith('executionMockMode', true);
   });
 
   it('Browse button calls dialog.openDirectory', async () => {

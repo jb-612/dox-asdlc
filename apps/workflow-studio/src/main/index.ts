@@ -211,6 +211,13 @@ app.whenReady().then(async () => {
   });
 
   // ---------------------------------------------------------------------------
+  // NOTE: ContainerPool and registerParallelHandlers (P15-F05) are NOT wired
+  // here for Phase 1. Phase 1 uses single-block sequential execution via
+  // CLISpawner directly in ExecutionEngine. Parallel Docker execution via
+  // ContainerPool is deferred to Phase 2.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
   // Container pool shutdown hooks (P15-F05, T23)
   //
   // The container pool is created lazily when the user starts a parallel

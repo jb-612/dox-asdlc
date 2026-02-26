@@ -97,7 +97,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cliDefaultCwd: '',
   redisUrl: 'redis://localhost:6379',
   cursorAgentUrl: 'http://localhost:8090',
-  executionMockMode: true,
+  executionMockMode: false,
   workItemDirectory: '',
   providers: {
     anthropic: { id: 'anthropic', defaultModel: 'claude-sonnet-4-6', modelParams: { temperature: 0.7, maxTokens: 4096 } },

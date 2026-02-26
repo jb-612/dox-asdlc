@@ -29,7 +29,7 @@ beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
 
-  mockSettingsLoad.mockResolvedValue({ executionMockMode: true });
+  mockSettingsLoad.mockResolvedValue({ executionMockMode: false });
   mockWorkflowTouch.mockResolvedValue({ success: true, lastUsedAt: new Date().toISOString() });
 
   (window as any).electronAPI = {

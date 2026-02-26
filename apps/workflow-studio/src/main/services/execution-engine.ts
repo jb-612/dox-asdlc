@@ -23,11 +23,11 @@ import type { RedisEventClient } from './redis-client';
 // Executes a workflow DAG node-by-node using topological sort. Supports two
 // execution modes:
 //
-//   1. MOCK MODE (default, mockMode: true)
+//   1. MOCK MODE (mockMode: true)
 //      Simulates agent work with random 1-3 second delays. Useful for UI
 //      development and demo purposes.
 //
-//   2. REAL CLI MODE (mockMode: false)
+//   2. REAL CLI MODE (default, mockMode: false)
 //      Spawns actual CLI processes via CLISpawner for each agent node.
 //      Monitors process exit codes to determine node success/failure.
 //      Supports configurable timeout per node.
@@ -56,7 +56,7 @@ export class ExecutionEngine {
   private isAborted = false;
   private mainWindow: BrowserWindow | null = null;
 
-  /** Whether to use mock execution (true) or real CLI spawning (false). */
+  /** Whether to use mock execution (true) or real CLI spawning (false, default). */
   private mockMode: boolean;
   /** CLI process spawner, required when mockMode is false. */
   private cliSpawner: CLISpawner | null;
@@ -84,7 +84,7 @@ export class ExecutionEngine {
 
   constructor(mainWindow: BrowserWindow, options?: ExecutionEngineOptions) {
     this.mainWindow = mainWindow;
-    this.mockMode = options?.mockMode ?? true;
+    this.mockMode = options?.mockMode ?? false;
     this.cliSpawner = options?.cliSpawner ?? null;
     this.redisClient = options?.redisClient ?? null;
     this.nodeTimeoutMs = options?.nodeTimeoutMs ?? 300000; // 5 minute default
@@ -185,7 +185,13 @@ export class ExecutionEngine {
       this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
       this.emitEvent('node_started', nodeId, `Started: ${node.label}`);
 
-      if (node.config.backend === 'cursor') {
+      if (node.config.backend === 'codex') {
+        this.updateNodeState(nodeId, 'failed', {
+          completedAt: new Date().toISOString(),
+          error: 'Codex backend not yet supported',
+        });
+        this.emitEvent('node_failed', nodeId, 'Codex backend not yet supported');
+      } else if (node.config.backend === 'cursor') {
         await this.executeNodeRemote(nodeId, node);
       } else if (this.mockMode) {
         await this.executeNodeMock(nodeId);
@@ -569,6 +575,7 @@ export class ExecutionEngine {
 
     // Build CLI spawn config from node config
     const args: string[] = [];
+    args.push('--output-format', 'json');
     if (node.config.model) {
       args.push('--model', node.config.model);
     }
@@ -578,6 +585,27 @@ export class ExecutionEngine {
     if (node.config.extraFlags) {
       args.push(...node.config.extraFlags);
     }
+
+    // Gather results from previously completed blocks for context
+    const previousResults = this.collectPreviousBlockResults(nodeId);
+
+    // Build composed system prompt including harness fields and prior context
+    const systemPrompt = this.buildSystemPrompt(
+      node,
+      this.execution?.workflow?.rules,
+      previousResults,
+    );
+
+    // Build the full prompt with work item context
+    const promptParts: string[] = [];
+    if (this.execution?.workItem) {
+      promptParts.push(`Working on: ${this.execution.workItem.id} - ${this.execution.workItem.title ?? ''}`);
+    }
+    promptParts.push(systemPrompt);
+    const composedPrompt = promptParts.join('\n');
+
+    // Pass prompt via -p flag for non-interactive mode
+    args.push('-p', composedPrompt);
 
     const session = this.cliSpawner.spawn({
       command: 'claude',
@@ -591,24 +619,6 @@ export class ExecutionEngine {
 
     // Update node state with CLI session reference
     this.updateNodeState(nodeId, 'running', { cliSessionId: session.id });
-
-    // Gather results from previously completed blocks for context
-    const previousResults = this.collectPreviousBlockResults(nodeId);
-
-    // Build composed system prompt including harness fields and prior context
-    const systemPrompt = this.buildSystemPrompt(
-      node,
-      this.execution?.workflow?.rules,
-      previousResults,
-    );
-
-    // Send work item context and composed prompt as initial prompt
-    const promptParts: string[] = [];
-    if (this.execution?.workItem) {
-      promptParts.push(`Working on: ${this.execution.workItem.id} - ${this.execution.workItem.title ?? ''}`);
-    }
-    promptParts.push(systemPrompt);
-    this.cliSpawner.write(session.id, promptParts.join('\n') + '\n');
 
     // Wait for CLI exit or timeout
     const timeoutMs = (node.config.timeoutSeconds ?? 0) * 1000 || this.nodeTimeoutMs;
@@ -970,7 +980,13 @@ export class ExecutionEngine {
         this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
         this.emitEvent('node_started', nodeId, `Re-executing: ${node.label} (revision)`);
 
-        if (node.config.backend === 'cursor') {
+        if (node.config.backend === 'codex') {
+          this.updateNodeState(nodeId, 'failed', {
+            completedAt: new Date().toISOString(),
+            error: 'Codex backend not yet supported',
+          });
+          this.emitEvent('node_failed', nodeId, 'Codex backend not yet supported');
+        } else if (node.config.backend === 'cursor') {
           await this.executeNodeRemote(nodeId, node);
         } else if (this.mockMode) {
           await this.executeNodeMock(nodeId);

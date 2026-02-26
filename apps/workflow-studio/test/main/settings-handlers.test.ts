@@ -92,7 +92,7 @@ const MOCK_SETTINGS: AppSettings = {
   cliDefaultCwd: '/tmp',
   redisUrl: 'redis://localhost:6379',
   cursorAgentUrl: 'http://localhost:8090',
-  executionMockMode: true,
+  executionMockMode: false,
 };
 
 /**

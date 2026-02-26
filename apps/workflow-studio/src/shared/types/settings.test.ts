@@ -12,7 +12,7 @@ describe('settings types (T01)', () => {
     expect(DEFAULT_SETTINGS.templateDirectory).toBeDefined();
     expect(DEFAULT_SETTINGS.autoSaveIntervalSeconds).toBeGreaterThanOrEqual(0);
     expect(DEFAULT_SETTINGS.redisUrl).toContain('redis://');
-    expect(DEFAULT_SETTINGS.executionMockMode).toBe(true);
+    expect(DEFAULT_SETTINGS.executionMockMode).toBe(false);
     expect(DEFAULT_SETTINGS.dockerSocketPath).toBe('/var/run/docker.sock');
     expect(DEFAULT_SETTINGS.agentTimeoutSeconds).toBe(300);
     expect(DEFAULT_SETTINGS.workspaceDirectory).toBe('');

@@ -8,6 +8,7 @@ import type {
 } from '../../shared/types/execution';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
+import type { RepoMount } from '../../shared/types/repo';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,7 @@ export interface ExecutionState {
     workItem?: WorkItemReference,
     variables?: Record<string, unknown>,
     mockMode?: boolean,
+    repoMount?: RepoMount,
   ) => Promise<void>;
 
   /** Pause the running execution. */
@@ -206,7 +208,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   // IPC controls
   // -----------------------------------------------------------------------
 
-  startExecution: async (workflow, workItem, variables, mockMode = true) => {
+  startExecution: async (workflow, workItem, variables, mockMode = false, repoMount) => {
     set({ lastError: null });
     try {
       const result = await window.electronAPI.execution.start({
@@ -215,6 +217,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         workItem,
         variables,
         mockMode,
+        repoMount,
       });
       if (!result.success) {
         set({ lastError: result.error ?? 'Failed to start execution' });

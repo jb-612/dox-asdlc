@@ -2,7 +2,7 @@
  * execution.spec.ts — UAT for the workflow execution flow.
  *
  * Requires a production build: `npm run build` before running.
- * Tests assume executionMockMode is ON (the default setting).
+ * Tests assume executionMockMode is OFF (the default setting).
  */
 import { test, expect, _electron as electron } from '@playwright/test';
 import { join } from 'path';

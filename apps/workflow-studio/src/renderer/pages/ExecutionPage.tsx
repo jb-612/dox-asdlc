@@ -244,7 +244,7 @@ export default function ExecutionPage(): JSX.Element {
 
   const handleStart = useCallback(async () => {
     if (!selectedWorkflow || !repoMount?.localPath) return;
-    await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides, mockMode);
+    await startExecution(selectedWorkflow, selectedWorkItem ?? undefined, variableOverrides, mockMode, repoMount ?? undefined);
 
     // Touch the template to update lastUsedAt (T14)
     window.electronAPI?.workflow?.touch?.(selectedWorkflow.id).catch(() => {});
