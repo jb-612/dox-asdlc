@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (id: string) => ipcRenderer.invoke('workitem:get', id),
     /** Read work items from a filesystem directory (P15-F03) */
     listFs: (directory?: string) => ipcRenderer.invoke('workitem:list-fs', directory),
+    /** Load full content of a single work item from a filesystem path (P15-F03) */
+    loadFs: (itemPath: string) => ipcRenderer.invoke('workitem:load-fs', itemPath),
   },
 
   /** CLI session management */

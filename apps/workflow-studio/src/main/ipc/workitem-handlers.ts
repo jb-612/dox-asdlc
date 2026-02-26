@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, resolve } from 'path';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { WorkItemType, WorkItemReference } from '../../shared/types/workitem';
+import type { WorkItemType, WorkItemReference, WorkItem } from '../../shared/types/workitem';
 import type { WorkItemService } from '../services/workitem-service';
 
 // ---------------------------------------------------------------------------
@@ -101,6 +101,63 @@ export function registerWorkItemHandlers(service: WorkItemService): void {
       } catch (err: unknown) {
         console.error('[WorkItemHandlers] listFs error:', err);
         return [];
+      }
+    },
+  );
+
+  // --- Load full content of a single work item from filesystem (P15-F03) ---
+  ipcMain.handle(
+    IPC_CHANNELS.WORKITEM_LOAD_FS,
+    async (_event, itemPath: string): Promise<WorkItem | null> => {
+      if (!itemPath) return null;
+
+      const resolved = resolve(itemPath);
+      if (resolved.includes('..') || itemPath.includes('..')) {
+        console.error('[WorkItemHandlers] loadFs: path traversal rejected:', itemPath);
+        return null;
+      }
+
+      try {
+        const dirStat = await stat(resolved);
+        if (!dirStat.isDirectory()) {
+          console.error('[WorkItemHandlers] loadFs: not a directory:', resolved);
+          return null;
+        }
+
+        const id = resolved.split('/').pop() ?? resolved;
+        let title = id;
+        let content = '';
+
+        // Try to read content from preferred files in order
+        for (const filename of ['prd.md', 'user_stories.md', 'design.md']) {
+          try {
+            const raw = await readFile(join(resolved, filename), 'utf-8');
+            content = raw;
+            const match = raw.match(/^#\s+(.+)/m);
+            if (match) {
+              title = match[1];
+            }
+            break;
+          } catch {
+            // Try next file
+          }
+        }
+
+        if (!content) {
+          return null;
+        }
+
+        return {
+          id,
+          title,
+          type: 'prd',
+          source: 'filesystem',
+          path: resolved,
+          content,
+        };
+      } catch (err: unknown) {
+        console.error('[WorkItemHandlers] loadFs error:', err);
+        return null;
       }
     },
   );

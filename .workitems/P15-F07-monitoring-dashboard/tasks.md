@@ -3,7 +3,7 @@ id: P15-F07
 parent_id: P15
 type: tasks
 version: 1
-status: draft
+status: complete
 constraints_hash: null
 created_by: planner
 created_at: "2026-02-22T00:00:00Z"
@@ -15,20 +15,20 @@ updated_at: "2026-02-22T00:00:00Z"
 ## Progress
 
 - [x] T01 Update shared telemetry types (monitoring.ts already exists — UPDATE, not create)
-- [ ] T02 TelemetryReceiver HTTP server
-- [ ] T03 MonitoringStore (in-memory ring buffer)
-- [ ] T04 IPC handlers for monitoring queries
-- [ ] T05 Wire receiver + store into main process startup/shutdown
-- [~] T06 Zustand monitoringStore (renderer) — **PARTIAL**: Store file exists but missing IPC listener setup and hydration
-- [~] T07 MonitoringPage layout + navigation wiring — **PARTIAL**: MonitoringPage exists as stub placeholder only
-- [ ] T08 SummaryCards component
-- [ ] T09 EventStream component
-- [ ] T10 AgentSelector component
-- [ ] T11 SessionList component
-- [ ] T12 WorkflowView component
-- [ ] T13 docker-telemetry-hook.py container hook
-- [ ] T14 Unit tests: TelemetryReceiver + MonitoringStore
-- [ ] T15 Unit tests: renderer components + Zustand store
+- [x] T02 TelemetryReceiver HTTP server
+- [x] T03 MonitoringStore (in-memory ring buffer)
+- [x] T04 IPC handlers for monitoring queries
+- [x] T05 Wire receiver + store into main process startup/shutdown
+- [x] T06 Zustand monitoringStore (renderer)
+- [x] T07 MonitoringPage layout + navigation wiring
+- [x] T08 SummaryCards component
+- [x] T09 EventStream component
+- [x] T10 AgentSelector component
+- [x] T11 SessionList component
+- [x] T12 WorkflowView component
+- [x] T13 docker-telemetry-hook.py container hook
+- [x] T14 Unit tests: TelemetryReceiver + MonitoringStore
+- [x] T15 Unit tests: renderer components + Zustand store
 
 ## Phase 1: Backend Foundation (T01–T05)
 
@@ -126,11 +126,9 @@ Register handler in `src/main/ipc/index.ts`.
 
 ## Phase 2: Renderer (T06–T12)
 
-### T06 — Zustand monitoringStore (renderer) --- PARTIAL
+### T06 — Zustand monitoringStore (renderer)
 
 **File:** `apps/workflow-studio/src/renderer/stores/monitoringStore.ts`
-
-**Status:** PARTIAL -- Store file exists but missing IPC listener setup and hydration.
 
 Create a Zustand store that:
 - Subscribes to `ipcRenderer.on('monitoring:event', ...)` and appends to local `events[]`
@@ -146,9 +144,7 @@ Create a Zustand store that:
 
 ---
 
-### T07 — MonitoringPage layout + navigation wiring --- PARTIAL
-
-**Status:** PARTIAL -- MonitoringPage exists as a stub placeholder only. Full two-column layout and navigation wiring not yet implemented.
+### T07 — MonitoringPage layout + navigation wiring
 
 **Files:**
 - `apps/workflow-studio/src/renderer/pages/MonitoringPage.tsx`

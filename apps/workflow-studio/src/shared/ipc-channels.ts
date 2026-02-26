@@ -51,6 +51,8 @@ export const IPC_CHANNELS = {
   WORKITEM_GET: 'workitem:get',
   /** Reads work items from the filesystem workItemDirectory (P15-F03) */
   WORKITEM_LIST_FS: 'workitem:list-fs',
+  /** Loads full content of a single work item from the filesystem (P15-F03) */
+  WORKITEM_LOAD_FS: 'workitem:load-fs',
 
   // ---------------------------------------------------------------------------
   // CLI operations

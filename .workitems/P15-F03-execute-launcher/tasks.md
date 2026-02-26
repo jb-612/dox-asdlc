@@ -1,7 +1,7 @@
 # P15-F03: Execute — Workflow Launcher — Tasks
 
 **Feature ID:** P15-F03
-**Status:** In Progress
+**Status:** Complete
 **Date:** 2026-02-22
 **Total Tasks:** 24
 **Estimated Total:** ~22.75 hours
@@ -104,7 +104,7 @@
 
 > Goal: Replace mock data in WorkItemPickerDialog with real filesystem reads.
 
-#### T08 — Implement `WORKITEM_LIST_FS` and `WORKITEM_LOAD_FS` handlers — PARTIAL
+#### T08 — Implement `WORKITEM_LIST_FS` and `WORKITEM_LOAD_FS` handlers — DONE
 - **File:** `apps/workflow-studio/src/main/ipc/workitem-handlers.ts` (existing, add new handlers)
 - **Logic for LIST_FS:**
   - Read `settings.workflowDirectory` (or a to-be-added `workItemDirectory` setting)
@@ -114,11 +114,11 @@
 - **Logic for LOAD_FS:**
   - Given a path, read `prd.md` or `user_stories.md` file content
   - Return `WorkItem { content, ...reference }`
-- **Tests:** mock fs.readdir, assert correct shape; missing dir returns empty array
+- **Tests:** Real-fs tests: 4 tests for LIST_FS + 6 tests for LOAD_FS (all passing)
 - **Stories:** US-09
 - **Estimate:** 1hr
 - **Dependencies:** T03
-- **Status:** [~]
+- **Status:** [x]
 
 ---
 
@@ -359,14 +359,14 @@
 |-------|-------|------|--------|
 | 1: Types & Contracts | T01–T03 | 3/3 | DONE |
 | 2: Repo Handlers | T04–T07 | 4/4 | DONE |
-| 3: WorkItem FS Handlers | T08 | 0/1 | PARTIAL |
+| 3: WorkItem FS Handlers | T08 | 1/1 | DONE |
 | 4: Execution Integration | T09–T10 | 2/2 | DONE |
 | 5: Preload & Types | T11 | 1/1 | DONE |
 | 6: Template Enhancements | T12–T14 | 3/3 | DONE |
 | 7: RepoMountSection | T15–T17 | 3/3 | DONE |
 | 8: Page Integration | T18–T19 | 2/2 | DONE |
 | 9: Security & Robustness | T20–T24 | 5/5 | DONE |
-| **Total** | **24** | **23/24 done, 1 partial** | **Near Complete (T08 partial)** |
+| **Total** | **24** | **24/24 done** | **Complete** |
 
 ---
 
