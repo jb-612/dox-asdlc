@@ -271,4 +271,97 @@ describe('Studio workflow round-trip', () => {
       }
     });
   });
+
+  // -----------------------------------------------------------------------
+  // F11-T05: New block types round-trip
+  // -----------------------------------------------------------------------
+
+  describe('F11-T05: New block types round-trip', () => {
+    function makeBlockNode(blockType: 'dev' | 'test' | 'review' | 'devops'): AgentNode {
+      const meta = BLOCK_TYPE_METADATA[blockType];
+      return {
+        id: uuidv4(),
+        type: meta.agentNodeType,
+        label: `${meta.label} Phase`,
+        config: {
+          systemPromptPrefix: meta.defaultSystemPromptPrefix,
+          outputChecklist: [...meta.defaultOutputChecklist],
+          backend: 'claude',
+        },
+        inputs: [],
+        outputs: [],
+        position: { x: 200, y: 200 },
+        description: `Run ${meta.label.toLowerCase()} phase`,
+      };
+    }
+
+    it('can add Dev block, configure prompt, and validate workflow', () => {
+      const devNode = makeBlockNode('dev');
+      const workflow = makeWorkflow([devNode]);
+
+      const result = WorkflowDefinitionSchema.safeParse(workflow);
+      expect(result.success).toBe(true);
+      expect(devNode.config.systemPromptPrefix).toContain('TDD');
+      expect(devNode.config.outputChecklist!.length).toBeGreaterThan(0);
+    });
+
+    it('can add Test block with default checklist populated', () => {
+      const testNode = makeBlockNode('test');
+      const workflow = makeWorkflow([testNode]);
+
+      const result = WorkflowDefinitionSchema.safeParse(workflow);
+      expect(result.success).toBe(true);
+      expect(testNode.config.outputChecklist!.length).toBeGreaterThan(0);
+      expect(testNode.type).toBe('utest');
+    });
+
+    it('can add Review block with default prompt populated', () => {
+      const reviewNode = makeBlockNode('review');
+      const workflow = makeWorkflow([reviewNode]);
+
+      const result = WorkflowDefinitionSchema.safeParse(workflow);
+      expect(result.success).toBe(true);
+      expect(reviewNode.config.systemPromptPrefix).toBeTruthy();
+      expect(reviewNode.type).toBe('reviewer');
+    });
+
+    it('can add DevOps block with correct metadata', () => {
+      const devopsNode = makeBlockNode('devops');
+      const workflow = makeWorkflow([devopsNode]);
+
+      const result = WorkflowDefinitionSchema.safeParse(workflow);
+      expect(result.success).toBe(true);
+      expect(devopsNode.type).toBe('deployment');
+      expect(devopsNode.config.systemPromptPrefix).toBeTruthy();
+    });
+
+    it('all 5 block types create valid workflows with buildSystemPrompt', () => {
+      const mockWindow = new BrowserWindow() as unknown as BrowserWindow;
+      const engine = new ExecutionEngine(mockWindow, { mockMode: true });
+
+      for (const blockType of ['plan', 'dev', 'test', 'review', 'devops'] as const) {
+        const meta = BLOCK_TYPE_METADATA[blockType];
+        const node: AgentNode = {
+          id: uuidv4(),
+          type: meta.agentNodeType,
+          label: `${meta.label} Block`,
+          config: {
+            systemPromptPrefix: meta.defaultSystemPromptPrefix,
+            outputChecklist: [...meta.defaultOutputChecklist],
+            backend: 'claude',
+          },
+          inputs: [],
+          outputs: [],
+          position: { x: 0, y: 0 },
+          description: `Run the ${meta.label.toLowerCase()} phase`,
+        };
+
+        const prompt = engine.buildSystemPrompt(node, []);
+        expect(prompt).toContain(meta.defaultSystemPromptPrefix);
+        if (meta.defaultOutputChecklist.length > 0) {
+          expect(prompt).toContain('You must produce:');
+        }
+      }
+    });
+  });
 });

@@ -25,6 +25,9 @@ beforeEach(() => {
         getKeyStatus: vi.fn(),
         testProvider: vi.fn(),
       },
+      cli: {
+        getDockerStatus: vi.fn(),
+      },
       dialog: {
         openDirectory: vi.fn(),
       },
@@ -364,7 +367,9 @@ describe('EnvironmentSection (T09)', () => {
     const onChange = vi.fn();
     render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
 
-    const timeoutInput = screen.getByDisplayValue('300');
+    const agentLabel = screen.getByText('Agent Timeout');
+    const agentFieldDiv = agentLabel.parentElement!;
+    const timeoutInput = agentFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
     fireEvent.change(timeoutInput, { target: { value: '5' } });
 
     expect(onChange).toHaveBeenCalledWith('agentTimeoutSeconds', 30);
@@ -374,7 +379,9 @@ describe('EnvironmentSection (T09)', () => {
     const onChange = vi.fn();
     render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
 
-    const timeoutInput = screen.getByDisplayValue('300');
+    const agentLabel = screen.getByText('Agent Timeout');
+    const agentFieldDiv = agentLabel.parentElement!;
+    const timeoutInput = agentFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
     fireEvent.change(timeoutInput, { target: { value: '9999' } });
 
     expect(onChange).toHaveBeenCalledWith('agentTimeoutSeconds', 3600);
@@ -405,6 +412,9 @@ describe('EnvironmentSection (T09)', () => {
           getKeyStatus: vi.fn(),
           testProvider: vi.fn(),
         },
+        cli: {
+          getDockerStatus: vi.fn(),
+        },
         dialog: {
           openDirectory: mockOpenDirectory,
         },
@@ -423,5 +433,354 @@ describe('EnvironmentSection (T09)', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(mockOpenDirectory).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSection — New Settings Fields (F13-T01)
+// ---------------------------------------------------------------------------
+
+describe('EnvironmentSection new fields (F13-T01)', () => {
+  it('renders Work Item Directory field with browse button', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    expect(screen.getByText('Work Item Directory')).toBeInTheDocument();
+    // Should have a browse button for it (one more than before)
+    const browseButtons = screen.getAllByText('Browse');
+    expect(browseButtons.length).toBeGreaterThanOrEqual(4); // docker, repo, workspace, workItem
+  });
+
+  it('renders Telemetry Receiver Port as numeric input with default 9292', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    expect(screen.getByText('Telemetry Receiver Port')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('9292')).toBeInTheDocument();
+  });
+
+  it('telemetryReceiverPort onChange clamps to min 1024', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const portInput = screen.getByDisplayValue('9292');
+    fireEvent.change(portInput, { target: { value: '80' } });
+
+    expect(onChange).toHaveBeenCalledWith('telemetryReceiverPort', 1024);
+  });
+
+  it('telemetryReceiverPort onChange clamps to max 65535', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const portInput = screen.getByDisplayValue('9292');
+    fireEvent.change(portInput, { target: { value: '80000' } });
+
+    expect(onChange).toHaveBeenCalledWith('telemetryReceiverPort', 65535);
+  });
+
+  it('renders Log Level dropdown with 4 options', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    expect(screen.getByText('Log Level')).toBeInTheDocument();
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+
+    // Check all 4 options exist
+    const options = screen.getAllByRole('option');
+    const logLevelOptions = options.filter((o) =>
+      ['debug', 'info', 'warn', 'error'].includes(o.textContent?.toLowerCase() ?? ''),
+    );
+    expect(logLevelOptions).toHaveLength(4);
+  });
+
+  it('changing logLevel calls onChange with correct value', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'debug' } });
+
+    expect(onChange).toHaveBeenCalledWith('logLevel', 'debug');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSection — Integration (F13-T04)
+// ---------------------------------------------------------------------------
+
+describe('EnvironmentSection integration (F13-T04)', () => {
+  it('all 3 new fields render, change, and call onChange with correct keys', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    // workItemDirectory
+    const workItemInput = screen.getByPlaceholderText('.workitems');
+    fireEvent.change(workItemInput, { target: { value: '/my/items' } });
+    expect(onChange).toHaveBeenCalledWith('workItemDirectory', '/my/items');
+
+    // telemetryReceiverPort
+    const portInput = screen.getByDisplayValue('9292');
+    fireEvent.change(portInput, { target: { value: '8080' } });
+    expect(onChange).toHaveBeenCalledWith('telemetryReceiverPort', 8080);
+
+    // logLevel
+    const logSelect = screen.getByRole('combobox');
+    fireEvent.change(logSelect, { target: { value: 'error' } });
+    expect(onChange).toHaveBeenCalledWith('logLevel', 'error');
+  });
+
+  it('re-renders with updated settings values', () => {
+    const customSettings = {
+      ...DEFAULT_SETTINGS,
+      workItemDirectory: '/custom/items',
+      telemetryReceiverPort: 5555,
+      logLevel: 'warn' as const,
+    };
+
+    render(<EnvironmentSection settings={customSettings} onChange={vi.fn()} />);
+
+    expect(screen.getByDisplayValue('/custom/items')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('5555')).toBeInTheDocument();
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('warn');
+  });
+
+  it('Docker test button returns result via cli.getDockerStatus', async () => {
+    const mockGetDockerStatus = vi.fn().mockResolvedValue({ available: true, version: '25.0.0' });
+    Object.defineProperty(window, 'electronAPI', {
+      value: {
+        settings: { getVersion: vi.fn(), load: vi.fn(), save: vi.fn(), setApiKey: vi.fn(), deleteApiKey: vi.fn(), getKeyStatus: vi.fn(), testProvider: vi.fn() },
+        cli: { getDockerStatus: mockGetDockerStatus },
+        dialog: { openDirectory: vi.fn() },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test Docker' }));
+
+    expect(await screen.findByText('Connected (v25.0.0)')).toBeInTheDocument();
+    expect(mockGetDockerStatus).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSection — Validation Edge Cases (F13-T03)
+// ---------------------------------------------------------------------------
+
+describe('EnvironmentSection validation (F13-T03)', () => {
+  it('telemetryReceiverPort 0 is rejected (clamped to 1024)', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const portInput = screen.getByDisplayValue('9292');
+    fireEvent.change(portInput, { target: { value: '0' } });
+
+    expect(onChange).toHaveBeenCalledWith('telemetryReceiverPort', 1024);
+  });
+
+  it('logLevel only accepts valid enum values', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const select = screen.getByRole('combobox');
+
+    // Valid value
+    fireEvent.change(select, { target: { value: 'warn' } });
+    expect(onChange).toHaveBeenCalledWith('logLevel', 'warn');
+
+    // The select only has 4 valid options, so invalid values
+    // can't be selected through the UI (HTML select constraint)
+    const options = select.querySelectorAll('option');
+    const optionValues = Array.from(options).map((o) => o.getAttribute('value'));
+    expect(optionValues).toEqual(['debug', 'info', 'warn', 'error']);
+  });
+
+  it('telemetryReceiverPort NaN input is ignored', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const portInput = screen.getByDisplayValue('9292');
+    fireEvent.change(portInput, { target: { value: 'abc' } });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSection — Docker Test Button (F13-T02)
+// ---------------------------------------------------------------------------
+
+describe('EnvironmentSection Docker Test Button (F13-T02)', () => {
+  it('renders "Test Docker" button', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    const btn = screen.getByRole('button', { name: 'Test Docker' });
+    expect(btn).toBeInTheDocument();
+  });
+
+  it('shows loading state while testing Docker connectivity', async () => {
+    const mockGetDockerStatus = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
+    Object.defineProperty(window, 'electronAPI', {
+      value: {
+        settings: { getVersion: vi.fn(), load: vi.fn(), save: vi.fn(), setApiKey: vi.fn(), deleteApiKey: vi.fn(), getKeyStatus: vi.fn(), testProvider: vi.fn() },
+        cli: { getDockerStatus: mockGetDockerStatus },
+        dialog: { openDirectory: vi.fn() },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test Docker' }));
+
+    expect(await screen.findByRole('button', { name: 'Testing...' })).toBeInTheDocument();
+  });
+
+  it('shows "Connected (vX.X.X)" on successful Docker test', async () => {
+    const mockGetDockerStatus = vi.fn().mockResolvedValue({ available: true, version: '24.0.7' });
+    Object.defineProperty(window, 'electronAPI', {
+      value: {
+        settings: { getVersion: vi.fn(), load: vi.fn(), save: vi.fn(), setApiKey: vi.fn(), deleteApiKey: vi.fn(), getKeyStatus: vi.fn(), testProvider: vi.fn() },
+        cli: { getDockerStatus: mockGetDockerStatus },
+        dialog: { openDirectory: vi.fn() },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test Docker' }));
+
+    expect(await screen.findByText('Connected (v24.0.7)')).toBeInTheDocument();
+  });
+
+  it('shows error message on failed Docker test', async () => {
+    const mockGetDockerStatus = vi.fn().mockResolvedValue({ available: false });
+    Object.defineProperty(window, 'electronAPI', {
+      value: {
+        settings: { getVersion: vi.fn(), load: vi.fn(), save: vi.fn(), setApiKey: vi.fn(), deleteApiKey: vi.fn(), getKeyStatus: vi.fn(), testProvider: vi.fn() },
+        cli: { getDockerStatus: mockGetDockerStatus },
+        dialog: { openDirectory: vi.fn() },
+      },
+      writable: true,
+      configurable: true,
+    });
+
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test Docker' }));
+
+    expect(await screen.findByText('Docker unavailable')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EnvironmentSection — Container Settings (F09-T03)
+// ---------------------------------------------------------------------------
+
+describe('EnvironmentSection container settings (F09-T03)', () => {
+  it('renders Container Image input with default value "asdlc-agent:1.0.0"', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    expect(screen.getByText('Container Image')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('asdlc-agent:1.0.0')).toBeInTheDocument();
+  });
+
+  it('renders Dormancy Timeout input with default value 300 (seconds, converted from 300000ms)', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    const dormancyLabel = screen.getByText('Dormancy Timeout (seconds)');
+    expect(dormancyLabel).toBeInTheDocument();
+    const dormancyFieldDiv = dormancyLabel.parentElement!;
+    const dormancyInput = dormancyFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
+    expect(dormancyInput.value).toBe('300');
+  });
+
+  it('changing container image updates the settings state', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const imageInput = screen.getByDisplayValue('asdlc-agent:1.0.0');
+    fireEvent.change(imageInput, { target: { value: 'my-registry/agent:2.0.0' } });
+
+    expect(onChange).toHaveBeenCalledWith('containerImage', 'my-registry/agent:2.0.0');
+  });
+
+  it('invalid container image reference shows validation error (empty string)', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={{ ...DEFAULT_SETTINGS, containerImage: '' }} onChange={onChange} />);
+
+    expect(screen.getByText(/invalid container image/i)).toBeInTheDocument();
+  });
+
+  it('invalid container image reference shows validation error (string with spaces)', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={{ ...DEFAULT_SETTINGS, containerImage: 'bad image name' }} onChange={onChange} />);
+
+    expect(screen.getByText(/invalid container image/i)).toBeInTheDocument();
+  });
+
+  it('valid container image reference does not show validation error', () => {
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />);
+
+    expect(screen.queryByText(/invalid container image/i)).not.toBeInTheDocument();
+  });
+
+  it('dormancy timeout onChange converts seconds to ms and calls onChange', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const dormancyLabel = screen.getByText('Dormancy Timeout (seconds)');
+    const dormancyFieldDiv = dormancyLabel.parentElement!;
+    const dormancyInput = dormancyFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
+
+    fireEvent.change(dormancyInput, { target: { value: '60' } });
+
+    expect(onChange).toHaveBeenCalledWith('dormancyTimeoutMs', 60_000);
+  });
+
+  it('dormancy timeout clamps to min 30 seconds', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const dormancyLabel = screen.getByText('Dormancy Timeout (seconds)');
+    const dormancyFieldDiv = dormancyLabel.parentElement!;
+    const dormancyInput = dormancyFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
+
+    fireEvent.change(dormancyInput, { target: { value: '5' } });
+
+    expect(onChange).toHaveBeenCalledWith('dormancyTimeoutMs', 30_000);
+  });
+
+  it('dormancy timeout clamps to max 3600 seconds', () => {
+    const onChange = vi.fn();
+    render(<EnvironmentSection settings={DEFAULT_SETTINGS} onChange={onChange} />);
+
+    const dormancyLabel = screen.getByText('Dormancy Timeout (seconds)');
+    const dormancyFieldDiv = dormancyLabel.parentElement!;
+    const dormancyInput = dormancyFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
+
+    fireEvent.change(dormancyInput, { target: { value: '9999' } });
+
+    expect(onChange).toHaveBeenCalledWith('dormancyTimeoutMs', 3_600_000);
+  });
+
+  it('dormancy timeout renders custom ms value as seconds', () => {
+    render(
+      <EnvironmentSection
+        settings={{ ...DEFAULT_SETTINGS, dormancyTimeoutMs: 120_000 }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    // 120000ms = 120 seconds
+    const dormancyLabel = screen.getByText('Dormancy Timeout (seconds)');
+    const dormancyFieldDiv = dormancyLabel.parentElement!;
+    const dormancyInput = dormancyFieldDiv.querySelector('input[type="number"]') as HTMLInputElement;
+
+    expect(dormancyInput.value).toBe('120');
   });
 });

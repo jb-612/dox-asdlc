@@ -3,6 +3,8 @@ import type {
   Execution,
   ExecutionEvent,
   ExecutionStatus,
+  MergeConflict,
+  MergeResolution,
   NodeExecutionState,
   ScrutinyLevel,
 } from '../../shared/types/execution';
@@ -36,6 +38,9 @@ export interface ExecutionState {
   /** Current scrutiny level for gate deliverable views (P15-F04). */
   scrutinyLevel: ScrutinyLevel;
 
+  /** Pending merge conflicts from parallel execution (P15-F09). */
+  mergeConflicts: MergeConflict[] | null;
+
   // --- Actions ---
 
   /** Replace the full execution snapshot and sync derived flags. */
@@ -55,6 +60,12 @@ export interface ExecutionState {
 
   /** Send revision feedback for a block in gate mode (P15-F04). */
   reviseBlock: (nodeId: string, feedback: string) => Promise<void>;
+
+  /** Store merge conflicts received from the execution engine (P15-F09). */
+  setMergeConflicts: (conflicts: MergeConflict[]) => void;
+
+  /** Send merge conflict resolutions via IPC and clear local state (P15-F09). */
+  resolveMergeConflicts: (resolutions: MergeResolution[]) => Promise<void>;
 
   // --- IPC controls ---
 
@@ -123,6 +134,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   lastError: null,
   subscribed: false,
   scrutinyLevel: 'summary',
+  mergeConflicts: null,
 
   // -----------------------------------------------------------------------
   // State mutations
@@ -177,9 +189,17 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       isWaitingGate: false,
       lastError: null,
       scrutinyLevel: 'summary',
+      mergeConflicts: null,
     }),
 
   setScrutinyLevel: (level) => set({ scrutinyLevel: level }),
+
+  setMergeConflicts: (conflicts) => set({ mergeConflicts: conflicts }),
+
+  resolveMergeConflicts: async (resolutions) => {
+    await window.electronAPI.execution.mergeConflictResolve(resolutions);
+    set({ mergeConflicts: null });
+  },
 
   reviseBlock: async (nodeId, feedback) => {
     const { execution } = get();

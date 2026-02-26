@@ -250,6 +250,43 @@ describe('ExecutionDetailsPanel -- onGateContinue / onGateRevise wiring (#280)',
 // Barrel export verification (#280)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// F10-T07: StatusBadge migration
+// ---------------------------------------------------------------------------
+
+describe('ExecutionDetailsPanel — StatusBadge migration (F10-T07)', () => {
+  it('renders node status with inline styles (shared StatusBadge)', () => {
+    const exec = createExecution('running');
+    exec.nodeStates['node-1'].status = 'running';
+    render(
+      <ExecutionDetailsPanel execution={exec} selectedNodeId="node-1" />,
+    );
+    const badge = screen.getByText('running');
+    // StatusBadge uses inline styles, not Tailwind classes
+    expect(badge.style.backgroundColor).toBeTruthy();
+  });
+
+  it('renders completed status via shared StatusBadge', () => {
+    const exec = createExecution('running');
+    exec.nodeStates['node-1'].status = 'completed';
+    render(
+      <ExecutionDetailsPanel execution={exec} selectedNodeId="node-1" />,
+    );
+    const badge = screen.getByText('completed');
+    expect(badge.style.color).toBeTruthy();
+  });
+
+  it('renders failed status via shared StatusBadge', () => {
+    const exec = createExecution('running');
+    exec.nodeStates['node-1'].status = 'failed';
+    render(
+      <ExecutionDetailsPanel execution={exec} selectedNodeId="node-1" />,
+    );
+    const badge = screen.getByText('failed');
+    expect(badge.style.backgroundColor).toBeTruthy();
+  });
+});
+
 describe('execution barrel export (#280)', () => {
   it('exports StepGatePanel', async () => {
     const barrel = await import(

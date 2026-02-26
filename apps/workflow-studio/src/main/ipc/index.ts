@@ -11,6 +11,7 @@ import type { WorkItemService } from '../services/workitem-service';
 import type { WorkflowFileService } from '../services/workflow-file-service';
 import type { SettingsService } from '../services/settings-service';
 import type { SessionHistoryService } from '../services/session-history-service';
+import type { ExecutorContainerPool } from '../services/workflow-executor';
 import { v4 as uuidv4 } from 'uuid';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 
@@ -25,6 +26,9 @@ export interface IPCServiceDeps {
   templateFileService: WorkflowFileService;
   settingsService: SettingsService;
   sessionHistoryService: SessionHistoryService;
+  /** Getter for the container pool. Uses a getter function because the pool
+   *  is initialized asynchronously after handler registration. */
+  getContainerPool?: () => ExecutorContainerPool | null;
 }
 
 /**
@@ -37,7 +41,11 @@ export interface IPCServiceDeps {
 export function registerAllHandlers(deps: IPCServiceDeps): void {
   registerWorkflowHandlers(deps.workflowFileService);
   registerTemplateHandlers(deps.templateFileService);
-  registerExecutionHandlers({ cliSpawner: deps.cliSpawner, settingsService: deps.settingsService });
+  registerExecutionHandlers({
+    cliSpawner: deps.cliSpawner,
+    settingsService: deps.settingsService,
+    getContainerPool: deps.getContainerPool,
+  });
   registerWorkItemHandlers(deps.workItemService);
   registerCLIHandlers(deps.cliSpawner, deps.sessionHistoryService);
   registerSettingsHandlers(deps.settingsService);

@@ -147,24 +147,24 @@ describe('CLISessionList', () => {
   // -------------------------------------------------------------------------
 
   describe('status badges', () => {
-    it('renders a status badge with title matching the status', () => {
+    it('renders a status badge with text matching the status', () => {
       renderList({ sessions: [makeSession('s1', { status: 'running' })] });
-      expect(screen.getByTitle('running')).toBeInTheDocument();
+      expect(screen.getByText('running')).toBeInTheDocument();
     });
 
     it('renders correct badge for exited status', () => {
       renderList({ sessions: [makeSession('s1', { status: 'exited' })] });
-      expect(screen.getByTitle('exited')).toBeInTheDocument();
+      expect(screen.getByText('exited')).toBeInTheDocument();
     });
 
     it('renders correct badge for error status', () => {
       renderList({ sessions: [makeSession('s1', { status: 'error' })] });
-      expect(screen.getByTitle('error')).toBeInTheDocument();
+      expect(screen.getByText('error')).toBeInTheDocument();
     });
 
     it('renders correct badge for starting status', () => {
       renderList({ sessions: [makeSession('s1', { status: 'starting' })] });
-      expect(screen.getByTitle('starting')).toBeInTheDocument();
+      expect(screen.getByText('starting')).toBeInTheDocument();
     });
   });
 
@@ -288,6 +288,29 @@ describe('CLISessionList', () => {
 
       const items = container.querySelectorAll('li');
       expect(items[1].className).toContain('border-l-transparent');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // F10-T08: StatusBadge migration
+  // -------------------------------------------------------------------------
+
+  describe('StatusBadge migration (F10-T08)', () => {
+    it('renders status text using shared StatusBadge', () => {
+      renderList({ sessions: [makeSession('s1', { status: 'running' })] });
+      // After migration, status text is rendered (not just a dot with title)
+      expect(screen.getByText('running')).toBeInTheDocument();
+    });
+
+    it('renders error status text using shared StatusBadge', () => {
+      renderList({ sessions: [makeSession('s1', { status: 'error' })] });
+      expect(screen.getByText('error')).toBeInTheDocument();
+    });
+
+    it('renders status with inline styles (shared StatusBadge)', () => {
+      renderList({ sessions: [makeSession('s1', { status: 'running' })] });
+      const badge = screen.getByText('running');
+      expect(badge.style.backgroundColor).toBeTruthy();
     });
   });
 

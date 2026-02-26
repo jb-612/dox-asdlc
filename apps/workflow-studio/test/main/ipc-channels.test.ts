@@ -31,3 +31,23 @@ describe('IPC_CHANNELS (P15-F03 additions)', () => {
     expect(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY).toBe('dialog:open-directory');
   });
 });
+
+describe('IPC_CHANNELS (P15-F09 merge conflict)', () => {
+  it('has EXECUTION_MERGE_CONFLICT channel', () => {
+    expect(IPC_CHANNELS.EXECUTION_MERGE_CONFLICT).toBe('execution:merge-conflict');
+  });
+
+  it('has EXECUTION_MERGE_RESOLVE channel (#281)', () => {
+    expect(IPC_CHANNELS.EXECUTION_MERGE_RESOLVE).toBe('execution:merge-resolve');
+  });
+});
+
+describe('IPC_CHANNELS monitoring channels match preload (#287)', () => {
+  it('MONITORING_RECEIVER_START matches preload string', () => {
+    expect(IPC_CHANNELS.MONITORING_RECEIVER_START).toBe('monitoring:receiver-start');
+  });
+
+  it('MONITORING_RECEIVER_STOP matches preload string', () => {
+    expect(IPC_CHANNELS.MONITORING_RECEIVER_STOP).toBe('monitoring:receiver-stop');
+  });
+});

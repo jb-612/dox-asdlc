@@ -18,3 +18,8 @@ export type { VirtualizedEventLogProps } from './VirtualizedEventLog';
 
 export { formatExecutionEvent, formatTelemetryEvent } from './eventFormatter';
 export type { FormattedEvent } from './eventFormatter';
+
+export { IpcErrorBoundary } from './IpcErrorBoundary';
+export type { IpcErrorBoundaryProps } from './IpcErrorBoundary';
+
+export { ToastProvider } from './ToastProvider';

@@ -202,8 +202,16 @@ export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, B
     label: 'Dev',
     description: 'Write implementation code following TDD',
     icon: 'CodeBracketIcon',
-    defaultSystemPromptPrefix: '',
-    defaultOutputChecklist: [],
+    defaultSystemPromptPrefix:
+      'You are a senior software engineer following strict TDD.\n' +
+      'For each task: 1) Write a failing test first (RED), 2) Write minimal code to pass (GREEN),\n' +
+      '3) Refactor while tests stay green. Never skip the failing-test step.',
+    defaultOutputChecklist: [
+      'Failing tests written before implementation',
+      'All tests passing',
+      'Lint and type-check clean',
+      'No breaking changes to existing tests',
+    ],
     phase: 2,
   },
   test: {
@@ -211,8 +219,16 @@ export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, B
     label: 'Test',
     description: 'Write and run unit tests',
     icon: 'BeakerIcon',
-    defaultSystemPromptPrefix: '',
-    defaultOutputChecklist: [],
+    defaultSystemPromptPrefix:
+      'You are a QA engineer writing comprehensive tests.\n' +
+      'Target >85% code coverage. Cover happy paths, edge cases, and error handling.\n' +
+      'Include performance tests for hot paths.',
+    defaultOutputChecklist: [
+      'Coverage report generated (target >85%)',
+      'All tests passing',
+      'Edge cases and error paths covered',
+      'Performance tests for critical paths',
+    ],
     phase: 2,
   },
   review: {
@@ -220,8 +236,16 @@ export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, B
     label: 'Review',
     description: 'Review code quality and security',
     icon: 'EyeIcon',
-    defaultSystemPromptPrefix: '',
-    defaultOutputChecklist: [],
+    defaultSystemPromptPrefix:
+      'You are a senior code reviewer.\n' +
+      'Evaluate: code quality, performance implications, security vulnerabilities,\n' +
+      'test coverage gaps, and adherence to project conventions.',
+    defaultOutputChecklist: [
+      'Security findings documented',
+      'Quality concerns listed with severity',
+      'Performance assessment complete',
+      'Test coverage gaps identified',
+    ],
     phase: 2,
   },
   devops: {
@@ -229,16 +253,24 @@ export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, B
     label: 'DevOps',
     description: 'Generate deployment plans and infrastructure',
     icon: 'RocketLaunchIcon',
-    defaultSystemPromptPrefix: '',
-    defaultOutputChecklist: [],
+    defaultSystemPromptPrefix:
+      'You are a DevOps engineer.\n' +
+      'Produce Docker, Kubernetes, and CI/CD artifacts.\n' +
+      'Ensure health checks, resource limits, and monitoring are configured.',
+    defaultOutputChecklist: [
+      'Dockerfile with multi-stage build',
+      'Kubernetes manifests with resource limits',
+      'CI/CD pipeline configuration',
+      'Health checks and monitoring setup',
+    ],
     phase: 2,
   },
 };
 
-/** Block types available in the current phase (Phase 1). */
+/** Block types available in the current phase (Phase 2). */
 export const AVAILABLE_BLOCK_TYPES = (
   Object.entries(BLOCK_TYPE_METADATA) as [import('./types/workflow').BlockType, BlockTypeMetadata][]
-).filter(([, meta]) => meta.phase <= 1).map(([type]) => type);
+).filter(([, meta]) => meta.phase <= 2).map(([type]) => type);
 
 export const NODE_CATEGORIES = [
   'discovery',

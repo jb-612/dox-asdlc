@@ -1,9 +1,16 @@
 import { ipcMain } from 'electron';
 import { readdir, readFile, stat } from 'fs/promises';
-import { join, resolve } from 'path';
+import { join, resolve, sep } from 'path';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { WorkItemType, WorkItemReference, WorkItem } from '../../shared/types/workitem';
 import type { WorkItemService } from '../services/workitem-service';
+
+/** Check whether a resolved path stays within the allowed root directory. */
+function isPathWithinRoot(resolvedPath: string, rootDir: string): boolean {
+  const normalizedRoot = resolve(rootDir) + sep;
+  const normalizedPath = resolve(resolvedPath);
+  return normalizedPath === resolve(rootDir) || normalizedPath.startsWith(normalizedRoot);
+}
 
 // ---------------------------------------------------------------------------
 // Work Item IPC handlers
@@ -43,6 +50,19 @@ export function registerWorkItemHandlers(service: WorkItemService): void {
     },
   );
 
+  // --- Check GitHub CLI availability (P15-F12) ----------------------------
+  ipcMain.handle(
+    IPC_CHANNELS.WORKITEM_CHECK_GH,
+    async () => {
+      try {
+        return await service.checkGhAvailable();
+      } catch (err: unknown) {
+        console.error('[WorkItemHandlers] checkGh error:', err);
+        return { available: false, authenticated: false };
+      }
+    },
+  );
+
   // --- List work items from filesystem directory (P15-F03) -----------------
   ipcMain.handle(
     IPC_CHANNELS.WORKITEM_LIST_FS,
@@ -53,7 +73,7 @@ export function registerWorkItemHandlers(service: WorkItemService): void {
       }
 
       const resolved = resolve(dir);
-      if (resolved.includes('..') || dir.includes('..')) {
+      if (!isPathWithinRoot(resolved, dir)) {
         console.error('[WorkItemHandlers] listFs: path traversal rejected:', dir);
         return [];
       }
@@ -112,7 +132,7 @@ export function registerWorkItemHandlers(service: WorkItemService): void {
       if (!itemPath) return null;
 
       const resolved = resolve(itemPath);
-      if (resolved.includes('..') || itemPath.includes('..')) {
+      if (!isPathWithinRoot(resolved, itemPath)) {
         console.error('[WorkItemHandlers] loadFs: path traversal rejected:', itemPath);
         return null;
       }

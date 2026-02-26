@@ -1,8 +1,9 @@
 import { BrowserWindow } from 'electron';
+import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { WorkflowDefinition, HITLGateDefinition, AgentNode } from '../../shared/types/workflow';
+import type { WorkflowDefinition, HITLGateDefinition, AgentNode, WorkflowPlan, ParallelLane } from '../../shared/types/workflow';
 import type {
   BlockResult,
   Execution,
@@ -11,11 +12,27 @@ import type {
   NodeExecutionState,
   ExecutionEvent,
   ExecutionEventType,
+  FileDiff,
+  ParallelBlockResult,
 } from '../../shared/types/execution';
+import { WorkflowExecutor } from './workflow-executor';
+import type { ExecutorContainerPool } from './workflow-executor';
+import { ExecutorEngineAdapter } from './executor-engine-adapter';
 import type { WorkItemReference } from '../../shared/types/workitem';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { CLISpawner } from './cli-spawner';
 import type { RedisEventClient } from './redis-client';
+import { captureGitDiff } from './diff-capture';
+
+/** Validate a node ID to prevent path traversal in file operations. */
+function isValidNodeId(nodeId: string): boolean {
+  return /^[\w-]{1,128}$/.test(nodeId);
+}
+
+/** Strip null bytes and truncate a prompt field to prevent injection. */
+function sanitizePromptField(field: string, maxLen = 4096): string {
+  return field.replace(/\0/g, '').slice(0, maxLen);
+}
 
 // ---------------------------------------------------------------------------
 // ExecutionEngine
@@ -72,6 +89,13 @@ export class ExecutionEngine {
   private fileRestrictions: string[];
   /** Whether the repo is mounted read-only. */
   private readOnly: boolean;
+
+  /**
+   * Optional container pool for parallel execution (P15-F09 T07).
+   * When set and the workflow has parallelGroups, execution routes
+   * through WorkflowExecutor instead of sequential node walking.
+   */
+  public containerPool: ExecutorContainerPool | null = null;
 
   /** Pending gate resolvers keyed by nodeId. */
   private gateResolvers = new Map<string, (decision: string) => void>();
@@ -159,7 +183,25 @@ export class ExecutionEngine {
       return this.execution;
     }
 
-    // Execute nodes in order
+    // Parallel detection (P15-F09 T07): if the workflow has parallelGroups,
+    // route to the parallel execution path via WorkflowExecutor.
+    if (workflow.parallelGroups && workflow.parallelGroups.length > 0) {
+      if (this.containerPool) {
+        return this.startParallel(workflow);
+      } else {
+        this.setStatus('failed');
+        this.execution.completedAt = new Date().toISOString();
+        this.emitEvent(
+          'execution_failed',
+          undefined,
+          'Docker required for parallel execution — container pool not available',
+        );
+        this.sendStateUpdate();
+        return this.execution;
+      }
+    }
+
+    // Execute nodes in order (sequential path)
     for (const nodeId of sorted) {
       if (this.isAborted) break;
 
@@ -171,6 +213,14 @@ export class ExecutionEngine {
 
       const node = workflow.nodes.find((n) => n.id === nodeId);
       if (!node) continue;
+
+      // Evaluate transition conditions: skip this node if no incoming
+      // transition is satisfied (root nodes with no incoming edges always run).
+      if (!this.shouldExecuteNode(nodeId, workflow)) {
+        this.updateNodeState(nodeId, 'skipped');
+        this.emitEvent('node_skipped', nodeId, `Skipped: ${node.label} (transition condition not met)`);
+        continue;
+      }
 
       this.execution.currentNodeId = nodeId;
 
@@ -419,6 +469,113 @@ export class ExecutionEngine {
   }
 
   // -----------------------------------------------------------------------
+  // Parallel execution (P15-F09 T08)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Execute the workflow via WorkflowExecutor for parallel lane dispatch.
+   *
+   * Builds a WorkflowPlan from the workflow's parallelGroups, creates an
+   * ExecutorEngineAdapter and WorkflowExecutor, runs the plan, then maps
+   * the ParallelBlockResult array back to the execution's nodeStates.
+   *
+   * Cyclomatic complexity: 5 (try/catch, result iteration success/fail,
+   * hasFailures branch, error path).
+   *
+   * @param workflow The workflow definition with populated parallelGroups.
+   * @returns The execution state after parallel completion.
+   */
+  private async startParallel(workflow: WorkflowDefinition): Promise<Execution> {
+    // Build a WorkflowPlan from the parallelGroups
+    const plan: WorkflowPlan = {
+      lanes: (workflow.parallelGroups ?? []).map((group): ParallelLane => ({
+        nodeIds: group.laneNodeIds,
+      })),
+      parallelismModel: 'multi-container',
+      failureMode: 'lenient',
+    };
+
+    // Build a prompt function that delegates to buildSystemPrompt
+    const buildPromptFn = (blockId: string): string => {
+      const node = workflow.nodes.find((n) => n.id === blockId);
+      if (!node) return `Execute block: ${blockId}`;
+      return this.buildSystemPrompt(node, workflow.rules);
+    };
+
+    // Create the adapter and executor
+    const adapter = new ExecutorEngineAdapter({
+      spawn: this.cliSpawner
+        ? (config) => this.cliSpawner!.spawn(config)
+        : () => ({ id: 'mock-session', status: 'mock' }),
+      waitForExit: async (sessionId: string, timeoutMs: number) =>
+        this.waitForCLIExit(sessionId, timeoutMs),
+      buildPromptFn,
+      mockMode: this.mockMode,
+    });
+
+    const emitIPC = (channel: string, data: unknown): void => {
+      this.mainWindow?.webContents.send(channel, data);
+    };
+
+    const executor = new WorkflowExecutor(this.containerPool!, adapter, emitIPC);
+
+    try {
+      const results = await executor.execute(plan);
+
+      // Map results back to nodeStates
+      let hasFailures = false;
+      for (const result of results) {
+        if (result.success) {
+          this.updateNodeState(result.blockId, 'completed', {
+            completedAt: new Date().toISOString(),
+            output: result.output,
+          });
+          this.emitEvent('node_completed', result.blockId, `Completed: ${result.blockId}`);
+        } else {
+          hasFailures = true;
+          this.updateNodeState(result.blockId, 'failed', {
+            completedAt: new Date().toISOString(),
+            error: result.error ?? 'Parallel block execution failed',
+          });
+          this.emitEvent('node_failed', result.blockId, `Failed: ${result.blockId}`);
+        }
+      }
+
+      // Set final execution status
+      if (hasFailures) {
+        this.setStatus('failed');
+        this.execution!.completedAt = new Date().toISOString();
+        this.emitEvent(
+          'execution_failed',
+          undefined,
+          'Execution failed due to node failure(s)',
+        );
+      } else {
+        this.setStatus('completed');
+        this.execution!.completedAt = new Date().toISOString();
+        this.emitEvent(
+          'execution_completed',
+          undefined,
+          'Execution completed successfully',
+        );
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.setStatus('failed');
+      this.execution!.completedAt = new Date().toISOString();
+      this.emitEvent(
+        'execution_failed',
+        undefined,
+        `Parallel execution failed: ${message}`,
+      );
+    }
+
+    this.execution!.currentNodeId = undefined;
+    this.sendStateUpdate();
+    return this.execution!;
+  }
+
+  // -----------------------------------------------------------------------
   // Prompt harness assembly (P15-F01)
   // -----------------------------------------------------------------------
 
@@ -459,17 +616,17 @@ export class ExecutionEngine {
 
     // 2. System prompt prefix
     if (node.config.systemPromptPrefix) {
-      parts.push(node.config.systemPromptPrefix);
+      parts.push(sanitizePromptField(node.config.systemPromptPrefix));
     }
 
     // 3. Task instruction (node description or systemPrompt)
     const taskInstruction = node.description || node.config.systemPrompt || `Execute ${node.type} agent: ${node.label}`;
-    parts.push(taskInstruction);
+    parts.push(sanitizePromptField(taskInstruction));
 
     // 4. Output checklist
     if (node.config.outputChecklist && node.config.outputChecklist.length > 0) {
       const checklist = node.config.outputChecklist
-        .map((item, i) => `${i + 1}. ${item}`)
+        .map((item, i) => `${i + 1}. ${sanitizePromptField(item)}`)
         .join('\n');
       parts.push(`You must produce:\n${checklist}`);
     }
@@ -492,7 +649,8 @@ export class ExecutionEngine {
 
     // 7. File restrictions (P15-F03)
     if (this.fileRestrictions.length > 0) {
-      parts.push(`Only modify files matching: ${this.fileRestrictions.join(', ')}`);
+      const sanitizedRestrictions = this.fileRestrictions.map((r) => sanitizePromptField(r, 256));
+      parts.push(`Only modify files matching: ${sanitizedRestrictions.join(', ')}`);
     }
 
     // 8. Read-only mount instruction (P15-F03, T23)
@@ -521,6 +679,10 @@ export class ExecutionEngine {
    *          cannot be parsed.
    */
   readBlockResult(workingDirectory: string, nodeId: string): BlockResult | null {
+    if (!isValidNodeId(nodeId)) {
+      console.error(`[ExecutionEngine] readBlockResult: invalid nodeId rejected: ${nodeId}`);
+      return null;
+    }
     const outputPath = join(workingDirectory, '.output', `block-${nodeId}.json`);
     if (!existsSync(outputPath)) {
       return null;
@@ -607,6 +769,12 @@ export class ExecutionEngine {
     // Pass prompt via -p flag for non-interactive mode
     args.push('-p', composedPrompt);
 
+    // Capture pre-execution git SHA for code blocks (best-effort)
+    let preExecSha: string | null = null;
+    if (node.type === 'coding') {
+      preExecSha = this.captureGitSha();
+    }
+
     const session = this.cliSpawner.spawn({
       command: 'claude',
       args,
@@ -644,6 +812,16 @@ export class ExecutionEngine {
       const output: Record<string, unknown> = { cliSessionId: session.id, exitCode };
       if (blockResult) {
         output.blockResult = blockResult;
+      }
+
+      // Capture git diffs for code blocks (best-effort)
+      if (node.type === 'coding' && preExecSha) {
+        try {
+          const fileDiffs = await captureGitDiff(workDir, preExecSha);
+          output.fileDiffs = fileDiffs;
+        } catch {
+          // Diff capture is best-effort — do not fail the node
+        }
       }
 
       this.updateNodeState(nodeId, 'completed', {
@@ -1080,6 +1258,53 @@ export class ExecutionEngine {
   // -----------------------------------------------------------------------
 
   /**
+   * Evaluate whether a node should execute based on its incoming transition
+   * conditions and the statuses of the source nodes.
+   *
+   * - Root nodes (no incoming transitions) always execute.
+   * - A node executes if at least one incoming transition is satisfied:
+   *   - 'always': always satisfied (regardless of source status)
+   *   - 'on_success': satisfied only if the source node completed
+   *   - 'on_failure': satisfied only if the source node failed
+   *   - 'expression': treated as 'always' (expression eval not yet implemented)
+   */
+  private shouldExecuteNode(
+    nodeId: string,
+    workflow: WorkflowDefinition,
+  ): boolean {
+    const incoming = workflow.transitions.filter(
+      (t) => t.targetNodeId === nodeId,
+    );
+
+    // Root nodes (no incoming transitions) always execute
+    if (incoming.length === 0) return true;
+
+    // At least one incoming transition must be satisfied
+    for (const t of incoming) {
+      const sourceState = this.execution.nodeStates[t.sourceNodeId];
+      if (!sourceState) continue;
+
+      const conditionType = t.condition?.type ?? 'always';
+
+      switch (conditionType) {
+        case 'always':
+        case 'expression':
+          // 'always' is always satisfied; 'expression' falls through to always
+          // until expression evaluation is implemented
+          return true;
+        case 'on_success':
+          if (sourceState.status === 'completed') return true;
+          break;
+        case 'on_failure':
+          if (sourceState.status === 'failed') return true;
+          break;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Kahn's algorithm for topological sort.
    *
    * Returns an array of node IDs in dependency order, or null if the graph
@@ -1119,6 +1344,19 @@ export class ExecutionEngine {
     }
 
     return sorted.length === workflow.nodes.length ? sorted : null;
+  }
+
+  /** Capture the current git HEAD SHA (best-effort). Returns null on failure. */
+  private captureGitSha(): string | null {
+    try {
+      const workDir = this.workingDirectory || process.cwd();
+      return execSync('git rev-parse HEAD', {
+        cwd: workDir,
+        encoding: 'utf-8',
+      }).trim();
+    } catch {
+      return null;
+    }
   }
 
   /** Promise-based sleep. */

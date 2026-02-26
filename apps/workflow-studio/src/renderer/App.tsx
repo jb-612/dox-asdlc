@@ -8,6 +8,8 @@ import SettingsPage from './pages/SettingsPage';
 import MonitoringPage from './pages/MonitoringPage';
 import StudioPage from './pages/StudioPage';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { IpcErrorBoundary } from './components/shared/IpcErrorBoundary';
+import { ToastProvider } from './components/shared/ToastProvider';
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
   const base = 'block px-3 py-2 rounded text-sm font-medium transition-colors';
@@ -61,17 +63,18 @@ function App(): JSX.Element {
         {/* Main Content Area */}
         <main className="flex-1 overflow-hidden">
           <Routes>
-            <Route path="/" element={<DesignerPage />} />
-            <Route path="/templates" element={<TemplateManagerPage />} />
-            <Route path="/studio" element={<StudioPage />} />
-            <Route path="/execute" element={<ExecutionPage />} />
-            <Route path="/execute/run" element={<ExecutionWalkthroughPage />} />
-            <Route path="/cli" element={<CLIManagerPage />} />
-            <Route path="/monitoring" element={<MonitoringPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/" element={<IpcErrorBoundary><DesignerPage /></IpcErrorBoundary>} />
+            <Route path="/templates" element={<IpcErrorBoundary><TemplateManagerPage /></IpcErrorBoundary>} />
+            <Route path="/studio" element={<IpcErrorBoundary><StudioPage /></IpcErrorBoundary>} />
+            <Route path="/execute" element={<IpcErrorBoundary><ExecutionPage /></IpcErrorBoundary>} />
+            <Route path="/execute/run" element={<IpcErrorBoundary><ExecutionWalkthroughPage /></IpcErrorBoundary>} />
+            <Route path="/cli" element={<IpcErrorBoundary><CLIManagerPage /></IpcErrorBoundary>} />
+            <Route path="/monitoring" element={<IpcErrorBoundary><MonitoringPage /></IpcErrorBoundary>} />
+            <Route path="/settings" element={<IpcErrorBoundary><SettingsPage /></IpcErrorBoundary>} />
           </Routes>
         </main>
       </div>
+      <ToastProvider />
     </BrowserRouter>
   );
 }

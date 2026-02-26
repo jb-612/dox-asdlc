@@ -6,6 +6,7 @@ import type {
 } from '../../../shared/types/execution';
 import type { AgentNode } from '../../../shared/types/workflow';
 import { NODE_TYPE_METADATA } from '../../../shared/constants';
+import { StatusBadge } from '../shared/StatusBadge';
 import ExecutionEventList from './ExecutionEventList';
 import StepGatePanel from './StepGatePanel';
 
@@ -55,28 +56,6 @@ function formatTime(iso?: string): string {
     return new Date(iso).toLocaleTimeString('en-GB', { hour12: false });
   } catch {
     return '--';
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Status badge
-// ---------------------------------------------------------------------------
-
-function statusBadgeClass(status: string): string {
-  switch (status) {
-    case 'running':
-      return 'bg-blue-600/20 text-blue-400';
-    case 'completed':
-      return 'bg-green-600/20 text-green-400';
-    case 'failed':
-      return 'bg-red-600/20 text-red-400';
-    case 'waiting_gate':
-      return 'bg-amber-600/20 text-amber-400';
-    case 'skipped':
-      return 'bg-gray-600/20 text-gray-400';
-    case 'pending':
-    default:
-      return 'bg-gray-600/20 text-gray-500';
   }
 }
 
@@ -132,11 +111,7 @@ function CurrentNodeTab({
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
             Status
           </h4>
-          <span
-            className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full ${statusBadgeClass(nodeState.status)}`}
-          >
-            {nodeState.status}
-          </span>
+          <StatusBadge status={nodeState.status} size="sm" />
         </div>
       )}
 

@@ -115,6 +115,23 @@ export class WorkItemService {
   }
 
   // -------------------------------------------------------------------------
+  // GitHub CLI availability check
+  // -------------------------------------------------------------------------
+
+  async checkGhAvailable(): Promise<{ available: boolean; authenticated: boolean }> {
+    try {
+      await execAsync('gh auth status', { cwd: this.projectRoot, timeout: 3000 });
+      return { available: true, authenticated: true };
+    } catch (err: unknown) {
+      const code = (err as { code?: string | number }).code;
+      if (code === 'ENOENT' || (err instanceof Error && err.message.includes('not found'))) {
+        return { available: false, authenticated: false };
+      }
+      return { available: true, authenticated: false };
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Single item lookup
   // -------------------------------------------------------------------------
 

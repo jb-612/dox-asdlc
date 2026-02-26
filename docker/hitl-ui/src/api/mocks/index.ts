@@ -67,7 +67,7 @@ export {
   randomDelay,
 } from './search';
 
-export type { SearchService } from './search';
+export type { SearchService } from '../searchService';
 
 // Kubernetes Visibility Dashboard mocks (P05-F09)
 export {

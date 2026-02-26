@@ -38,7 +38,7 @@ This ensures users always see what's running, what's blocked, and overall progre
 
 ## Session Renewal Protocol
 
-PM CLI delegates ONE atomic task at a time to prevent context overload.
+PM CLI delegates ONE atomic task at a time per sequential delegation. Use native teams (TeamCreate) when parallel work is needed — teammates execute concurrently.
 
 After each atomic task delegation:
 1. Wait for agent to complete the single task

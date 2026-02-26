@@ -80,13 +80,19 @@ export interface ElectronAPI {
       nodeId: string;
       feedback: string;
     }) => Promise<{ success: boolean; error?: string }>;
+    /** Resolve merge conflicts (P15-F09) */
+    mergeConflictResolve: (resolutions: unknown) => Promise<{ success: boolean; error?: string }>;
   };
 
   workitem: {
     list: (type: string) => Promise<unknown[]>;
     get: (id: string) => Promise<unknown>;
+    /** Check GitHub CLI availability and auth status (P15-F12) */
+    checkGhAvailable: () => Promise<{ available: boolean; authenticated: boolean }>;
     /** Read work items from the configured workItemDirectory (P15-F03) */
     listFs: (directory?: string) => Promise<unknown[]>;
+    /** Load full content of a single work item from a filesystem path (P15-F03) */
+    loadFs: (itemPath: string) => Promise<unknown>;
   };
 
   cli: {
@@ -137,13 +143,13 @@ export interface ElectronAPI {
     validate: (path: string) => Promise<{ valid: boolean; hasGit?: boolean; error?: string }>;
   };
 
-  container: {
+  containerPool: {
     /** P15-F05: Get container pool status */
-    poolStatus: () => Promise<{ running: number; idle: number; dormant: number; total: number }>;
+    getStatus: () => Promise<{ running: number; idle: number; dormant: number; total: number }>;
     /** P15-F05: Start the container pool */
-    poolStart: (imageDigest: string, size: number) => Promise<{ success: boolean; error?: string }>;
+    start: (count: number) => Promise<{ success: boolean; error?: string }>;
     /** P15-F05: Stop all containers in the pool */
-    poolStop: () => Promise<{ success: boolean; error?: string }>;
+    stop: () => Promise<{ success: boolean; error?: string }>;
   };
 
   monitoring: {

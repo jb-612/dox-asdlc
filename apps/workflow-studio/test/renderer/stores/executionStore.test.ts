@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useExecutionStore } from '../../../src/renderer/stores/executionStore';
-import type { Execution } from '../../../src/shared/types/execution';
+import type { Execution, MergeConflict } from '../../../src/shared/types/execution';
 
 // ---------------------------------------------------------------------------
 // Mock window.electronAPI
@@ -10,6 +10,7 @@ const mockRevise = vi.fn();
 const mockOnEvent = vi.fn();
 const mockRemoveListener = vi.fn();
 const mockGateDecision = vi.fn().mockResolvedValue({ success: true });
+const mockMergeConflictResolve = vi.fn().mockResolvedValue({ success: true });
 
 vi.stubGlobal('window', {
   ...globalThis.window,
@@ -21,6 +22,7 @@ vi.stubGlobal('window', {
       abort: vi.fn().mockResolvedValue({ success: true }),
       gateDecision: mockGateDecision,
       revise: mockRevise,
+      mergeConflictResolve: mockMergeConflictResolve,
     },
     onEvent: mockOnEvent,
     removeListener: mockRemoveListener,
@@ -135,5 +137,56 @@ describe('executionStore extensions (P15-F04)', () => {
     // After setting execution with a workflow that has defaultScrutinyLevel,
     // the store should pick it up
     expect(useExecutionStore.getState().scrutinyLevel).toBe('full_content');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Merge conflict state (P15-F09)
+// ---------------------------------------------------------------------------
+
+describe('executionStore merge conflicts (P15-F09)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useExecutionStore.setState({
+      execution: null,
+      events: [],
+      isRunning: false,
+      isPaused: false,
+      isWaitingGate: false,
+      lastError: null,
+      subscribed: false,
+      scrutinyLevel: 'summary',
+      mergeConflicts: null,
+    });
+  });
+
+  it('initial mergeConflicts is null', () => {
+    const state = useExecutionStore.getState();
+    expect(state.mergeConflicts).toBeNull();
+  });
+
+  it('setMergeConflicts stores conflicts array', () => {
+    const conflicts: MergeConflict[] = [
+      { filePath: 'src/a.ts', blockAId: 'b1', blockBId: 'b2' },
+      { filePath: 'src/b.ts', blockAId: 'b1', blockBId: 'b3' },
+    ];
+    useExecutionStore.getState().setMergeConflicts(conflicts);
+    expect(useExecutionStore.getState().mergeConflicts).toEqual(conflicts);
+  });
+
+  it('resolveMergeConflicts sends IPC and clears state to null', async () => {
+    const conflicts: MergeConflict[] = [
+      { filePath: 'src/a.ts', blockAId: 'b1', blockBId: 'b2' },
+    ];
+    useExecutionStore.setState({ mergeConflicts: conflicts });
+
+    await useExecutionStore.getState().resolveMergeConflicts([
+      { filePath: 'src/a.ts', keepBlockId: 'b1' },
+    ]);
+
+    expect(mockMergeConflictResolve).toHaveBeenCalledWith([
+      { filePath: 'src/a.ts', keepBlockId: 'b1' },
+    ]);
+    expect(useExecutionStore.getState().mergeConflicts).toBeNull();
   });
 });

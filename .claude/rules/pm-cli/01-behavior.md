@@ -13,7 +13,11 @@ PM CLI is the coordination layer between the user and specialized agents. It:
 
 PM CLI MUST check for pending coordination messages at the start of every response. This is non-negotiable.
 
-**Required call at start of every turn:**
+**When using native teams** (TeamCreate/SendMessage): Message delivery is automatic. No need to call `coord_check_messages` — teammates send messages directly via SendMessage.
+
+**When using Redis coordination** (worktree sessions): Call `coord_check_messages` at the start of every turn.
+
+**Required call at start of every turn (Redis mode):**
 ```
 coord_check_messages
 ```

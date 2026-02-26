@@ -69,15 +69,10 @@ export async function getServicesHealth(
     return getMockServicesHealth();
   }
 
-  try {
-    const response = await apiClient.get<ServicesHealthResponse>(
-      '/metrics/services/health'
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Services health API unavailable:', error);
-    return { services: [], connections: [], timestamp: new Date().toISOString() };
-  }
+  const response = await apiClient.get<ServicesHealthResponse>(
+    '/metrics/services/health'
+  );
+  return response.data;
 }
 
 /**

@@ -66,6 +66,8 @@ These permissions are always allowed regardless of environment. They are configu
 - Frontend: `src/hitl_ui/`, `docker/hitl-ui/`
 - Orchestrator: All paths, exclusive ownership of `contracts/`, `.claude/`, `docs/`
 
+**Note:** Subagent file write permissions are enforced by Claude Code's permission system, not just guardrails. Subagents (planner, orchestrator, reviewer) may be unable to write to paths like `.workitems/` even if guardrails allow it. Write planning artifacts directly from the PM CLI session when subagent writes fail.
+
 **Test Commands:**
 - `pytest` - Python unit and integration tests
 - `npm test` - JavaScript/TypeScript tests

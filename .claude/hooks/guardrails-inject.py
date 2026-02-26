@@ -190,7 +190,8 @@ def main():
     detected = detector.detect(prompt)
 
     # Build context dict — agent is required for meaningful guardrails evaluation
-    agent = detected.agent or os.environ.get("CLAUDE_INSTANCE_ID") or "unknown"
+    # Prioritize CLAUDE_INSTANCE_ID over keyword-detected agent (#121)
+    agent = os.environ.get("CLAUDE_INSTANCE_ID") or detected.agent or "unknown"
     context_dict = {
         "agent": agent,
         "session_id": session_id,

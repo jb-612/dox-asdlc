@@ -3,29 +3,8 @@ import type { WorkItemReference, WorkItemType } from '../../../shared/types/work
 import WorkItemCard from './WorkItemCard';
 
 // ---------------------------------------------------------------------------
-// Mock data for Issues and Ideas -- GitHub Issues wiring deferred
+// Static placeholder data for Ideas tab (no backend yet)
 // ---------------------------------------------------------------------------
-
-const MOCK_ISSUES: WorkItemReference[] = [
-  {
-    id: 'issue-42',
-    type: 'issue',
-    source: 'github',
-    title: 'Agent context exceeds token limit on large repos',
-    description: 'When running Repo Mapper on repositories with 500+ files, the context pack exceeds the 100K token budget.',
-    url: 'https://github.com/org/repo/issues/42',
-    labels: ['bug', 'context-control'],
-  },
-  {
-    id: 'issue-57',
-    type: 'issue',
-    source: 'github',
-    title: 'Add retry logic for flaky SAST scans',
-    description: 'SAST scans intermittently fail due to network timeouts. Need configurable retry with exponential backoff.',
-    url: 'https://github.com/org/repo/issues/57',
-    labels: ['enhancement', 'quality-gate'],
-  },
-];
 
 const MOCK_IDEAS: WorkItemReference[] = [
   {
@@ -96,6 +75,11 @@ export default function WorkItemPickerDialog({
   const [prdsLoading, setPrdsLoading] = useState(false);
   const [prdsError, setPrdsError] = useState<string | null>(null);
 
+  // GitHub Issues state (P15-F12 T07)
+  const [ghIssues, setGhIssues] = useState<WorkItemReference[]>([]);
+  const [issuesLoading, setIssuesLoading] = useState(false);
+  const [ghStatus, setGhStatus] = useState<{ available: boolean; authenticated: boolean } | null>(null);
+
   // Fetch PRDs from filesystem when dialog opens
   useEffect(() => {
     if (!isOpen) return;
@@ -126,19 +110,47 @@ export default function WorkItemPickerDialog({
     fetchPrds();
   }, [isOpen]);
 
+  // Check GitHub CLI availability on mount (P15-F12 T07)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    window.electronAPI.workitem.checkGhAvailable().then(setGhStatus).catch(() => {
+      setGhStatus({ available: false, authenticated: false });
+    });
+  }, [isOpen]);
+
+  // Fetch GitHub issues when Issues tab becomes active (P15-F12 T07)
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'issues') return;
+    if (!ghStatus || !ghStatus.available || !ghStatus.authenticated) return;
+
+    setIssuesLoading(true);
+    window.electronAPI.workitem
+      .list('issue')
+      .then((items) => {
+        setGhIssues(items as WorkItemReference[]);
+      })
+      .catch(() => {
+        setGhIssues([]);
+      })
+      .finally(() => {
+        setIssuesLoading(false);
+      });
+  }, [isOpen, activeTab, ghStatus]);
+
   // Get items for current tab
   const tabItems = useMemo((): WorkItemReference[] => {
     switch (activeTab) {
       case 'prds':
         return fsPrds;
       case 'issues':
-        return MOCK_ISSUES;
+        return ghIssues;
       case 'ideas':
         return MOCK_IDEAS;
       case 'manual':
         return [];
     }
-  }, [activeTab, fsPrds]);
+  }, [activeTab, fsPrds, ghIssues]);
 
   // Filter by search
   const filteredItems = useMemo(() => {
@@ -246,6 +258,27 @@ export default function WorkItemPickerDialog({
           ) : activeTab === 'prds' && prdsError ? (
             <div className="flex items-center justify-center h-full text-red-400 text-sm">
               {prdsError}
+            </div>
+          ) : activeTab === 'issues' && ghStatus && !ghStatus.available ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-2">
+              <span className="text-lg">⚠️</span>
+              <span>GitHub CLI not installed.</span>
+              <span className="text-xs text-gray-500">
+                Install it from <code className="text-gray-300">https://cli.github.com</code>
+              </span>
+            </div>
+          ) : activeTab === 'issues' && ghStatus && ghStatus.available && !ghStatus.authenticated ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400 text-sm gap-2">
+              <span className="text-lg">🔒</span>
+              <span>Not authenticated with GitHub.</span>
+              <span className="text-xs text-gray-500">
+                Run <code className="text-gray-300">gh auth login</code> to authenticate.
+              </span>
+            </div>
+          ) : activeTab === 'issues' && issuesLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
+              Loading issues...
             </div>
           ) : activeTab === 'manual' ? (
             <div className="space-y-3">

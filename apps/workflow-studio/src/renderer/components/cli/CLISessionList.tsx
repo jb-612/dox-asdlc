@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import type { CLISession, CLISessionStatus } from '../../../shared/types/cli';
+import type { CLISession } from '../../../shared/types/cli';
+import { StatusBadge } from '../shared/StatusBadge';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,22 +17,6 @@ export interface CLISessionListProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function statusBadge(status: CLISessionStatus): JSX.Element {
-  const colors: Record<CLISessionStatus, string> = {
-    starting: 'bg-yellow-500',
-    running: 'bg-green-500',
-    exited: 'bg-gray-500',
-    error: 'bg-red-500',
-  };
-
-  return (
-    <span
-      className={`inline-block w-2 h-2 rounded-full ${colors[status]}`}
-      title={status}
-    />
-  );
-}
 
 function formatTime(isoDate: string): string {
   try {
@@ -151,7 +136,7 @@ function SessionItem({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          {statusBadge(session.status)}
+          <StatusBadge status={session.status} size="sm" />
           <span className="text-xs font-mono text-gray-300 truncate">
             {truncateId(session.id)}
           </span>

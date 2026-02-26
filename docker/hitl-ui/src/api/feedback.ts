@@ -133,7 +133,7 @@ export const feedbackKeys = {
 // Mock Data
 // =============================================================================
 
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 const mockRuleProposals: RuleProposal[] = [
   {

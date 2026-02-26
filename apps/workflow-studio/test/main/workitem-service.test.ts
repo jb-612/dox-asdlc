@@ -524,4 +524,42 @@ describe('WorkItemService', () => {
       );
     });
   });
+
+  // =========================================================================
+  // checkGhAvailable (T06)
+  // =========================================================================
+
+  describe('checkGhAvailable', () => {
+    it('returns { available: true, authenticated: true } when gh auth status succeeds', async () => {
+      mockExecAsync.mockResolvedValue({ stdout: 'Logged in to github.com', stderr: '' });
+
+      const result = await service.checkGhAvailable();
+
+      expect(result).toEqual({ available: true, authenticated: true });
+      expect(mockExecAsync).toHaveBeenCalledWith(
+        'gh auth status',
+        expect.objectContaining({ cwd: '/fake/project', timeout: 3000 }),
+      );
+    });
+
+    it('returns { available: false, authenticated: false } when gh command is not found', async () => {
+      const err = new Error('command not found: gh') as Error & { code?: string };
+      err.code = 'ENOENT';
+      mockExecAsync.mockRejectedValue(err);
+
+      const result = await service.checkGhAvailable();
+
+      expect(result).toEqual({ available: false, authenticated: false });
+    });
+
+    it('returns { available: true, authenticated: false } when gh auth status fails with non-zero exit', async () => {
+      const err = new Error('not logged in') as Error & { code?: number };
+      err.code = 1;
+      mockExecAsync.mockRejectedValue(err);
+
+      const result = await service.checkGhAvailable();
+
+      expect(result).toEqual({ available: true, authenticated: false });
+    });
+  });
 });

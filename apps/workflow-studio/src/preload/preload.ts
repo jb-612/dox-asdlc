@@ -39,12 +39,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** P15-F04: Send revision feedback for a block in gate mode */
     revise: (config: { executionId: string; nodeId: string; feedback: string }) =>
       ipcRenderer.invoke('execution:revise', config),
+    /** P15-F09: Resolve merge conflicts */
+    mergeConflictResolve: (resolutions: unknown) =>
+      ipcRenderer.invoke('execution:merge-resolve', resolutions),
   },
 
   /** Work item access */
   workitem: {
     list: (type: string) => ipcRenderer.invoke('workitem:list', type),
     get: (id: string) => ipcRenderer.invoke('workitem:get', id),
+    /** Check GitHub CLI availability and auth status (P15-F12) */
+    checkGhAvailable: () => ipcRenderer.invoke('workitem:check-gh'),
     /** Read work items from a filesystem directory (P15-F03) */
     listFs: (directory?: string) => ipcRenderer.invoke('workitem:list-fs', directory),
     /** Load full content of a single work item from a filesystem path (P15-F03) */
@@ -118,8 +123,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getEvents: (filter?: unknown) => ipcRenderer.invoke('monitoring:get-events', filter),
     getSessions: () => ipcRenderer.invoke('monitoring:get-sessions'),
     getStats: () => ipcRenderer.invoke('monitoring:get-stats'),
-    startReceiver: () => ipcRenderer.invoke('monitoring:start-receiver'),
-    stopReceiver: () => ipcRenderer.invoke('monitoring:stop-receiver'),
+    startReceiver: () => ipcRenderer.invoke('monitoring:receiver-start'),
+    stopReceiver: () => ipcRenderer.invoke('monitoring:receiver-stop'),
     onEvent: (callback: (...args: unknown[]) => void) =>
       ipcRenderer.on('monitoring:event', (_event, ...args) => callback(...args)),
   },

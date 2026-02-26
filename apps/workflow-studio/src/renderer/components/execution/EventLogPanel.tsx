@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { ExecutionEvent, ExecutionEventType } from '../../../shared/types/execution';
-import { formatEvent } from '../../utils/eventFormatter';
+import { formatExecutionEvent } from '../shared/eventFormatter';
+import { VirtualizedEventLog } from '../shared/VirtualizedEventLog';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -52,45 +53,31 @@ function categoryForType(type: ExecutionEventType): FilterCategory[] {
   }
 }
 
-function matchesFilter(event: ExecutionEvent, filter: FilterCategory): boolean {
-  if (filter === 'all') return true;
-  return categoryForType(event.type).includes(filter);
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 /**
  * Event log panel with filtering, node-level filtering, and auto-scroll.
- * Uses the formatEvent utility for consistent display formatting.
+ * Thin wrapper around VirtualizedEventLog for rendering.
  */
 export default function EventLogPanel({
   events,
   filterNodeId,
 }: EventLogPanelProps): JSX.Element {
   const [filter, setFilter] = useState<FilterCategory>('all');
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(() => {
-    let list = events;
-    if (filterNodeId) {
-      list = list.filter((e) => e.nodeId === filterNodeId);
-    }
-    return list.filter((e) => matchesFilter(e, filter));
-  }, [events, filter, filterNodeId]);
-
-  // Auto-scroll to bottom when events change
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [filtered.length]);
 
   const handleFilterClick = useCallback((key: FilterCategory) => {
     setFilter(key);
   }, []);
+
+  const filterPredicate = useMemo(() => {
+    return (event: ExecutionEvent): boolean => {
+      if (filterNodeId && event.nodeId !== filterNodeId) return false;
+      if (filter === 'all') return true;
+      return categoryForType(event.type).includes(filter);
+    };
+  }, [filter, filterNodeId]);
 
   return (
     <div data-testid="event-log-panel" className="flex flex-col h-full bg-gray-900">
@@ -117,34 +104,14 @@ export default function EventLogPanel({
         ))}
       </div>
 
-      {/* Event list */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-        {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500 text-xs">
-            No events to display
-          </div>
-        ) : (
-          filtered.map((event) => {
-            const formatted = formatEvent(event);
-            return (
-              <div
-                key={event.id}
-                data-testid="event-log-entry"
-                className="flex items-start gap-2 py-1 px-1 rounded hover:bg-gray-800/50 transition-colors"
-              >
-                <span className="text-[10px] text-gray-500 font-mono whitespace-nowrap mt-0.5 min-w-[60px]">
-                  {formatted.timestamp}
-                </span>
-                <span className="flex-shrink-0 mt-0.5 text-gray-400 text-xs">
-                  {formatted.icon}
-                </span>
-                <span className="text-xs text-gray-300 leading-relaxed break-words">
-                  {formatted.text}
-                </span>
-              </div>
-            );
-          })
-        )}
+      {/* Event list — delegated to VirtualizedEventLog */}
+      <div className="flex-1 overflow-hidden">
+        <VirtualizedEventLog
+          events={events}
+          formatter={formatExecutionEvent}
+          filterPredicate={filterPredicate}
+          autoScroll={true}
+        />
       </div>
     </div>
   );

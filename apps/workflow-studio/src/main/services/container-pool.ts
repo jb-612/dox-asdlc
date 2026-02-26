@@ -36,6 +36,8 @@ export type ParallelismModel = 'multi-container' | 'single-container';
  * @property healthCheckTimeoutMs  Total timeout for health check polling (ms).
  * @property dormancyTimeoutMs     Time before a dormant container is terminated (ms).
  * @property parallelismModel      Execution model: 'multi-container' (default) or 'single-container'.
+ * @property telemetryEnabled      Whether to enable telemetry in spawned containers (default true).
+ * @property telemetryUrl          URL for telemetry ingestion in spawned containers.
  */
 export interface ContainerPoolOptions {
   image: string;
@@ -44,6 +46,8 @@ export interface ContainerPoolOptions {
   healthCheckTimeoutMs: number;
   dormancyTimeoutMs: number;
   parallelismModel?: ParallelismModel;
+  telemetryEnabled?: boolean;
+  telemetryUrl?: string;
 }
 
 // Internal mutable record — we store more than the readonly ContainerRecord
@@ -346,48 +350,53 @@ export class ContainerPool {
     const port = this.ports.allocate();
     const agentUrl = `http://localhost:${port}`;
 
-    const createOpts: CreateContainerOptions = {
-      Image: this.options.image,
-      Labels: { 'asdlc.managed': 'true' },
-      Env: [
-        'TELEMETRY_ENABLED=1',
-        'TELEMETRY_URL=http://host.docker.internal:9292/telemetry',
-      ],
-      ExposedPorts: { '3000/tcp': {} },
-      HostConfig: {
-        PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },
-      },
-    };
+    try {
+      const createOpts: CreateContainerOptions = {
+        Image: this.options.image,
+        Labels: { 'asdlc.managed': 'true' },
+        Env: [
+          `TELEMETRY_ENABLED=${this.options.telemetryEnabled !== false ? '1' : '0'}`,
+          `TELEMETRY_URL=${this.options.telemetryUrl ?? 'http://host.docker.internal:9292/telemetry'}`,
+        ],
+        ExposedPorts: { '3000/tcp': {} },
+        HostConfig: {
+          PortBindings: { '3000/tcp': [{ HostPort: String(port) }] },
+        },
+      };
 
-    // Single-container mode uses sleep infinity entrypoint
-    if (this.isSingleContainer()) {
-      createOpts.Cmd = ['sleep', 'infinity'];
+      // Single-container mode uses sleep infinity entrypoint
+      if (this.isSingleContainer()) {
+        createOpts.Cmd = ['sleep', 'infinity'];
+      }
+
+      const container = await this.docker.createContainer(createOpts);
+
+      const record: InternalRecord = {
+        id: container.id,
+        state: 'starting',
+        blockId: null,
+        port,
+        agentUrl,
+        createdAt: Date.now(),
+        dormantSince: null,
+        dormancyTimer: null,
+        acquireCount: 0,
+      };
+      this.records.set(container.id, record);
+      this.emitStateChange(record);
+
+      await this.docker.startContainer(container.id);
+      await this.docker.healthCheck(
+        port,
+        this.options.healthCheckIntervalMs,
+        this.options.healthCheckTimeoutMs,
+      );
+
+      this.transition(record, 'idle');
+    } catch (err) {
+      this.ports.release(port);
+      throw err;
     }
-
-    const container = await this.docker.createContainer(createOpts);
-
-    const record: InternalRecord = {
-      id: container.id,
-      state: 'starting',
-      blockId: null,
-      port,
-      agentUrl,
-      createdAt: Date.now(),
-      dormantSince: null,
-      dormancyTimer: null,
-      acquireCount: 0,
-    };
-    this.records.set(container.id, record);
-    this.emitStateChange(record);
-
-    await this.docker.startContainer(container.id);
-    await this.docker.healthCheck(
-      port,
-      this.options.healthCheckIntervalMs,
-      this.options.healthCheckTimeoutMs,
-    );
-
-    this.transition(record, 'idle');
   }
 
   /**

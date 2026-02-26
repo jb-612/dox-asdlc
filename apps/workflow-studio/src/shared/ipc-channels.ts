@@ -43,12 +43,18 @@ export const IPC_CHANNELS = {
   EXECUTION_BLOCK_ERROR: 'execution:block-error',
   /** Execution abort confirmation */
   EXECUTION_ABORTED: 'execution:aborted',
+  /** Merge conflict resolution request (P15-F09) */
+  EXECUTION_MERGE_CONFLICT: 'execution:merge-conflict',
+  /** Merge conflict resolution response (P15-F09) */
+  EXECUTION_MERGE_RESOLVE: 'execution:merge-resolve',
 
   // ---------------------------------------------------------------------------
   // Work item operations
   // ---------------------------------------------------------------------------
   WORKITEM_LIST: 'workitem:list',
   WORKITEM_GET: 'workitem:get',
+  /** Check whether the GitHub CLI is installed and authenticated (P15-F12) */
+  WORKITEM_CHECK_GH: 'workitem:check-gh',
   /** Reads work items from the filesystem workItemDirectory (P15-F03) */
   WORKITEM_LIST_FS: 'workitem:list-fs',
   /** Loads full content of a single work item from the filesystem (P15-F03) */

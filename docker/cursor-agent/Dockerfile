@@ -16,7 +16,13 @@ RUN apt-get update && apt-get install -y \
 
 # Install Cursor CLI via official installer.
 # The installer places the binary at /root/.cursor/bin/agent
-RUN curl https://cursor.com/install -fsS | bash
+# Download to file first for integrity verification (pipe-to-bash is unsafe).
+# TODO: Pin to a specific version and verify SHA256 checksum once Cursor
+#       publishes release checksums. Example:
+#   echo "<sha256>  /tmp/cursor-install.sh" | sha256sum -c -
+RUN curl https://cursor.com/install -fsSo /tmp/cursor-install.sh \
+    && bash /tmp/cursor-install.sh \
+    && rm /tmp/cursor-install.sh
 
 # Make the binary available system-wide as 'agent'.
 # server.ts resolves AGENT_BINARY env var (default: "agent") via PATH lookup.

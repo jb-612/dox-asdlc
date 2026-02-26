@@ -68,4 +68,12 @@ describe('settings types (T01)', () => {
     expect(settings.dockerSocketPath).toBe('/custom/docker.sock');
     expect(settings.agentTimeoutSeconds).toBe(600);
   });
+
+  it('DEFAULT_SETTINGS.containerImage defaults to asdlc-agent:1.0.0', () => {
+    expect(DEFAULT_SETTINGS.containerImage).toBe('asdlc-agent:1.0.0');
+  });
+
+  it('DEFAULT_SETTINGS.dormancyTimeoutMs defaults to 300000', () => {
+    expect(DEFAULT_SETTINGS.dormancyTimeoutMs).toBe(300000);
+  });
 });

@@ -146,7 +146,7 @@ def extract_paths_from_arguments(tool: str, arguments: dict) -> list[str]:
     """Extract file paths from tool arguments based on tool type."""
     paths = []
     # Common path fields
-    for field in ["file_path", "path", "file", "directory"]:
+    for field in ["file_path", "path", "file", "directory", "notebook_path"]:
         val = arguments.get(field)
         if val and isinstance(val, str):
             sanitized = sanitize_path(val)
@@ -172,9 +172,9 @@ def check_tool_restriction(tool: str, evaluated: dict) -> tuple[str | None, bool
     if tool_lower in tools_denied:
         return f"Tool '{tool}' is denied by active guardrails", True
 
-    # If there's an allow list and tool is not on it, warn (advisory)
+    # If there's an allow list and tool is not on it, block (mandatory)
     if tools_allowed and tool_lower not in tools_allowed:
-        return f"Tool '{tool}' is not in the allowed tools list", False
+        return f"Tool '{tool}' is not in the allowed tools list", True
 
     return None, False
 
@@ -240,8 +240,8 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
 
-    # Check path restrictions for Write and Edit tools
-    if tool in ("Write", "Edit") and paths:
+    # Check path restrictions for Write, Edit, MultiEdit, and NotebookEdit tools
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit") and paths:
         reason, is_mandatory = check_path_restriction(paths, evaluated, context)
         if reason and is_mandatory:
             print(reason, file=sys.stderr)

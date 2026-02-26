@@ -376,6 +376,7 @@ async def list_guidelines(
         20, ge=1, le=100, description="Results per page (1-100)"
     ),
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> GuidelinesListResponse:
     """List guardrails guidelines with optional filtering and pagination.
 
@@ -440,6 +441,7 @@ async def list_audit_entries(
         50, ge=1, le=200, description="Results per page (1-200)"
     ),
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> AuditLogResponse:
     """List audit log entries with optional filtering and pagination.
 
@@ -495,6 +497,7 @@ async def list_audit_entries(
 @router.post("/evaluate", response_model=EvaluatedContextResponse)
 async def evaluate_context(
     body: TaskContextRequest,
+    _key: None = Depends(verify_api_key),
 ) -> EvaluatedContextResponse:
     """Evaluate a task context against all enabled guidelines.
 
@@ -557,6 +560,7 @@ async def export_guidelines(
         None, description="Filter by guideline category"
     ),
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> list[GuidelineResponse]:
     """Export guidelines as a JSON array.
 
@@ -651,6 +655,7 @@ async def import_guidelines(
 async def get_guideline(
     guideline_id: str,
     store: GuardrailsStore = Depends(get_guardrails_store),
+    _key: None = Depends(verify_api_key),
 ) -> GuidelineResponse:
     """Get a single guideline by ID.
 

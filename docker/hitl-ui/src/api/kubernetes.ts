@@ -70,7 +70,7 @@ const K8S_STALE_TIME = 15000;
  * Uses mocks when VITE_USE_MOCKS=true or in development mode.
  */
 function shouldUseMocks(): boolean {
-  return import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+  return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
 // ============================================================================

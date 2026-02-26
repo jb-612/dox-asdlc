@@ -148,7 +148,7 @@ cd .worktrees/p11-guardrails && export CLAUDE_INSTANCE_ID=p11-guardrails && clau
 **Key concepts:**
 - **Session Identity** (CLAUDE_INSTANCE_ID) = which feature context
 - **Agent Role** (subagent) = which paths are allowed
-- **Presence**: Heartbeat every 60s, stale after 5min. See `.claude/rules/coordination-protocol/`
+- **Presence**: Heartbeat every 60s, stale after 5min. See `.claude/rules/coordination-protocol.md`
 
 **Librarian Merge Protocol:** Human acts as integration gatekeeper — merge one branch at a time to main, rebase others after.
 
@@ -158,7 +158,7 @@ See `.claude/rules/parallel-coordination.md` for full multi-session details.
 
 The project includes a dynamic guardrails system (P11-F01) that provides contextually-conditional rules for agent behavior. Guidelines are stored in Elasticsearch, evaluated at runtime against the current task context, and injected into agent sessions via Claude Code hooks. This replaces static rule loading with targeted, per-context enforcement.
 
-See `@docs/guardrails/README.md` for full documentation.
+See `docs/guardrails/README.md` for full documentation.
 
 ### Key Commands
 
@@ -224,10 +224,10 @@ tmux shortcuts: `Ctrl-b n` (next window), `Ctrl-b p` (previous window), `Ctrl-b 
 
 ## Related Docs
 
-- @docs/environments/README.md — Environment tiers
-- @docs/Main_Features.md — Feature specs
-- @docs/K8s_Service_Access.md — K8s networking
-- @docs/guardrails/README.md — Guardrails configuration system
-- @docs/observability/workstation.md — Workstation observability guide
-- @docs/decisions/e2b-evaluation.md — E2B sandbox evaluation (deferred)
-- @docs/decisions/hook-consolidation.md — Hook consolidation ADR
+- docs/environments/README.md — Environment tiers
+- docs/Main_Features.md — Feature specs
+- docs/K8s_Service_Access.md — K8s networking
+- docs/guardrails/README.md — Guardrails configuration system
+- docs/observability/workstation.md — Workstation observability guide
+- docs/decisions/e2b-evaluation.md — E2B sandbox evaluation (deferred)
+- docs/decisions/hook-consolidation.md — Hook consolidation ADR

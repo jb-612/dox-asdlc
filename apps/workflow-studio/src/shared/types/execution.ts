@@ -88,6 +88,7 @@ export interface CodeBlockDeliverables {
   blockType: 'code';
   filesChanged?: string[];
   diffSummary?: string;
+  fileDiffs?: FileDiff[];
 }
 
 export interface TestBlockDeliverables {
@@ -200,6 +201,21 @@ export interface ParallelBlockResult {
   output: unknown;
   error?: string;
   durationMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Merge conflict resolution (P15-F09)
+// ---------------------------------------------------------------------------
+
+export interface MergeConflict {
+  filePath: string;
+  blockAId: string;
+  blockBId: string;
+}
+
+export interface MergeResolution {
+  filePath: string;
+  keepBlockId: string | 'abort';
 }
 
 // ---------------------------------------------------------------------------

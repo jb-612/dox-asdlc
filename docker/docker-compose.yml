@@ -10,7 +10,7 @@ services:
     container_name: asdlc-postgres
     hostname: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
@@ -37,7 +37,7 @@ services:
     container_name: asdlc-orchestrator
     hostname: orchestrator
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -88,7 +88,7 @@ services:
     container_name: asdlc-workers
     hostname: workers
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -125,7 +125,7 @@ services:
     container_name: asdlc-review-swarm
     hostname: review-swarm
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -168,7 +168,7 @@ services:
     container_name: asdlc-cursor-agent
     hostname: cursor-agent
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     environment:
       - SERVICE_NAME=cursor-agent
       - SERVICE_PORT=8090
@@ -202,7 +202,7 @@ services:
     container_name: asdlc-redis
     hostname: redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -223,7 +223,7 @@ services:
     container_name: asdlc-elasticsearch
     hostname: elasticsearch
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -249,7 +249,7 @@ services:
     container_name: asdlc-victoriametrics
     hostname: victoriametrics
     ports:
-      - "8428:8428"
+      - "127.0.0.1:8428:8428"
     command:
       - -storageDataPath=/victoria-metrics-data
       - -retentionPeriod=30d
@@ -285,7 +285,7 @@ services:
     container_name: asdlc-slack-bridge
     hostname: slack-bridge
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     environment:
       - REDIS_URL=redis://:changeme_redis_password_before_deployment@redis:6379
       - SERVICE_NAME=slack-bridge
@@ -331,7 +331,7 @@ services:
     container_name: asdlc-hitl-ui
     hostname: hitl-ui
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -362,7 +362,7 @@ services:
     container_name: asdlc-infisical
     hostname: infisical
     ports:
-      - "8086:8080"
+      - "127.0.0.1:8086:8080"
     environment:
       - ENCRYPTION_KEY=${INFISICAL_ENCRYPTION_KEY:-}
       - AUTH_SECRET=${INFISICAL_AUTH_SECRET:-}

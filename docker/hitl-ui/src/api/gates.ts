@@ -20,7 +20,7 @@ export const gateKeys = {
 };
 
 // Check if we're in mock mode
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Fetch pending gates
 async function fetchPendingGates(

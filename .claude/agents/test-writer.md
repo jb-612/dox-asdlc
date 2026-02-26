@@ -2,6 +2,7 @@
 name: test-writer
 description: Test-first developer that reads specs and writes failing tests. Enforces RED phase of TDD by writing tests before any implementation code exists.
 tools: Read, Write, Edit, Bash, Glob, Grep
+disallowedTools: MultiEdit, NotebookEdit, Task, WebFetch, WebSearch
 model: inherit
 ---
 

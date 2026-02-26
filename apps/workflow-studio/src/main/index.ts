@@ -2,6 +2,7 @@ import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { registerAllHandlers } from './ipc';
+import type { ContainerPool } from './services/container-pool';
 import { CLISpawner } from './services/cli-spawner';
 import { WorkItemService } from './services/workitem-service';
 import { WorkflowFileService } from './services/workflow-file-service';
@@ -9,6 +10,7 @@ import { SettingsService } from './services/settings-service';
 import { SessionHistoryService } from './services/session-history-service';
 import { cleanupTempRepoDirs } from './temp-cleanup';
 import { registerShutdownHooks } from './services/container-pool-shutdown';
+import { initContainerPool } from './services/pool-startup';
 import { MonitoringStore } from './services/monitoring-store';
 import { TelemetryReceiver } from './services/telemetry-receiver';
 import { registerMonitoringHandlers, setupMonitoringPush } from './ipc/monitoring-handlers';
@@ -109,6 +111,7 @@ let telemetryReceiver: TelemetryReceiver | null = null;
 // ---------------------------------------------------------------------------
 
 /** Set by initContainerPool() once Docker is available. */
+let containerPool: ContainerPool | null = null;
 let containerPoolTeardown: (() => Promise<void>) | null = null;
 
 function createWindow(): void {
@@ -208,14 +211,22 @@ app.whenReady().then(async () => {
     templateFileService,
     settingsService,
     sessionHistoryService,
+    getContainerPool: () => containerPool,
   });
 
   // ---------------------------------------------------------------------------
-  // NOTE: ContainerPool and registerParallelHandlers (P15-F05) are NOT wired
-  // here for Phase 1. Phase 1 uses single-block sequential execution via
-  // CLISpawner directly in ExecutionEngine. Parallel Docker execution via
-  // ContainerPool is deferred to Phase 2.
+  // Container Pool (P15-F09, T04) — wire pool at startup if Docker available
   // ---------------------------------------------------------------------------
+  initContainerPool({
+    dockerSocketPath: settings.dockerSocketPath,
+    containerImage: settings.containerImage,
+    dormancyTimeoutMs: settings.dormancyTimeoutMs,
+  }).then((pool) => {
+    if (pool) {
+      containerPool = pool;
+      containerPoolTeardown = () => pool.teardown();
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Container pool shutdown hooks (P15-F05, T23)
@@ -245,7 +256,11 @@ app.whenReady().then(async () => {
   );
   registerMonitoringHandlers(monitoringStore, telemetryReceiver);
   setupMonitoringPush(monitoringStore);
-  await telemetryReceiver.start();
+  try {
+    await telemetryReceiver.start();
+  } catch (err) {
+    console.error('[Monitoring] TelemetryReceiver failed to start:', err);
+  }
 
   // Now load the renderer — handlers are ready
   loadWindowContent();

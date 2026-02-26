@@ -11,10 +11,14 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
 from typing import Any
+
+# Instance ID validation: alphanumeric, hyphens, underscores, dots only
+_VALID_INSTANCE_ID = re.compile(r'^[a-zA-Z0-9_\-.]+$')
 
 from src.core.redis_client import close_redis_client, get_redis_client
 from src.infrastructure.coordination.client import CoordinationClient
@@ -67,6 +71,11 @@ class CoordinationMCPServer:
         # Check environment variable first
         env_id = os.environ.get("CLAUDE_INSTANCE_ID")
         if env_id and env_id.lower() != "unknown":
+            if not _VALID_INSTANCE_ID.match(env_id):
+                raise RuntimeError(
+                    f"Invalid CLAUDE_INSTANCE_ID: '{env_id}'. "
+                    "Must contain only alphanumeric, hyphens, underscores, or dots."
+                )
             return env_id
 
         # Check if we're in a worktree

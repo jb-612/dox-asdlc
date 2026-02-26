@@ -10,7 +10,7 @@ export const workerKeys = {
 };
 
 // Check if we're in mock mode
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 // Fetch worker pool status
 async function fetchWorkerPoolStatus(): Promise<WorkerPoolStatus> {

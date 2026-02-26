@@ -570,4 +570,63 @@ describe('ContainerPool', () => {
       snap.forEach((r) => expect(r.state).toBe('terminated'));
     });
   });
+
+  // -------------------------------------------------------------------------
+  // T14: Telemetry env var forwarding
+  // -------------------------------------------------------------------------
+
+  describe('T14: telemetry env var forwarding', () => {
+    it('passes telemetryEnabled and telemetryUrl from options to container env', async () => {
+      const pool = createPool({
+        telemetryEnabled: true,
+        telemetryUrl: 'http://custom-host:9999/telemetry',
+      });
+      await pool.prewarm(1);
+
+      const createCall = mockCreateContainer.mock.calls[0][0];
+      const env = createCall.Env as string[];
+      expect(env).toContain('TELEMETRY_ENABLED=1');
+      expect(env).toContain('TELEMETRY_URL=http://custom-host:9999/telemetry');
+    });
+
+    it('defaults TELEMETRY_ENABLED to 0 when telemetryEnabled is false', async () => {
+      const pool = createPool({ telemetryEnabled: false });
+      await pool.prewarm(1);
+
+      const createCall = mockCreateContainer.mock.calls[0][0];
+      const env = createCall.Env as string[];
+      expect(env).toContain('TELEMETRY_ENABLED=0');
+    });
+
+    it('uses configurable telemetryUrl instead of hardcoded value', async () => {
+      const pool = createPool({
+        telemetryUrl: 'http://my-telemetry:8080/ingest',
+      });
+      await pool.prewarm(1);
+
+      const createCall = mockCreateContainer.mock.calls[0][0];
+      const env = createCall.Env as string[];
+      const urlEntry = env.find((e: string) => e.startsWith('TELEMETRY_URL='));
+      expect(urlEntry).toBe('TELEMETRY_URL=http://my-telemetry:8080/ingest');
+    });
+
+    it('uses default telemetry URL when telemetryUrl is not provided', async () => {
+      const pool = createPool();
+      await pool.prewarm(1);
+
+      const createCall = mockCreateContainer.mock.calls[0][0];
+      const env = createCall.Env as string[];
+      const urlEntry = env.find((e: string) => e.startsWith('TELEMETRY_URL='));
+      expect(urlEntry).toBe('TELEMETRY_URL=http://host.docker.internal:9292/telemetry');
+    });
+
+    it('defaults TELEMETRY_ENABLED to 1 when telemetryEnabled is not provided', async () => {
+      const pool = createPool();
+      await pool.prewarm(1);
+
+      const createCall = mockCreateContainer.mock.calls[0][0];
+      const env = createCall.Env as string[];
+      expect(env).toContain('TELEMETRY_ENABLED=1');
+    });
+  });
 });

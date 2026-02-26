@@ -88,6 +88,10 @@ export interface AppSettings {
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Port for the telemetry HTTP receiver (default: 9292) */
   telemetryReceiverPort?: number;
+  /** Docker image for container pool (default: asdlc-agent:1.0.0) */
+  containerImage?: string;
+  /** Dormancy timeout in ms before idle containers are terminated (default: 300000) */
+  dormancyTimeoutMs?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -109,4 +113,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultRepoMountPath: '',
   workspaceDirectory: '',
   agentTimeoutSeconds: 300,
+  containerImage: 'asdlc-agent:1.0.0',
+  dormancyTimeoutMs: 300_000,
 };

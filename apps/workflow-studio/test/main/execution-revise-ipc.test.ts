@@ -128,9 +128,9 @@ describe('execution:revise IPC handler', () => {
       feedback: 'Please improve the plan',
     })) as { success: boolean; error?: string };
 
-    // This should fail because executionId is undefined, which won't match
+    // This should fail because executionId is undefined / missing
     expect(result.success).toBe(false);
-    expect(result.error).toBe('Execution not found');
+    expect(result.error).toBe('Missing or invalid executionId');
   });
 
   it('should succeed when executionId is included in the payload', async () => {

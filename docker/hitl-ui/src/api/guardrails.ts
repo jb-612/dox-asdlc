@@ -39,7 +39,7 @@ import type {
  * Check if we should use mock data.
  */
 function shouldUseMocks(): boolean {
-  return import.meta.env.VITE_USE_MOCKS === 'true' || import.meta.env.DEV;
+  return import.meta.env.VITE_USE_MOCKS === 'true';
 }
 
 // ============================================================================

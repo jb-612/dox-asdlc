@@ -4,6 +4,7 @@ import { ExecutionEngine } from '../services/execution-engine';
 import type { CLISpawner } from '../services/cli-spawner';
 import type { RedisEventClient } from '../services/redis-client';
 import type { SettingsService } from '../services/settings-service';
+import type { ExecutorContainerPool } from '../services/workflow-executor';
 import type { WorkflowDefinition } from '../../shared/types/workflow';
 import type { WorkItemReference } from '../../shared/types/workitem';
 import type { RepoMount } from '../../shared/types/repo';
@@ -26,6 +27,9 @@ export interface ExecutionHandlerDeps {
   cliSpawner?: CLISpawner;
   redisClient?: RedisEventClient;
   settingsService?: SettingsService;
+  /** Getter for the container pool. Called at execution start time so the
+   *  pool can be initialized asynchronously after handler registration. */
+  getContainerPool?: () => ExecutorContainerPool | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +44,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
   const cliSpawner = deps?.cliSpawner;
   const redisClient = deps?.redisClient;
   const settingsService = deps?.settingsService;
+  const getContainerPool = deps?.getContainerPool;
 
   // --- Start execution ---------------------------------------------------
   ipcMain.handle(
@@ -55,6 +60,14 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         mockMode?: boolean;
       },
     ) => {
+      // Validate payload
+      if (!config || typeof config !== 'object') {
+        return { success: false, error: 'Invalid or missing payload' };
+      }
+      if (typeof config.workflowId !== 'string' || config.workflowId.length === 0) {
+        return { success: false, error: 'Missing or invalid workflowId (must be a non-empty string)' };
+      }
+
       // Refuse if already running
       if (engine?.isActive()) {
         return {
@@ -99,6 +112,12 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         fileRestrictions: config.repoMount?.fileRestrictions || undefined,
         readOnly: config.repoMount?.readOnly || undefined,
       });
+
+      // Wire container pool for parallel execution (P15-F09 T04)
+      const pool = getContainerPool?.();
+      if (pool) {
+        engine.containerPool = pool;
+      }
 
       // Start is async and runs in the background -- we return immediately
       // with the execution ID while the engine drives the workflow.
@@ -172,6 +191,20 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         reason?: string;
       },
     ) => {
+      // Validate payload
+      if (!decision || typeof decision !== 'object') {
+        return { success: false, error: 'Invalid or missing payload' };
+      }
+      if (typeof decision.executionId !== 'string' || !decision.executionId) {
+        return { success: false, error: 'Missing or invalid executionId' };
+      }
+      if (typeof decision.nodeId !== 'string' || !decision.nodeId) {
+        return { success: false, error: 'Missing or invalid nodeId' };
+      }
+      if (typeof decision.selectedOption !== 'string' || !decision.selectedOption) {
+        return { success: false, error: 'Missing or invalid selectedOption' };
+      }
+
       const eng = engine;
       if (!eng) {
         return { success: false, error: 'No active execution' };
@@ -198,6 +231,20 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         feedback: string;
       },
     ) => {
+      // Validate payload
+      if (!config || typeof config !== 'object') {
+        return { success: false, error: 'Invalid or missing payload' };
+      }
+      if (typeof config.executionId !== 'string' || !config.executionId) {
+        return { success: false, error: 'Missing or invalid executionId' };
+      }
+      if (typeof config.nodeId !== 'string' || !config.nodeId) {
+        return { success: false, error: 'Missing or invalid nodeId' };
+      }
+      if (typeof config.feedback !== 'string' || !config.feedback) {
+        return { success: false, error: 'Missing or invalid feedback' };
+      }
+
       const eng = engine;
       if (!eng) {
         return { success: false, error: 'No active execution' };
