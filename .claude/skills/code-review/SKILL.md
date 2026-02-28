@@ -38,6 +38,7 @@ Focus areas:
 - **Security** — No injection, no hardcoded secrets, proper input validation (OWASP Top 10)
 - **Correctness** — Logic matches specification, edge cases handled
 - **Style** — Follows project conventions, clear naming, type hints
+- **Complexity** — Run `./tools/complexity.sh --threshold 5` on changed files; flag CC > 5 violations. Run `--verify-comments` to detect CC annotation drift.
 - **Dependencies** — No known CVEs, minimal dependency footprint
 - Invokes `@security-review` checklist for comprehensive security analysis
 

@@ -143,6 +143,9 @@ Phase details: `PLAN-phases.md` (P04, P05, P06) and `PLAN-phases-2.md` (P08, P12
 - [~] F12 diffviewer-github-issues
 - [~] F13 monitoring-settings-completion
 
+## META — Cross-Cutting Improvements
+- [x] META-02 cyclomatic-complexity-enforcement
+
 ---
 
 ## Legend

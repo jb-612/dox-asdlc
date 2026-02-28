@@ -39,6 +39,15 @@ All tests must pass. If any fail, debug and fix before proceeding.
 
 Fix all errors before proceeding.
 
+## Step 3.5: Run Complexity Check
+
+```bash
+./tools/complexity.sh --threshold 5 src/path/to/feature/
+./tools/complexity.sh --verify-comments src/path/to/feature/
+```
+
+All functions must be CC <= 5. Fix violations before proceeding. Docstring `CC = N` annotations must match actual complexity.
+
 ## Step 4: Verify Interfaces
 
 Compare implementation against `design.md`:

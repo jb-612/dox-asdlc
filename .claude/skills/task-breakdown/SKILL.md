@@ -32,6 +32,7 @@ Each task must be:
 - **< 2 hours** estimated effort
 - **Independently testable** — produces one observable behavior change
 - **Single-responsibility** — touches one concern (one module, one endpoint, one component)
+- **CC budget** — all new/modified functions must stay CC <= 5; split complex logic into helpers
 
 ### Task Format
 

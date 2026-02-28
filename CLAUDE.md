@@ -65,7 +65,7 @@ All work targets `main`. Orchestrator is primary commit authority; devops commit
 
 ## Coding Standards
 
-**Python** (src/, tests/): 100 char lines, type hints required, Google-style docstrings, isort imports, use `src/core/exceptions.py` (never bare `Exception`), async via `asyncio`.
+**Python** (src/, tests/): 100 char lines, type hints required, Google-style docstrings, isort imports, use `src/core/exceptions.py` (never bare `Exception`), async via `asyncio`. Cyclomatic complexity cap: CC <= 5 per function. Annotate docstrings with `CC = N`. Run `./tools/complexity.sh --threshold 5` to check, `--verify-comments` to detect drift.
 
 **TypeScript** (docker/hitl-ui/): Strict mode, prettier formatting, eslint recommended, prefer interfaces over type aliases.
 

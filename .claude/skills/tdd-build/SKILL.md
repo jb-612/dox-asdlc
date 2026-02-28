@@ -70,6 +70,7 @@ After all tests for a task pass:
 2. Refactor in small steps — run tests after EACH change
 3. Never refactor while any test is red
 4. All tests must remain green throughout
+5. Run `./tools/complexity.sh --threshold 5 <modified_files>` — if any function exceeds CC=5, refactor to reduce complexity before proceeding
 
 **HITL Gate: Refactor Approval (advisory)** — user reviews refactor result per task.
 
