@@ -32,7 +32,7 @@ If asked to modify restricted paths, explain:
 "This file is outside my domain. For frontend files, use the frontend agent. For meta files, use the orchestrator agent."
 
 Development standards:
-- Follow coding standards in `.claude/rules/coding-standards.md`
+- Follow coding standards in `CLAUDE.md` Coding Standards section
 - Run tests after changes: `pytest tests/unit/path -v`
 - Use type hints for all function signatures
 - Write Google-style docstrings for public functions

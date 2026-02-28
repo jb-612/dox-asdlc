@@ -4,31 +4,9 @@ An Agentic Software Development Lifecycle (aSDLC) system using the Claude Agent 
 
 ## Quick Start
 
-This project uses Claude Code CLI for development. The workflow enforces planning before implementation.
-
-**Prerequisites:**
-
-- Python 3.11+
-- Claude Code CLI installed and authenticated
-- Docker 24+ (for local development)
-- Kubernetes + Helm 3+ (optional, for K8s testing)
-- gcloud CLI (optional, for remote environments)
-
-## Environment Tiers
-
-| Tier | Platform | Use Case | Speed |
-|------|----------|----------|-------|
-| **Local Dev** | Docker Compose | Daily development | Fast |
-| **Local Staging** | K8s (minikube) | Helm/K8s testing | Slow |
-| **Remote Lab** | GCP Cloud Run | Demos | Fast |
-| **Remote Staging** | GCP GKE | Pre-production | Slow |
-
-See `docs/environments/README.md` for detailed guides.
-
-**Local Development (Docker Compose) - Recommended:**
+**Prerequisites:** Python 3.11+, Claude Code CLI, Docker 24+
 
 ```bash
-# Clone and enter project
 cd dox-asdlc
 
 # Start all services
@@ -37,45 +15,43 @@ cd docker && docker compose up -d
 # Access services
 # HITL UI: http://localhost:3000
 # API: http://localhost:8080
-# Metrics: http://localhost:8428
 
 # Create a new feature
 ./scripts/new-feature.sh P01 F02 "feature-name"
 
-# Validate planning before coding
+# Validate planning, then implement, then complete
 ./scripts/check-planning.sh P01-F02-feature-name
-
-# After implementation, validate completion
 ./scripts/check-completion.sh P01-F02-feature-name
 ```
 
-**Local Staging (Minikube) - For K8s testing:**
+## Development Workflow
 
-```bash
-# Start local cluster
-minikube start -p dox-asdlc --cpus=4 --memory=8192
+All work follows the 11-step workflow defined in `CLAUDE.md`:
 
-# Build and load images
-./scripts/build-images.sh --minikube
+1. **Plan** -- Create work item with design, user stories, and tasks
+2. **Validate** -- Run `check-planning.sh` to verify completeness
+3. **Implement** -- Execute tasks using TDD (Red-Green-Refactor)
+4. **Review** -- Reviewer inspects; findings become GitHub issues
+5. **Complete** -- Run `check-completion.sh`, commit only when 100% done
 
-# Deploy via Helm
-helm upgrade --install dox-asdlc ./helm/dox-asdlc -n dox-asdlc --create-namespace
+See `.workitems/PLAN.md` for project tracking and `.workitems/README.md` for conventions.
 
-# Verify
-kubectl get pods -n dox-asdlc
-```
+## Multi-Agent Architecture
 
-## Multi-Agent CLI Architecture
+Multiple Claude CLI sessions work in parallel via isolated git worktrees, organized by bounded context (feature/epic).
 
-This project uses three specialized Claude CLI instances working in parallel:
+| Role | Path Access | Responsibility |
+|------|-------------|----------------|
+| planner | `.workitems/` | Planning artifacts only |
+| backend | `src/workers/`, `src/orchestrator/`, `src/infrastructure/` | Workers, orchestrator, infrastructure |
+| frontend | `src/hitl_ui/`, `docker/hitl-ui/` | HITL Web UI, React components |
+| reviewer | All (read-only) | Code review, design review |
+| test-writer | Test files | Writes failing tests (RED phase) |
+| debugger | All (read-only) | Test failure diagnostics |
+| orchestrator | All paths, exclusive meta files | Commits, docs, coordination |
+| devops | `docker/`, `helm/`, `.github/workflows/` | Infrastructure, deployments |
 
-| Agent | Path Access | Responsibility |
-|-------|-------------|----------------|
-| Orchestrator | All paths, exclusive meta files | Reviews, merges, meta files, docs |
-| Backend | `src/workers/`, `src/orchestrator/`, `src/infrastructure/` | Workers, orchestrator, infrastructure |
-| Frontend | `src/hitl_ui/`, `docker/hitl-ui/` | HITL Web UI, frontend components |
-
-Coordination happens via Redis messaging. See `.claude/rules/parallel-coordination.md`.
+Coordination via Redis messaging. See `.claude/rules/coordination-protocol.md`.
 
 ## Project Structure
 
@@ -83,12 +59,14 @@ Coordination happens via Redis messaging. See `.claude/rules/parallel-coordinati
 dox-asdlc/
 ├── CLAUDE.md              # Claude Code configuration
 ├── .claude/               # Claude Code settings and skills
-│   ├── settings.json
+│   ├── settings.json      # Hooks and environment
+│   ├── agents/            # Agent definitions
 │   ├── rules/             # Development rules
-│   ├── skills/            # Custom skills
-│   └── subagents/         # Subagent definitions
+│   └── skills/            # Custom skills
 ├── .workitems/            # Feature planning artifacts
-│   └── Pnn-Fnn-{name}/    # Per-feature folders
+│   ├── PLAN.md            # Master project plan
+│   ├── _templates/        # Work item templates
+│   └── Pnn-Fnn-{name}/   # Per-feature folders
 ├── docs/                  # Solution documentation
 ├── src/                   # Source code
 │   ├── orchestrator/      # Governance container
@@ -104,97 +82,25 @@ dox-asdlc/
 ├── docker/                # Container definitions
 │   └── hitl-ui/           # HITL Web UI (React SPA)
 ├── helm/                  # Kubernetes Helm charts
-│   └── dox-asdlc/         # Umbrella chart
-│       └── charts/        # Sub-charts (redis, chromadb, etc.)
-└── scripts/               # Development scripts
-    ├── coordination/      # CLI coordination (Redis messaging)
-    ├── k8s/               # Kubernetes scripts
-    └── orchestrator/      # Orchestrator review scripts
+└── scripts/               # Development and session scripts
 ```
 
-## Development Workflow
+## Environment Tiers
 
-1. **Plan**: Create work item with design, user stories, and tasks
-2. **Validate**: Run `check-planning.sh` to verify completeness
-3. **Implement**: Execute tasks using TDD (Red-Green-Refactor)
-4. **Complete**: Run `check-completion.sh` to verify all criteria met
-5. **Commit**: Commit only when feature is 100% complete
+| Tier | Platform | Use Case |
+|------|----------|----------|
+| **Workstation** | Bare metal (tmux + worktrees) | Agent development |
+| **Local Dev** | Docker Compose | Daily development (recommended) |
+| **Local Staging** | K8s (minikube) | Helm chart testing |
+| **Remote Lab** | GCP Cloud Run | Demos |
+| **Remote Staging** | GCP GKE | Pre-production |
 
-## CLI Coordination
-
-```bash
-# Start session with a launcher script (creates identity file)
-./start-backend.sh      # For backend development
-./start-frontend.sh     # For frontend development
-./start-orchestrator.sh # For review/merge operations
-
-# Check coordination messages
-./scripts/coordination/check-messages.sh
-
-# Publish a message
-./scripts/coordination/publish-message.sh <type> <subject> <description> --to <target>
-
-# Acknowledge a message
-./scripts/coordination/ack-message.sh <message-id>
-```
-
-## Remote Deployments
-
-### Remote Lab (GCP Cloud Run)
-
-Quick serverless deployment for demos:
-
-```bash
-export PROJECT_ID=your-project-id
-
-# Build and push images
-gcloud auth configure-docker
-docker build -t gcr.io/$PROJECT_ID/orchestrator -f docker/orchestrator/Dockerfile .
-docker push gcr.io/$PROJECT_ID/orchestrator
-
-# Deploy to Cloud Run
-gcloud run deploy orchestrator --image gcr.io/$PROJECT_ID/orchestrator --allow-unauthenticated
-```
-
-See `docs/environments/remote-lab.md` for full guide.
-
-### Remote Staging (GCP GKE)
-
-Production-like Kubernetes environment:
-
-```bash
-export PROJECT_ID=your-project-id
-export CLUSTER_NAME=dox-staging
-
-# Get cluster credentials
-gcloud container clusters get-credentials $CLUSTER_NAME --region us-central1
-
-# Deploy via Helm
-helm upgrade --install dox-asdlc ./helm/dox-asdlc -n dox-staging
-```
-
-See `docs/environments/remote-staging.md` for full guide.
-
-### Plane CE (Project Management)
-
-Optionally deploy Plane Community Edition for project/task management:
-
-```bash
-# Deploy Plane CE alongside aSDLC
-./scripts/k8s/deploy.sh --with-plane
-
-# Access Plane CE UI (minikube)
-minikube service plane-app-web -n plane-ce --url
-```
+See `docs/environments/README.md` for detailed guides and `@deploy` skill for deployment scripts.
 
 ## Documentation
 
-- [Environment Tiers](docs/environments/README.md) - Local Dev, Staging, Remote environments
-- [Main Features](docs/Main_Features.md) - Feature specifications
-- [User Stories](docs/User_Stories.md) - Epic-level requirements
-- [K8s Service Access](docs/K8s_Service_Access.md) - Kubernetes networking architecture
-- [VictoriaMetrics Monitoring](docs/VictoriaMetrics_Monitoring.md) - Metrics and observability
-
-## License
-
-[License information here]
+- [Environment Tiers](docs/environments/README.md)
+- [Main Features](docs/Main_Features.md)
+- [K8s Service Access](docs/K8s_Service_Access.md)
+- [Guardrails](docs/guardrails/README.md)
+- [Observability](docs/observability/workstation.md)

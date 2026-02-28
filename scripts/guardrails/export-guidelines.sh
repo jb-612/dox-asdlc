@@ -2,14 +2,14 @@
 # Export guidelines from Elasticsearch to static JSON file.
 #
 # This script queries the guardrails-config index in Elasticsearch
-# and writes all guidelines as a JSON array to .claude/guardrails-static.json.
+# and writes all guidelines as a JSON array to src/core/guardrails/static-guidelines.json.
 #
 # Usage:
 #   ./scripts/guardrails/export-guidelines.sh [--es-url URL] [--output PATH]
 #
 # Options:
 #   --es-url URL     Elasticsearch URL (default: http://localhost:9200)
-#   --output PATH    Output file path (default: .claude/guardrails-static.json)
+#   --output PATH    Output file path (default: src/core/guardrails/static-guidelines.json)
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ else
     PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 fi
 
-OUTPUT_FILE="${PROJECT_ROOT}/.claude/guardrails-static.json"
+OUTPUT_FILE="${PROJECT_ROOT}/src/core/guardrails/static-guidelines.json"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -45,7 +45,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --es-url URL     Elasticsearch URL (default: http://localhost:9200)"
-            echo "  --output PATH    Output file path (default: .claude/guardrails-static.json)"
+            echo "  --output PATH    Output file path (default: src/core/guardrails/static-guidelines.json)"
             exit 0
             ;;
         *)

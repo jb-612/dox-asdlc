@@ -1,71 +1,4 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(./tools/*:*)",
-      "Bash(./scripts/*:*)",
-      "Bash(git:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(.venv/bin/*:*)",
-      "Bash(source .venv/bin/activate:*)",
-      "Bash(pip:*)",
-      "Bash(pip3:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(node:*)",
-      "Bash(docker:*)",
-      "Bash(docker-compose:*)",
-      "Bash(kubectl:*)",
-      "Bash(helm:*)",
-      "Bash(gh:*)",
-      "Bash(ls:*)",
-      "Bash(mkdir:*)",
-      "Bash(touch:*)",
-      "Bash(cp:*)",
-      "Bash(mv:*)",
-      "Bash(cat:*)",
-      "Bash(cat >:*)",
-      "Bash(cat >>:*)",
-      "Bash(chmod:*)",
-      "Bash(ln:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(grep:*)",
-      "Bash(rg:*)",
-      "Bash(find:*)",
-      "Bash(wc:*)",
-      "Bash(sort:*)",
-      "Bash(uniq:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(which:*)",
-      "Bash(pwd)",
-      "Bash(cd:*)",
-      "Bash(echo:*)",
-      "Bash(export:*)",
-      "Bash(env)",
-      "Bash(osascript:*)",
-      "Bash(pytest:*)",
-      "mcp__coordination__*",
-      "mcp__knowledge-store__*",
-      "mcp__ide__*"
-    ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Bash(rm -rf:*)",
-      "Bash(rm -r:*)",
-      "Bash(sudo:*)",
-      "Bash(chmod 777:*)",
-      "Bash(> /dev/*)",
-      "Bash(kubectl delete:*)",
-      "Bash(helm uninstall:*)",
-      "Bash(docker system prune:*)",
-      "Bash(git push --force:*)",
-      "Bash(git reset --hard:*)"
-    ]
-  },
   "hooks": {
     "SessionStart": [
       {
@@ -73,90 +6,62 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py session-start python3 scripts/hooks/session-start.py",
-            "timeout": 10000
+            "command": ".claude/hooks/session-start.sh",
+            "timeout": 5000
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-enforce-edit python3 .claude/hooks/guardrails-enforce.py",
-            "timeout": 5000
+            "command": ".claude/hooks/block-dangerous-commands.sh",
+            "timeout": 3000
           }
         ]
       },
       {
-        "matcher": "Write",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-enforce-write python3 .claude/hooks/guardrails-enforce.py",
-            "timeout": 5000
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": ".*",
-        "hooks": [
+            "command": ".claude/hooks/require-workitem.sh",
+            "timeout": 3000
+          },
           {
             "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-inject python3 .claude/hooks/guardrails-inject.py",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "SubagentStart": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py guardrails-subagent python3 .claude/hooks/guardrails-subagent.py",
-            "timeout": 10000
+            "command": ".claude/hooks/enforce-tdd-separation.sh",
+            "timeout": 3000
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py post-tool-use echo '{}'",
+            "command": ".claude/hooks/auto-lint.sh",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-workitems-length.sh",
+            "timeout": 3000
           }
         ]
       }
     ],
     "Stop": [
       {
-        "matcher": ".*",
         "hooks": [
           {
-            "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py session-stop echo '{}'",
-            "timeout": 5000
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd /Users/jbellish/VSProjects/dox-asdlc && python3 scripts/hooks/hook-wrapper.py notification echo '{}'",
-            "timeout": 5000
+            "type": "prompt",
+            "prompt": "Before ending this session, verify the Mandatory Development Workflow from CLAUDE.md was followed: (1) Do .workitems/PNN-FNN-*/ folders exist for every feature worked on? (2) Does each have design.md, user_stories.md, tasks.md? (3) Were design reviews completed before code was written? (4) Were code reviews completed before commits? (5) Do tests exist for all new code? If ANY step was skipped, warn the user with the specific gap. Skip this check for files under .claude/ and project-level config files (CLAUDE.md, .gitignore, etc.)."
           }
         ]
       }

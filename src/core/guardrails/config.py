@@ -42,7 +42,7 @@ class GuardrailsConfig:
     index_prefix: str = ""
     cache_ttl: float = 60.0
     fallback_mode: str = "static"
-    static_file_path: str = ".claude/guardrails-static.json"
+    static_file_path: str = "src/core/guardrails/static-guidelines.json"
 
     @classmethod
     def from_env(cls) -> GuardrailsConfig:
@@ -59,7 +59,7 @@ class GuardrailsConfig:
                 (default: static). Accepts "permissive", "restrictive",
                 or "static".
             GUARDRAILS_STATIC_FILE: Path to static guidelines JSON file
-                (default: .claude/guardrails-static.json).
+                (default: src/core/guardrails/static-guidelines.json).
 
         Returns:
             GuardrailsConfig instance with values from environment.
@@ -117,7 +117,7 @@ class GuardrailsConfig:
             cache_ttl=cache_ttl,
             fallback_mode=fallback_mode,
             static_file_path=os.getenv(
-                "GUARDRAILS_STATIC_FILE", ".claude/guardrails-static.json"
+                "GUARDRAILS_STATIC_FILE", "src/core/guardrails/static-guidelines.json"
             ),
         )
 

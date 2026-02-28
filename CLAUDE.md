@@ -2,44 +2,42 @@
 
 Agentic Software Development Lifecycle using Claude Agent SDK, Redis coordination, and bash tools.
 
+## Mandatory Development Workflow
+
+All feature work follows the 11-step workflow. See `.claude/rules/workflow.md` for full details.
+
+1. Workplan -- PM CLI drafts plan
+2. Planning -- Planner creates work items (`@feature-planning`)
+3. Diagrams -- Architecture diagrams (`@diagram-builder`)
+4. Design Review -- Reviewer validates (HITL: advisory)
+5. Re-plan -- PM CLI assigns scopes
+6. Parallel Build -- Backend/Frontend via TDD (`@tdd-execution`)
+7. Testing -- Unit/integration tests (`@testing`)
+8. Review -- Reviewer inspects, findings become GitHub issues
+9. Orchestration -- E2E, lint, commit to main (`@feature-completion`)
+10. DevOps -- Infrastructure (HITL: mandatory)
+11. Closure -- Summary, close issues
+
 ## PM CLI Role
 
-This main session acts as Project Manager (PM CLI). It:
-- Plans and delegates work, does NOT implement code
-- Coordinates specialized agents
-- Follows the 11-step workflow
-- Enforces HITL gates for critical operations
+PM CLI coordinates between the user and specialized agents. It plans workflow, delegates atomic tasks, tracks progress, and handles blockers. PM CLI does NOT write code, create tests, modify source files, make commits, or design architecture.
 
-See `.claude/rules/pm-cli/` for full PM CLI behavior.
-
-## The 11-Step Workflow
-
-```
- 1. Workplan         -> PM CLI drafts plan
- 2. Planning         -> Planner creates work items
- 3. Diagrams         -> Architecture diagrams
- 4. Design Review    -> Reviewer validates
- 5. Re-plan          -> PM CLI assigns scopes
- 6. Parallel Build   -> Backend/Frontend (atomic tasks)
- 7. Testing          -> Unit/integration tests
- 8. Review           -> Reviewer inspects, issues created
- 9. Orchestration    -> E2E, commits
-10. DevOps           -> Infrastructure (HITL required)
-11. Closure          -> Summary, close issues
-```
-
-See `.claude/rules/workflow/` for full step details and HITL gates.
+- **Message check**: Native teams deliver automatically; Redis sessions call `coord_check_messages` every turn
+- **Presence check**: Call `coord_get_presence` before delegating; warn if stale (>5min) or offline (>15min)
+- **Delegation**: ONE atomic task at a time sequentially; use TeamCreate for parallel work
+- **Task visibility**: Use TaskCreate/TaskUpdate for all multi-step work
 
 ## Non-Negotiable Rules
 
-1. **Plan before code** — See `@feature-planning` skill for work item creation
-2. **TDD required** — See `@tdd-execution` skill for Red-Green-Refactor
-3. **Commit only complete features** — See `@feature-completion` skill for validation
-4. **Review findings become issues** — All code review findings become GitHub issues
-5. **Orchestrator exclusively owns meta files** — CLAUDE.md, docs/, contracts/, .claude/**
-6. **Task visibility required** — See `.claude/rules/task-visibility.md`
+1. **Plan before code** -- Steps 1-2 must complete before Step 6
+2. **TDD required** -- Step 6 uses `@tdd-execution` skill (Red-Green-Refactor)
+3. **Commit only complete features** -- Step 9 uses `@feature-completion` skill
+4. **Review findings become issues** -- All code review findings become GitHub issues
+5. **Orchestrator exclusively owns meta files** -- CLAUDE.md, docs/, contracts/, .claude/**
+6. **Task visibility required** -- Use TaskCreate/TaskUpdate for all multi-step work
+7. **Trunk-based development** -- All work targets main branch directly
 
-## Roles
+## Roles and Path Restrictions
 
 | Role | Purpose | Domain |
 |------|---------|--------|
@@ -52,14 +50,31 @@ See `.claude/rules/workflow/` for full step details and HITL gates.
 | orchestrator | Coordination, docs, meta, commits | Meta files |
 | devops | Docker, K8s, cloud, GitHub Actions | Infrastructure |
 
-See `.claude/agents/` for full agent definitions.
-
-## Path Restrictions
-
+**Path restrictions:**
 - **backend**: `src/workers/`, `src/orchestrator/`, `src/infrastructure/`, `.workitems/P01-P03,P06`
 - **frontend**: `docker/hitl-ui/`, `src/hitl_ui/`, `.workitems/P05-*`
 - **devops**: `docker/`, `helm/`, `.github/workflows/`, `scripts/k8s/`
 - **orchestrator**: All paths, exclusive: `CLAUDE.md`, `docs/`, `contracts/`, `.claude/`
+
+See `.claude/agents/` for full agent definitions.
+
+## Trunk-Based Development
+
+All work targets `main`. Orchestrator is primary commit authority; devops commits infrastructure only. Other agents prepare changes but do not commit.
+
+- Pre-commit hook enforces `./tools/test.sh --quick`
+- Protected paths (`contracts/`, `.claude/`) require HITL confirmation
+- Orchestrator can revert any commit when tests on main are failing
+
+## Coding Standards
+
+**Python** (src/, tests/): 100 char lines, type hints required, Google-style docstrings, isort imports, use `src/core/exceptions.py` (never bare `Exception`), async via `asyncio`.
+
+**TypeScript** (docker/hitl-ui/): Strict mode, prettier formatting, eslint recommended, prefer interfaces over type aliases.
+
+**Bash** (tools/): `#!/bin/bash` with `set -euo pipefail`, output JSON `{ "success": bool, "results": [], "errors": [] }`, exit 0 on success.
+
+**Tests**: One file per module (`test_{module}.py`), naming `test_{function}_{scenario}_{outcome}()`, 80% coverage minimum.
 
 ## Skills
 
@@ -77,157 +92,15 @@ See `.claude/agents/` for full agent definitions.
 
 Each skill lives in `.claude/skills/<name>/` with SKILL.md + optional `scripts/` directory.
 
-## Commands
-
-Scripts are owned by their respective skills. Original paths forward to skill locations:
-
-```bash
-# Planning (see @feature-planning)
-./scripts/new-feature.sh P01 F02 "feature-name"
-./scripts/check-planning.sh P01-F02-feature-name
-
-# Quality gates (see @testing)
-./tools/test.sh src/path/to/feature
-./tools/lint.sh src/
-./tools/e2e.sh
-
-# Completion (see @feature-completion)
-./scripts/check-completion.sh P01-F02-feature-name
-
-# Issue Tracking
-gh issue list
-gh issue create --title "..."
-gh issue close <num>
-```
-
-## Environment Tiers
-
-| Tier | Platform | Use Case |
-|------|----------|----------|
-| **Workstation** | Bare metal (tmux + worktrees) | Agent development, multi-session work |
-| **Local Dev** | Docker Compose | Rapid iteration (recommended for daily dev) |
-| **Local Staging** | K8s (minikube) | Helm chart testing |
-| **Remote Lab** | GCP Cloud Run | Demos |
-| **Remote Staging** | GCP GKE | Pre-production |
-
-**Quick Start:** `cd docker && docker compose up -d`
-
-See `docs/environments/README.md` for full guides. See `@deploy` skill for deployment scripts.
-
-## KnowledgeStore MCP
-
-Semantic search MCP for exploring the indexed codebase.
-
-| Tool | Purpose |
-|------|---------|
-| `ks_search` | Semantic search across indexed code and docs |
-| `ks_get` | Retrieve specific document by ID |
-| `ks_index` | Add new documents to the index |
-| `ks_health` | Check Elasticsearch status |
-
-**Configuration:** `localhost:9200` (Elasticsearch), `localhost:6379` (Redis).
-For K8s: `./scripts/k8s/port-forward-mcp.sh all`
-
 ## Multi-Session Infrastructure
 
-Multiple CLI sessions work in parallel, each in an isolated git worktree organized by **bounded context** (feature/epic), not by agent role.
+Multiple CLI sessions run in parallel via isolated git worktrees, organized by bounded context. See `.claude/rules/coordination-protocol.md` for coordination details.
 
-**Quick Start:**
-```bash
-./scripts/start-session.sh p11-guardrails
-cd .worktrees/p11-guardrails && export CLAUDE_INSTANCE_ID=p11-guardrails && claude
-```
-
-| Command | Purpose |
-|---------|---------|
-| `./scripts/start-session.sh <ctx>` | Create worktree + branch + identity |
-| `./scripts/worktree/list-worktrees.sh` | List all worktrees (JSON) |
-| `./scripts/worktree/teardown-worktree.sh <ctx>` | Remove worktree (--merge or --abandon) |
-| `./scripts/worktree/merge-worktree.sh <ctx>` | Merge feature branch to main via PR |
-
-**Key concepts:**
-- **Session Identity** (CLAUDE_INSTANCE_ID) = which feature context
-- **Agent Role** (subagent) = which paths are allowed
-- **Presence**: Heartbeat every 60s, stale after 5min. See `.claude/rules/coordination-protocol.md`
-
-**Librarian Merge Protocol:** Human acts as integration gatekeeper — merge one branch at a time to main, rebase others after.
-
-See `.claude/rules/parallel-coordination.md` for full multi-session details.
-
-## Guardrails Configuration System
-
-The project includes a dynamic guardrails system (P11-F01) that provides contextually-conditional rules for agent behavior. Guidelines are stored in Elasticsearch, evaluated at runtime against the current task context, and injected into agent sessions via Claude Code hooks. This replaces static rule loading with targeted, per-context enforcement.
-
-See `docs/guardrails/README.md` for full documentation.
-
-### Key Commands
-
-```bash
-# Bootstrap default guidelines into Elasticsearch
-python scripts/bootstrap_guardrails.py --es-url http://localhost:9200
-
-# Preview bootstrap without writing
-python scripts/bootstrap_guardrails.py --dry-run
-```
-
-### Key Interfaces
-
-- **HITL UI:** Navigate to `/guardrails` in the HITL UI to manage guidelines
-- **MCP Tool:** `guardrails_get_context(agent="backend", action="implement")` evaluates matching guidelines
-- **REST API:** `GET/POST/PUT/DELETE /api/guardrails` for CRUD operations
-
-### Configuration
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `GUARDRAILS_ENABLED` | `true` | Master enable/disable |
-| `ELASTICSEARCH_URL` | `http://localhost:9200` | ES connection |
-| `GUARDRAILS_CACHE_TTL` | `60.0` | Evaluator cache TTL in seconds |
-| `GUARDRAILS_FALLBACK_MODE` | `static` | Behavior when ES unavailable: `static` (use local JSON), `permissive` (allow all), `restrictive` (block) |
-| `GUARDRAILS_STATIC_FILE` | `.claude/guardrails-static.json` | Path to static guidelines file (used when fallback_mode=static) |
-
-## Workstation Observability
-
-Hook execution telemetry is captured to a local SQLite database and viewable via a built-in dashboard.
-
-- **Telemetry store**: `~/.asdlc/telemetry.db` (SQLite, WAL mode)
-- **Dashboard**: `http://localhost:9191` (zero-dependency Python server)
-- **JSONL log**: `/tmp/hook-telemetry.jsonl` (backward compat with Prometheus exporter)
-
-```bash
-# Start the dashboard (opens browser on macOS)
-./scripts/telemetry/start-dashboard.sh
-
-# Stop the dashboard
-./scripts/telemetry/start-dashboard.sh --stop
-```
-
-See `docs/observability/workstation.md` for full guide.
-
-## tmux Multi-Session Management
-
-Use tmux to run multiple Claude CLI sessions in parallel, each in its own worktree context:
-
-```bash
-# Launch tmux session with PM + feature contexts + dashboard
-./scripts/sessions/tmux-launcher.sh p11-guardrails p04-review-swarm
-
-# Start a single feature context (with optional --tmux flag to add to tmux session)
-./scripts/start-session.sh p11-guardrails
-./scripts/start-session.sh --tmux p11-guardrails
-
-# List sessions across all sources (tmux, SQLite, worktrees)
-./scripts/sessions/list-sessions.sh
-```
-
-tmux shortcuts: `Ctrl-b n` (next window), `Ctrl-b p` (previous window), `Ctrl-b w` (window list).
+Quick start: `./scripts/start-session.sh <context>` then `cd .worktrees/<context> && claude`
 
 ## Related Docs
 
-- docs/environments/README.md — Environment tiers
-- docs/Main_Features.md — Feature specs
-- docs/K8s_Service_Access.md — K8s networking
-- docs/guardrails/README.md — Guardrails configuration system
-- docs/observability/workstation.md — Workstation observability guide
-- docs/decisions/e2b-evaluation.md — E2B sandbox evaluation (deferred)
-- docs/decisions/hook-consolidation.md — Hook consolidation ADR
+- `.claude/rules/workflow.md` -- Full 11-step workflow
+- `.claude/rules/hitl-gates.md` -- HITL gate specifications
+- `.claude/rules/coordination-protocol.md` -- Multi-session coordination and native teams
+- `docs/environments/README.md` -- Environment tiers and deployment

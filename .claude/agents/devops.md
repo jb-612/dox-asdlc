@@ -126,7 +126,7 @@ This mode allows the PM CLI to continue other work while infrastructure operatio
 - Environment is isolated and disposable
 - No HITL gates (already confirmed at invocation)
 
-See `.claude/rules/permissions.md` for environment detection.
+See `CLAUDE.md` Permissions section for environment detection.
 
 ## Guardrails
 

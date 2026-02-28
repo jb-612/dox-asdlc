@@ -39,7 +39,7 @@ def test_from_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.index_prefix == ""
     assert config.cache_ttl == 60.0
     assert config.fallback_mode == "static"
-    assert config.static_file_path == ".claude/guardrails-static.json"
+    assert config.static_file_path == "src/core/guardrails/static-guidelines.json"
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ def test_to_dict_round_trip() -> None:
         index_prefix="tenant",
         cache_ttl=45.0,
         fallback_mode="permissive",
-        static_file_path=".claude/guardrails-static.json",
+        static_file_path="src/core/guardrails/static-guidelines.json",
     )
 
     # Serialize
@@ -196,7 +196,7 @@ def test_enabled_false() -> None:
     assert config.index_prefix == ""
     assert config.cache_ttl == 60.0
     assert config.fallback_mode == "static"
-    assert config.static_file_path == ".claude/guardrails-static.json"
+    assert config.static_file_path == "src/core/guardrails/static-guidelines.json"
 
 
 # ---------------------------------------------------------------------------

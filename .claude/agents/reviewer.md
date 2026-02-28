@@ -36,7 +36,7 @@ Review checklist:
 - [ ] No XSS vulnerabilities
 
 **Project Standards:**
-- [ ] Follows `.claude/rules/coding-standards.md`
+- [ ] Follows coding standards in `CLAUDE.md`
 - [ ] Type hints on all function signatures
 - [ ] Google-style docstrings for public functions
 - [ ] Tests follow naming convention
