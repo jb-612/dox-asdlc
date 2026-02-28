@@ -36,7 +36,7 @@ for dir in "$REPO_ROOT"/.workitems/P*-F*-*/; do
 done
 
 if [[ "$FOUND" == "false" ]]; then
-  echo "WARNING: No approved workitems found. Create one with /feature-planning first." >&2
+  echo "WARNING: No approved workitems found. Create one with /design-pipeline first." >&2
   exit 2
 fi
 

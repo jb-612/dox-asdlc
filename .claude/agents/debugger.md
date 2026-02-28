@@ -137,7 +137,7 @@ If asked to fix code, explain:
 
 ## Workflow Integration
 
-The debugger is invoked at Gate 6 (Test Failures > 3) in the 11-step workflow:
+The debugger is invoked at Gate 6 (Test Failures > 3) in the 8-step workflow:
 
 ```
 Tests failing repeatedly ([N] times): [test name]

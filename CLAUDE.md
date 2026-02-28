@@ -4,19 +4,16 @@ Agentic Software Development Lifecycle using Claude Agent SDK, Redis coordinatio
 
 ## Mandatory Development Workflow
 
-All feature work follows the 11-step workflow. See `.claude/rules/workflow.md` for full details.
+All feature work follows the 8-step workflow. See `.claude/rules/workflow.md` for full details.
 
 1. Workplan -- PM CLI drafts plan
-2. Planning -- Planner creates work items (`@feature-planning`)
-3. Diagrams -- Architecture diagrams (`@diagram-builder`)
-4. Design Review -- Reviewer validates (HITL: advisory)
-5. Re-plan -- PM CLI assigns scopes
-6. Parallel Build -- Backend/Frontend via TDD (`@tdd-execution`)
-7. Testing -- Unit/integration tests (`@testing`)
-8. Review -- Reviewer inspects, findings become GitHub issues
-9. Orchestration -- E2E, lint, commit to main (`@feature-completion`)
-10. DevOps -- Infrastructure (HITL: mandatory)
-11. Closure -- Summary, close issues
+2. Design Pipeline -- 11-stage design, review, task breakdown (`@design-pipeline`)
+3. TDD Build -- Three Laws micro-cycles with 3-agent separation (`@tdd-build`)
+4. Code Review -- 3-agent parallel review (`@code-review`)
+5. Feature Completion -- Validate tests, lint, interfaces, E2E (`@feature-completion`)
+6. Commit -- Conventional commits with traceability (`@commit`)
+7. DevOps -- Infrastructure (HITL: mandatory) (`@deploy`)
+8. Closure -- Summary, close issues
 
 ## PM CLI Role
 
@@ -29,9 +26,9 @@ PM CLI coordinates between the user and specialized agents. It plans workflow, d
 
 ## Non-Negotiable Rules
 
-1. **Plan before code** -- Steps 1-2 must complete before Step 6
-2. **TDD required** -- Step 6 uses `@tdd-execution` skill (Red-Green-Refactor)
-3. **Commit only complete features** -- Step 9 uses `@feature-completion` skill
+1. **Plan before code** -- Steps 1-2 must complete before Step 3
+2. **TDD required** -- Step 3 uses `@tdd-build` skill (Three Laws micro-cycles)
+3. **Commit only complete features** -- Step 5 validates, Step 6 commits via `@commit`
 4. **Review findings become issues** -- All code review findings become GitHub issues
 5. **Orchestrator exclusively owns meta files** -- CLAUDE.md, docs/, contracts/, .claude/**
 6. **Task visibility required** -- Use TaskCreate/TaskUpdate for all multi-step work
@@ -80,15 +77,19 @@ All work targets `main`. Orchestrator is primary commit authority; devops commit
 
 | Skill | Purpose | Invocation |
 |-------|---------|------------|
-| `feature-planning` | Create work item artifacts | Workflow step 2 |
-| `tdd-execution` | Red-Green-Refactor cycle | Workflow step 6 |
-| `feature-completion` | Validate and complete feature | Workflow step 9 |
+| `design-pipeline` | Feature design, review, and task breakdown | Workflow step 2 |
+| `tdd-build` | Three Laws TDD micro-cycles | Workflow step 3 |
+| `code-review` | 3-agent parallel code review | Workflow step 4 |
+| `security-review` | OWASP, dependency audit, secret scanning | Workflow step 4 (via code-review) |
+| `feature-completion` | Validate and complete feature | Workflow step 5 |
+| `testing` | Quality gates (test, lint, SAST, SCA, E2E) | Workflow step 5 |
+| `commit` | Conventional commits with traceability | Workflow step 6 |
+| `task-breakdown` | Atomic task decomposition from design | Workflow step 2 (via design-pipeline) |
+| `phase-gate` | Phase completion validation | After all features in phase |
+| `diagram-builder` | Mermaid diagrams | Workflow step 2 (via design-pipeline) |
+| `multi-review` | Parallel AI code review (Gemini + Codex via mprocs) | Workflow step 4 |
 | `contract-update` | API contract changes | On demand |
-| `diagram-builder` | Mermaid diagrams | Workflow step 3 |
-| `multi-review` | Parallel AI code review (Gemini + Codex via mprocs) | Workflow step 8 |
-| `testing` | Quality gates (test, lint, SAST, SCA, E2E) | Workflow step 7 |
-| `code-review` | Code analysis and review | Workflow steps 4, 8 |
-| `deploy` | Environment deployment (Cloud Run, K8s) | Workflow step 10 |
+| `deploy` | Environment deployment (Cloud Run, K8s) | Workflow step 7 |
 
 Each skill lives in `.claude/skills/<name>/` with SKILL.md + optional `scripts/` directory.
 
@@ -100,7 +101,7 @@ Quick start: `./scripts/start-session.sh <context>` then `cd .worktrees/<context
 
 ## Related Docs
 
-- `.claude/rules/workflow.md` -- Full 11-step workflow
+- `.claude/rules/workflow.md` -- Full 8-step workflow
 - `.claude/rules/hitl-gates.md` -- HITL gate specifications
 - `.claude/rules/coordination-protocol.md` -- Multi-session coordination and native teams
 - `docs/environments/README.md` -- Environment tiers and deployment

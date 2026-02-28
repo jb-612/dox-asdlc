@@ -25,35 +25,57 @@ All gates support the standard response options (Approve/Reject or Y/N). Additio
 | **Reject** | Abort the operation |
 | **Steer** | Redirect: provide feedback to modify the approach without full rejection |
 
-The Steer option is available at gates where iterative refinement is appropriate (Gate 0, Gate 5).
+The Steer option is available at gates where iterative refinement is appropriate (Design Review R2, User Gate).
 
 ## Mandatory Gates
 
 Mandatory gates block all progress until the user provides a valid response. These protect against irreversible or high-impact operations.
 
-### Gate 0: Intent and Requirements Approval
+### Design Review R2 Hard Block
 
-**Trigger:** After planning artifacts (design.md, user_stories.md, tasks.md) are created in Step 2
+**Trigger:** Design pipeline Stage 7 — reviewer re-validates after R1 revisions. Fires if Critical concerns remain.
 
 **Question Format:**
 ```
-Planning complete for [feature name]:
- - Design: [summary]
- - Stories: [count] user stories
- - Tasks: [count] atomic tasks
+Design Review Round 2 for [feature]:
+ - Critical concerns remaining: [N]
+ - [concern details]
 
 Options:
- A) Approve and proceed to implementation
+ A) Address remaining concerns (return to revision)
+ B) Override and proceed (requires justification, logged for audit)
+ C) Abort design
+```
+
+**Behavior:**
+- Option A: Return to pipeline Stage 6 for revisions
+- Option B: User provides justification; logged for audit trail. Proceed with acknowledgment.
+- Option C: Abort design pipeline
+
+### User Gate
+
+**Trigger:** Design pipeline Stage 10 — all planning artifacts complete, reviewed, and tasks broken down.
+
+**Question Format:**
+```
+Design pipeline complete for [feature]:
+ - Design: [summary]
+ - Stories: [count] user stories
+ - Tasks: [count] atomic tasks ([total estimate] hours)
+ - Reviews: R1 + R2 passed
+
+Options:
+ A) Approve and proceed to TDD Build
  B) Steer: modify scope or approach (provide feedback)
  C) Reject and return to workplan
 ```
 
 **Behavior:**
-- Option A: Proceed to design review (Step 4)
-- Option B: User provides feedback; planner revises artifacts. This is the "steer" mechanism -- the user can redirect without full rejection.
-- Option C: Abort planning; return to Step 1 for re-scoping
+- Option A: Proceed to TDD Build (Step 3)
+- Option B: User provides feedback; return to pipeline Stage 2 for revision
+- Option C: Abort pipeline; return to Step 1 for re-scoping
 
-### Gate 1: DevOps Invocation
+### DevOps Invocation
 
 **Trigger:** Before any devops operation (docker deploy, kubernetes, cloud infrastructure, GitHub Actions)
 
@@ -73,7 +95,7 @@ Options:
 - Option B: Publish DEVOPS_REQUEST via Redis MCP to separate CLI
 - Option C: Output step-by-step instructions for manual execution
 
-### Gate 2: Protected Path Commit
+### Protected Path Commit
 
 **Trigger:** Commit includes files in `contracts/` or `.claude/`
 
@@ -90,7 +112,7 @@ Confirm? (Y/N)
 - N response aborts the commit operation
 - Any other response prompts for valid input
 
-### Gate 3: Contract Change
+### Contract Change
 
 **Trigger:** Any modification to `contracts/current/` or `contracts/versions/`
 
@@ -107,7 +129,7 @@ Have all consumers been notified? (Y/N)
 - N response blocks the change
 - User should notify consumers before confirming
 
-### Gate 4: Destructive Workstation Operation
+### Destructive Workstation Operation
 
 **Trigger:** rm -rf, kubectl delete, helm uninstall, docker system prune executed on workstation (not in container or Kubernetes)
 
@@ -124,33 +146,55 @@ Confirm? (Y/N)
 - N response aborts the operation
 - Gate is conditional on environment (see Environment Detection)
 
+### Phase Gate
+
+**Trigger:** All features in a phase are complete. Fires when `@phase-gate` skill runs validation.
+
+**Question Format:**
+```
+Phase [N] validation complete:
+ - Features: [N/N] complete
+ - E2E: [pass/fail]
+ - Open defects: [N] critical, [N] high
+
+Options:
+ A) Approve phase completion
+ B) Address remaining issues
+ C) Defer to next phase
+```
+
+**Behavior:**
+- Cannot proceed without user response
+- Option A: Mark phase complete in PLAN.md
+- Option B: Return to fix issues
+- Option C: Move issues to next phase backlog
+
 ## Advisory Gates
 
 Advisory gates pause for user input but allow the user to proceed with acknowledgment. These provide oversight without blocking workflow.
 
-### Gate 5: Design Review Concerns
+### Refactor Approval
 
-**Trigger:** Reviewer agent found concerns during design review
+**Trigger:** After each TDD task's refactor phase completes (tdd-build Phase 3).
 
 **Question Format:**
 ```
-Design review found [N] concerns:
- - [concern 1]
- - [concern 2]
- - ...
+Refactor complete for [task]:
+ - Changes: [summary]
+ - Tests: all passing
 
 Options:
- A) Address concerns before proceeding
- B) Proceed anyway (acknowledge concerns)
- C) Abort this task
+ A) Approve refactor
+ B) Request changes
+ C) Revert refactor (keep pre-refactor code)
 ```
 
 **Behavior:**
-- Option A: Return to design phase to address concerns
-- Option B: Continue with user acknowledgment logged
-- Option C: Abort current task
+- Option A: Accept refactored code, proceed to next task
+- Option B: Return to refactorer with feedback
+- Option C: Revert to pre-refactor state, proceed to next task
 
-### Gate 6: Test Failures Greater Than 3
+### Test Failures Greater Than 3
 
 **Trigger:** Same test has failed more than 3 consecutive times
 
@@ -171,7 +215,7 @@ Options:
 - Option C: Abort current task
 - Option D: Invoke the debugger agent (read-only) to produce a diagnostic report. After report, PM CLI re-presents options A-C with diagnostic context.
 
-### Gate 7: Complex Operation
+### Complex Operation
 
 **Trigger:** Operation spans more than 10 files OR crosses backend and frontend domains OR mixes infrastructure with code changes
 
@@ -217,7 +261,7 @@ All HITL gate decisions are logged with:
 
 ## Environment Detection
 
-Gate 4 (Destructive Workstation Operation) is conditional based on environment detection.
+Destructive Workstation Operation gate is conditional based on environment detection.
 
 ### Detection Logic
 
@@ -235,28 +279,26 @@ fi
 
 ### Gate Behavior
 
-| Environment | Detected By | Gate 4 Behavior |
-|-------------|-------------|-----------------|
+| Environment | Detected By | Gate Behavior |
+|-------------|-------------|---------------|
 | Container | `/.dockerenv` exists | **Skip gate** - environment is isolated |
 | Kubernetes | `KUBERNETES_SERVICE_HOST` set | **Skip gate** - environment is isolated |
 | Workstation | Neither present | **Enforce gate** - require confirmation |
 
-### Rationale
-
-In isolated environments (containers, Kubernetes pods), destructive operations are contained and recoverable. On a developer workstation, destructive operations can affect the host system and may be irreversible.
-
 ## Summary Table
 
-| Gate | Trigger | Type | Question Summary |
-|------|---------|------|------------------|
-| Intent Approval | Planning complete | Mandatory | Approve / Steer / Reject |
-| DevOps Invocation | Any devops operation | Mandatory | Run here / Send to CLI / Instructions |
-| Protected Path Commit | `contracts/`, `.claude/` | Mandatory | Confirm Y/N |
-| Contract Change | API contract modification | Mandatory | Consumers notified Y/N |
-| Destructive Workstation | rm, delete, prune | Mandatory | Confirm Y/N |
-| Design Review Concerns | Reviewer found concerns | Advisory | Address / Proceed / Abort |
-| Test Failures > 3 | Repeated test failures | Advisory | Debug / Skip / Abort |
-| Complex Operation | >10 files, cross-domain | Advisory | Continue / New CLI / Instructions |
+| Gate | Step | Trigger | Type |
+|------|------|---------|------|
+| Design Review R2 | 2 | R2 critical concerns remain | Mandatory |
+| User Gate | 2 | Planning artifacts complete | Mandatory |
+| DevOps Invocation | 7 | Any devops operation | Mandatory |
+| Protected Path Commit | 6 | `contracts/`, `.claude/` | Mandatory |
+| Contract Change | 6 | API contract modification | Mandatory |
+| Destructive Workstation | Any | rm, delete, prune | Mandatory |
+| Phase Gate | Post-phase | All features complete | Mandatory |
+| Refactor Approval | 3 | TDD refactor phase done | Advisory |
+| Test Failures > 3 | 3 | Repeated test failures | Advisory |
+| Complex Operation | Any | >10 files, cross-domain | Advisory |
 
 ## Integration with PM CLI
 

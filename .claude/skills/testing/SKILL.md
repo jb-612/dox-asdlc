@@ -14,7 +14,7 @@ Run quality gates for $ARGUMENTS:
 
 ## When NOT to Use
 
-- Writing tests (use `@tdd-execution`)
+- Writing tests (use `@tdd-build`)
 - Implementing code changes
 
 ## Available Scripts
@@ -41,5 +41,5 @@ All scripts output standardized JSON via `tools/lib/common.sh`.
 
 ## Cross-References
 
-- `@tdd-execution` — Writing tests (Red-Green-Refactor)
+- `@tdd-build` — Writing tests (Three Laws TDD micro-cycles)
 - `@feature-completion` — Pre-commit validation sequence

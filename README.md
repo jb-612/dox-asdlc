@@ -26,7 +26,7 @@ cd docker && docker compose up -d
 
 ## Development Workflow
 
-All work follows the 11-step workflow defined in `CLAUDE.md`:
+All work follows the 8-step workflow defined in `CLAUDE.md`:
 
 1. **Plan** -- Create work item with design, user stories, and tasks
 2. **Validate** -- Run `check-planning.sh` to verify completeness
