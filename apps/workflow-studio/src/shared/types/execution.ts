@@ -71,6 +71,8 @@ export interface ExecutionEvent {
   nodeId?: string;
   data?: unknown;
   message: string;
+  traceId?: string;
+  spanId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,4 +268,6 @@ export interface Execution {
   variables: Record<string, unknown>;
   startedAt: string;
   completedAt?: string;
+  /** Trace ID for this execution run (P15-F16) */
+  traceId?: string;
 }

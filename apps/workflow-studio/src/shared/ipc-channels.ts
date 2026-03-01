@@ -157,6 +157,15 @@ export const IPC_CHANNELS = {
   EXECUTION_HISTORY_GET: 'execution:history-get',
   EXECUTION_HISTORY_CLEAR: 'execution:history-clear',
   EXECUTION_REPLAY: 'execution:replay',
+
+  // ---------------------------------------------------------------------------
+  // Analytics / cost tracking (P15-F16)
+  // ---------------------------------------------------------------------------
+  ANALYTICS_GET_EXECUTIONS: 'analytics:get-executions',
+  ANALYTICS_GET_DAILY_COSTS: 'analytics:get-daily-costs',
+  ANALYTICS_GET_EXECUTION: 'analytics:get-execution',
+  /** Notification that new analytics data is available (main -> renderer) */
+  ANALYTICS_DATA_UPDATED: 'analytics:data-updated',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

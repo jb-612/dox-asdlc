@@ -31,6 +31,8 @@ export interface TelemetryEvent {
   nodeId?: string;
   /** Token usage and cost for this event (if applicable) */
   tokenUsage?: TokenUsage;
+  traceId?: string;
+  spanId?: string;
 }
 
 export type AgentSessionStatus = 'running' | 'completed' | 'failed';

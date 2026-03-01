@@ -129,6 +129,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('monitoring:event', (_event, ...args) => callback(...args)),
   },
 
+  /** Analytics / cost tracking (P15-F16) */
+  analytics: {
+    getExecutions: (fromDate: string, toDate: string) =>
+      ipcRenderer.invoke('analytics:get-executions', fromDate, toDate),
+    getDailyCosts: (fromDate: string, toDate: string) =>
+      ipcRenderer.invoke('analytics:get-daily-costs', fromDate, toDate),
+    getExecution: (executionId: string, fromDate: string, toDate: string) =>
+      ipcRenderer.invoke('analytics:get-execution', executionId, fromDate, toDate),
+    onDataUpdated: (callback: () => void) => {
+      const wrapped = () => callback();
+      ipcRenderer.on('analytics:data-updated', wrapped);
+      return () => { ipcRenderer.removeListener('analytics:data-updated', wrapped); };
+    },
+  },
+
   /** Subscribe to push events from the main process */
   onEvent: (channel: string, callback: (...args: unknown[]) => void) => {
     ipcRenderer.on(channel, (_event, ...args) => callback(...args));

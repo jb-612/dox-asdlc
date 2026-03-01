@@ -27,6 +27,8 @@ import { computeProgressiveTimeout } from './retry-utils';
 import { evaluateExpression } from './expression-evaluator';
 import type { ExecutionHistoryService } from './execution-history-service';
 import type { ExecutionHistoryEntry } from '../../shared/types/execution';
+import type { AnalyticsService } from './analytics-service';
+import type { ExecutionCostSummary } from '../../shared/types/analytics';
 
 /** Validate a node ID to prevent path traversal in file operations. */
 function isValidNodeId(nodeId: string): boolean {
@@ -75,6 +77,8 @@ export interface ExecutionEngineOptions {
   workflowResolver?: (workflowId: string) => WorkflowDefinition | null;
   /** Current sub-workflow nesting depth (P15-F15, internal) */
   subWorkflowDepth?: number;
+  /** Analytics service for cost tracking persistence (P15-F16) */
+  analyticsService?: AnalyticsService;
 }
 
 export class ExecutionEngine {
@@ -105,6 +109,8 @@ export class ExecutionEngine {
   private workflowResolver: ((workflowId: string) => WorkflowDefinition | null) | null;
   /** Current sub-workflow nesting depth (P15-F15). */
   private subWorkflowDepth: number;
+  /** Analytics service for cost tracking persistence (P15-F16). */
+  private analyticsService: AnalyticsService | null;
   /** Node IDs to skip during resume replay (P15-F14). */
   private resumeSkipNodeIds: Set<string> | null = null;
   /** Node IDs to skip due to condition branch routing (P15-F15). */
@@ -139,6 +145,7 @@ export class ExecutionEngine {
     this.historyService = options?.historyService ?? null;
     this.workflowResolver = options?.workflowResolver ?? null;
     this.subWorkflowDepth = options?.subWorkflowDepth ?? 0;
+    this.analyticsService = options?.analyticsService ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -169,6 +176,7 @@ export class ExecutionEngine {
 
     // Create execution state
     const executionId = uuidv4();
+    const traceId = uuidv4();
     const now = new Date().toISOString();
 
     this.execution = {
@@ -181,6 +189,7 @@ export class ExecutionEngine {
       events: [],
       variables: {},
       startedAt: now,
+      traceId,
     };
 
     // Initialize variables from workflow defaults (P15-F15)
@@ -345,6 +354,9 @@ export class ExecutionEngine {
     // Save to execution history (P15-F14)
     await this.saveToHistory();
 
+    // Save analytics data (P15-F16)
+    await this.saveToAnalytics();
+
     return this.execution;
   }
 
@@ -373,6 +385,37 @@ export class ExecutionEngine {
     };
 
     await this.historyService.addEntry(entry);
+  }
+
+  /** Save execution cost summary to analytics service (P15-F16). */
+  private async saveToAnalytics(): Promise<void> {
+    if (!this.analyticsService || !this.execution) return;
+
+    const startMs = new Date(this.execution.startedAt).getTime();
+    const endMs = this.execution.completedAt
+      ? new Date(this.execution.completedAt).getTime()
+      : Date.now();
+
+    const summary: ExecutionCostSummary = {
+      executionId: this.execution.id,
+      workflowId: this.execution.workflowId,
+      workflowName: this.execution.workflow.metadata.name,
+      status: this.execution.status,
+      startedAt: this.execution.startedAt,
+      completedAt: this.execution.completedAt,
+      durationMs: endMs - startMs,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCostUsd: 0,
+      blockCosts: [],
+    };
+
+    try {
+      await this.analyticsService.saveExecution(summary);
+      this.mainWindow?.webContents.send(IPC_CHANNELS.ANALYTICS_DATA_UPDATED);
+    } catch {
+      // Analytics persistence is best-effort; don't fail the execution
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1660,6 +1703,8 @@ export class ExecutionEngine {
       nodeId,
       data,
       message: message ?? '',
+      traceId: this.execution?.traceId,
+      spanId: nodeId ? uuidv4() : undefined,
     };
     this.execution?.events.push(event);
     this.mainWindow?.webContents.send(IPC_CHANNELS.EXECUTION_EVENT, event);
