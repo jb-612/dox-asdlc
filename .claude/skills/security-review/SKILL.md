@@ -1,6 +1,7 @@
 ---
 name: security-review
 description: Dedicated security review — OWASP Top 10, dependency audit, secret scanning, input validation. Runs as part of code-review or standalone.
+argument-hint: "[scope or file-path]"
 allowed-tools: Read, Glob, Grep, Bash
 context: fork
 agent: reviewer

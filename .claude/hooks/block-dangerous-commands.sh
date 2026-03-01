@@ -3,7 +3,7 @@
 set -euo pipefail
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.input.command // empty')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 [[ -z "$COMMAND" ]] && exit 0
 

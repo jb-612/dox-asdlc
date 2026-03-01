@@ -1,6 +1,7 @@
 ---
 name: task-breakdown
 description: Break a feature design into atomic, testable tasks with estimates, dependencies, and test paths. Reusable standalone skill invoked by @design-pipeline or independently.
+argument-hint: "[feature-id]"
 ---
 
 Break down feature $ARGUMENTS into atomic tasks:

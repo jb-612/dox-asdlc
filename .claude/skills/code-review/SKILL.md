@@ -1,7 +1,8 @@
 ---
 name: code-review
 description: 3-agent parallel code review — architecture, code quality + security, and test coverage reviewers with master synthesis. Use when reviewing PRs, inspecting code, or auditing a module.
-allowed-tools: Read, Glob, Grep
+allowed-tools: Read, Glob, Grep, Bash
+argument-hint: "[scope or file-path]"
 context: fork
 agent: reviewer
 ---

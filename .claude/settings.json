@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/session-start.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
             "timeout": 5000
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/block-dangerous-commands.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-commands.sh",
             "timeout": 3000
           }
         ]
@@ -28,12 +28,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/require-workitem.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/require-workitem.sh",
             "timeout": 3000
           },
           {
             "type": "command",
-            "command": ".claude/hooks/enforce-tdd-separation.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-tdd-separation.sh",
             "timeout": 3000
           }
         ]
@@ -45,12 +45,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/auto-lint.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-lint.sh",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": ".claude/hooks/check-workitems-length.sh",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-workitems-length.sh",
             "timeout": 3000
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Before ending this session, verify the Mandatory Development Workflow from CLAUDE.md was followed: (1) Do .workitems/PNN-FNN-*/ folders exist for every feature worked on? (2) Does each have design.md, user_stories.md, tasks.md? (3) Were design reviews completed before code was written? (4) Were code reviews completed before commits? (5) Do tests exist for all new code? If ANY step was skipped, warn the user with the specific gap. Skip this check for files under .claude/ and project-level config files (CLAUDE.md, .gitignore, etc.)."
+            "prompt": "If stop_hook_active is true in the hook input, respond with {\"ok\": true} immediately without checking anything. Otherwise, verify the Mandatory Development Workflow from CLAUDE.md was followed: (1) Do .workitems/PNN-FNN-*/ folders exist for every feature worked on? (2) Does each have design.md, user_stories.md, tasks.md? (3) Were design reviews completed before code was written? (4) Were code reviews completed before commits? (5) Do tests exist for all new code? If ANY step was skipped, warn the user with the specific gap. Skip this check for files under .claude/ and project-level config files (CLAUDE.md, .gitignore, etc.)."
           }
         ]
       }

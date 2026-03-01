@@ -1,6 +1,7 @@
 ---
 name: testing
 description: Run quality gates — unit tests, linting, SAST, SCA, and E2E. Use when running tests, checking code quality, or validating before commit.
+argument-hint: "[scope or test-path]"
 allowed-tools: Read, Glob, Grep, Bash
 ---
 

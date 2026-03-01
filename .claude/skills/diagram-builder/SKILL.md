@@ -1,6 +1,7 @@
 ---
 name: diagram-builder
 description: Creates and updates Mermaid diagrams for architecture, workflows, and data flows. Auto-invoked during planning for architecture diagrams, explicit invocation for others.
+argument-hint: "[diagram-type or feature-id]"
 ---
 
 Create or update Mermaid diagram for $ARGUMENTS:

@@ -3,8 +3,8 @@
 set -euo pipefail
 
 INPUT=$(cat)
-TOOL=$(echo "$INPUT" | jq -r '.tool // empty')
-FILE_PATH=$(echo "$INPUT" | jq -r '.input.file_path // empty')
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 [[ -z "$FILE_PATH" ]] && exit 0
 

@@ -1,10 +1,32 @@
 ---
 name: tdd-build
 description: Three Laws TDD micro-cycle engine with 3-agent separation. Enforces Uncle Bob's Three Laws — production code only to pass a failing test, minimum test code to fail, minimum production code to pass. Replaces tdd-execution.
+argument-hint: "[feature-id/task-id]"
 allowed-tools: Read, Edit, Write, Glob, Grep, Bash
 ---
 
 Execute TDD build for task $ARGUMENTS:
+
+## Prerequisites
+
+Before writing any code, validate the target feature is ready for TDD. Extract the feature ID from $ARGUMENTS (e.g., `P15-F14` from `P15-F14-execution-hardening/T01`).
+
+1. Read `.workitems/{feature-dir}/design.md` — assert YAML `status: approved` (not `draft`)
+2. Read `.workitems/{feature-dir}/tasks.md` — assert file is non-empty and has unchecked tasks (`- [ ]`)
+3. Read `.workitems/{feature-dir}/user_stories.md` — assert file exists and is non-empty
+
+All three reads can run in parallel. If any check fails, STOP and report:
+
+```
+TDD Prerequisites FAILED for [feature]:
+ - design.md status: [actual value] (expected: approved)
+ - tasks.md: [present/missing/empty]
+ - user_stories.md: [present/missing/empty]
+
+Run @design-pipeline first to complete planning.
+```
+
+Do not proceed to RED phase until all prerequisites pass.
 
 ## Three Laws of TDD
 

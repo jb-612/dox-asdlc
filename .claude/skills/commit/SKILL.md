@@ -1,6 +1,7 @@
 ---
 name: commit
 description: Conventional commits with traceability. Enforces commit format, runs pre-commit validation, and handles protected path HITL gate. Extracted from feature-completion.
+argument-hint: "[feature-id]"
 disable-model-invocation: true
 ---
 

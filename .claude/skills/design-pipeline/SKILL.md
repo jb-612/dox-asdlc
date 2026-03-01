@@ -1,6 +1,7 @@
 ---
 name: design-pipeline
 description: 11-stage sequential pipeline for feature design — scaffolding, design, user stories, diagrams, 2-round review with hard gates, task breakdown, and user approval. Replaces feature-planning + diagram-builder trigger + design review + re-plan.
+argument-hint: "[feature-id]"
 ---
 
 Design pipeline for feature $ARGUMENTS:

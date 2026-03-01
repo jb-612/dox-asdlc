@@ -7,6 +7,8 @@ paths:
   - contracts/**
   - .claude/rules/**
   - .claude/skills/**
+  - .claude/agents/**
+  - .claude/hooks/**
 ---
 
 # Orchestrator Rules

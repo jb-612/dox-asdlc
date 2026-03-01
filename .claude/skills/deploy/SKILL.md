@@ -1,6 +1,7 @@
 ---
 name: deploy
 description: Deploy aSDLC to any environment tier — Cloud Run, K8s, or local. Use when deploying, updating, or tearing down environments.
+argument-hint: "[environment-tier]"
 disable-model-invocation: true
 ---
 

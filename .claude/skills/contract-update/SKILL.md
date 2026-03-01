@@ -1,6 +1,7 @@
 ---
 name: contract-update
 description: Guides proposing, negotiating, and publishing API contract changes. Use when modifying contracts/, adding endpoints, or changing schemas.
+argument-hint: "[contract-name]"
 disable-model-invocation: true
 ---
 

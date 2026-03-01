@@ -1,6 +1,7 @@
 ---
 name: multi-review
 description: Launch parallel AI code reviews using mprocs with Gemini and Codex CLIs. Opens a new Terminal window with 4 parallel reviewers, then polls and synthesizes results.
+argument-hint: "[scope or file-path]"
 ---
 
 # Multi-Review: Parallel AI Code Review

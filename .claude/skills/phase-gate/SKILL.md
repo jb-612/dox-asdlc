@@ -1,6 +1,7 @@
 ---
 name: phase-gate
 description: Phase completion validation — verifies all features in a phase are complete, checks quality gates, and updates PLAN.md. Use when all features in a phase are done and ready for sign-off.
+argument-hint: "[phase-number]"
 disable-model-invocation: true
 ---
 

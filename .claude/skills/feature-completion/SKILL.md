@@ -1,6 +1,7 @@
 ---
 name: feature-completion
 description: Validates and completes a feature after all tasks are done. Use when tasks.md shows 100% complete, before invoking @commit.
+argument-hint: "[feature-id]"
 disable-model-invocation: true
 ---
 
