@@ -23,6 +23,9 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { CLISpawner } from './cli-spawner';
 import type { RedisEventClient } from './redis-client';
 import { captureGitDiff } from './diff-capture';
+import { computeProgressiveTimeout } from './retry-utils';
+import type { ExecutionHistoryService } from './execution-history-service';
+import type { ExecutionHistoryEntry } from '../../shared/types/execution';
 
 /** Validate a node ID to prevent path traversal in file operations. */
 function isValidNodeId(nodeId: string): boolean {
@@ -65,6 +68,8 @@ export interface ExecutionEngineOptions {
   fileRestrictions?: string[];
   /** Whether the repo is mounted read-only (T23) */
   readOnly?: boolean;
+  /** Execution history service for persistent history (P15-F14) */
+  historyService?: ExecutionHistoryService;
 }
 
 export class ExecutionEngine {
@@ -89,6 +94,10 @@ export class ExecutionEngine {
   private fileRestrictions: string[];
   /** Whether the repo is mounted read-only. */
   private readOnly: boolean;
+  /** Optional history service for persisting execution results (P15-F14). */
+  private historyService: ExecutionHistoryService | null;
+  /** Node IDs to skip during resume replay (P15-F14). */
+  private resumeSkipNodeIds: Set<string> | null = null;
 
   /**
    * Optional container pool for parallel execution (P15-F09 T07).
@@ -116,6 +125,7 @@ export class ExecutionEngine {
     this.workingDirectory = options?.workingDirectory ?? null;
     this.fileRestrictions = options?.fileRestrictions ?? [];
     this.readOnly = options?.readOnly ?? false;
+    this.historyService = options?.historyService ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -214,6 +224,13 @@ export class ExecutionEngine {
       const node = workflow.nodes.find((n) => n.id === nodeId);
       if (!node) continue;
 
+      // Resume replay: skip pre-completed nodes (P15-F14)
+      if (this.resumeSkipNodeIds?.has(nodeId)) {
+        this.updateNodeState(nodeId, 'completed', { completedAt: new Date().toISOString() });
+        this.emitEvent('node_skipped', nodeId, `Skipped (resume): ${node.label}`);
+        continue;
+      }
+
       // Evaluate transition conditions: skip this node if no incoming
       // transition is satisfied (root nodes with no incoming edges always run).
       if (!this.shouldExecuteNode(nodeId, workflow)) {
@@ -282,7 +299,38 @@ export class ExecutionEngine {
 
     this.execution.currentNodeId = undefined;
     this.sendStateUpdate();
+
+    // Save to execution history (P15-F14)
+    await this.saveToHistory();
+
     return this.execution;
+  }
+
+  /** Save current execution to history service (P15-F14). */
+  private async saveToHistory(): Promise<void> {
+    if (!this.historyService || !this.execution) return;
+
+    const retryStats: Record<string, number> = {};
+    for (const [nodeId, state] of Object.entries(this.execution.nodeStates)) {
+      if (state.retryCount && state.retryCount > 0) {
+        retryStats[nodeId] = state.retryCount;
+      }
+    }
+
+    const entry: ExecutionHistoryEntry = {
+      id: this.execution.id,
+      workflowId: this.execution.workflowId,
+      workflowName: this.execution.workflow.metadata.name,
+      workflow: this.execution.workflow,
+      workItem: this.execution.workItem,
+      status: this.execution.status,
+      startedAt: this.execution.startedAt,
+      completedAt: this.execution.completedAt,
+      nodeStates: this.execution.nodeStates,
+      retryStats,
+    };
+
+    await this.historyService.addEntry(entry);
   }
 
   /** Pause the execution. Nodes in progress will finish but no new node starts. */
@@ -469,6 +517,64 @@ export class ExecutionEngine {
   }
 
   // -----------------------------------------------------------------------
+  // Replay (P15-F14)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Replay a previous execution from history (P15-F14). CC=4
+   */
+  async replay(request: {
+    historyEntryId: string;
+    mode: 'full' | 'resume';
+  }): Promise<{ success: boolean; executionId?: string; error?: string }> {
+    if (this.isActive()) {
+      return { success: false, error: 'Execution already active' };
+    }
+
+    if (!this.historyService) {
+      return { success: false, error: 'History service not available' };
+    }
+
+    const entry = this.historyService.getById(request.historyEntryId);
+    if (!entry) {
+      return { success: false, error: `History entry not found: ${request.historyEntryId}` };
+    }
+
+    const workflow = entry.workflow;
+
+    if (request.mode === 'resume') {
+      // Pre-populate completed node states so start() skips them
+      const result = await this.startWithPrePopulatedStates(workflow, entry);
+      return { success: result.status === 'completed', executionId: result.id };
+    }
+
+    // Full replay — just re-execute
+    const result = await this.start(workflow, entry.workItem);
+    return { success: result.status === 'completed', executionId: result.id };
+  }
+
+  /**
+   * Start execution with pre-populated node states for resume replay. CC=3
+   */
+  private async startWithPrePopulatedStates(
+    workflow: WorkflowDefinition,
+    entry: ExecutionHistoryEntry,
+  ): Promise<Execution> {
+    // Build a map of pre-completed nodes
+    const preCompletedNodeIds = new Set<string>();
+    for (const [nodeId, state] of Object.entries(entry.nodeStates)) {
+      if (state.status === 'completed') {
+        preCompletedNodeIds.add(nodeId);
+      }
+    }
+    this.resumeSkipNodeIds = preCompletedNodeIds;
+
+    const result = await this.start(workflow, entry.workItem);
+    this.resumeSkipNodeIds = null;
+    return result;
+  }
+
+  // -----------------------------------------------------------------------
   // Parallel execution (P15-F09 T08)
   // -----------------------------------------------------------------------
 
@@ -522,26 +628,15 @@ export class ExecutionEngine {
     try {
       const results = await executor.execute(plan);
 
-      // Map results back to nodeStates
-      let hasFailures = false;
-      for (const result of results) {
-        if (result.success) {
-          this.updateNodeState(result.blockId, 'completed', {
-            completedAt: new Date().toISOString(),
-            output: result.output,
-          });
-          this.emitEvent('node_completed', result.blockId, `Completed: ${result.blockId}`);
-        } else {
-          hasFailures = true;
-          this.updateNodeState(result.blockId, 'failed', {
-            completedAt: new Date().toISOString(),
-            error: result.error ?? 'Parallel block execution failed',
-          });
-          this.emitEvent('node_failed', result.blockId, `Failed: ${result.blockId}`);
-        }
-      }
+      // Separate successes from failures, then retry failed blocks (P15-F14)
+      const finalResults = await this.processParallelResults(
+        results,
+        workflow,
+        executor,
+      );
 
       // Set final execution status
+      const hasFailures = finalResults.some(r => !r.success);
       if (hasFailures) {
         this.setStatus('failed');
         this.execution!.completedAt = new Date().toISOString();
@@ -572,7 +667,123 @@ export class ExecutionEngine {
 
     this.execution!.currentNodeId = undefined;
     this.sendStateUpdate();
+
+    // Save to execution history (P15-F14)
+    await this.saveToHistory();
+
     return this.execution!;
+  }
+
+  // -----------------------------------------------------------------------
+  // Parallel result processing + retry (P15-F14)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Process parallel execution results: mark successes, retry failures. CC=4
+   */
+  private async processParallelResults(
+    results: ParallelBlockResult[],
+    workflow: WorkflowDefinition,
+    executor: { execute: (plan: WorkflowPlan) => Promise<ParallelBlockResult[]> },
+  ): Promise<ParallelBlockResult[]> {
+    const finalResults: ParallelBlockResult[] = [];
+    const failedBlockIds: string[] = [];
+
+    for (const result of results) {
+      if (result.success) {
+        this.updateNodeState(result.blockId, 'completed', {
+          completedAt: new Date().toISOString(),
+          output: result.output,
+        });
+        this.emitEvent('node_completed', result.blockId, `Completed: ${result.blockId}`);
+        finalResults.push(result);
+      } else {
+        const node = workflow.nodes.find(n => n.id === result.blockId);
+        const maxRetries = node?.config?.maxRetries ?? 0;
+        if (maxRetries > 0 && !this.isAborted) {
+          failedBlockIds.push(result.blockId);
+        } else {
+          this.updateNodeState(result.blockId, 'failed', {
+            completedAt: new Date().toISOString(),
+            error: result.error ?? 'Parallel block execution failed',
+          });
+          this.emitEvent('node_failed', result.blockId, `Failed: ${result.blockId}`);
+          finalResults.push(result);
+        }
+      }
+    }
+
+    // Retry failed blocks individually
+    for (const blockId of failedBlockIds) {
+      const retryResult = await this.retryParallelBlock(blockId, workflow, executor);
+      finalResults.push(retryResult);
+    }
+
+    return finalResults;
+  }
+
+  /**
+   * Retry a single failed parallel block up to its maxRetries. CC=4
+   */
+  private async retryParallelBlock(
+    blockId: string,
+    workflow: WorkflowDefinition,
+    executor: { execute: (plan: WorkflowPlan) => Promise<ParallelBlockResult[]> },
+  ): Promise<ParallelBlockResult> {
+    const node = workflow.nodes.find(n => n.id === blockId);
+    if (!node) {
+      return { blockId, success: false, output: null, error: `Node ${blockId} not found`, durationMs: 0 };
+    }
+    const maxRetries = node.config.maxRetries ?? 0;
+    let lastResult: ParallelBlockResult = {
+      blockId,
+      success: false,
+      output: null,
+      error: 'retry pending',
+      durationMs: 0,
+    };
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      if (this.isAborted) break;
+
+      this.emitEvent('node_retry', blockId, `Retry ${attempt}/${maxRetries}: ${node.label}`, {
+        attempt,
+        maxRetries,
+        nodeId: blockId,
+      });
+
+      const retryPlan: WorkflowPlan = {
+        lanes: [{ nodeIds: [blockId] }],
+        parallelismModel: 'multi-container',
+        failureMode: 'lenient',
+      };
+
+      const retryResults = await executor.execute(retryPlan);
+      lastResult = retryResults[0] ?? lastResult;
+
+      this.updateNodeState(blockId, lastResult.success ? 'completed' : 'failed', {
+        completedAt: new Date().toISOString(),
+        retryCount: attempt,
+        lastRetryAt: new Date().toISOString(),
+        output: lastResult.output,
+        error: lastResult.success ? undefined : lastResult.error,
+      });
+
+      if (lastResult.success) {
+        this.emitEvent('node_completed', blockId, `Completed after retry: ${node.label}`);
+        return lastResult;
+      }
+    }
+
+    if (!lastResult.success) {
+      this.emitEvent('node_retry_exhausted', blockId, `Retries exhausted: ${node.label}`, {
+        nodeId: blockId,
+        attempts: maxRetries + 1,
+      });
+      this.emitEvent('node_failed', blockId, `Failed: ${node.label}`);
+    }
+
+    return lastResult;
   }
 
   // -----------------------------------------------------------------------
@@ -788,10 +999,22 @@ export class ExecutionEngine {
     // Update node state with CLI session reference
     this.updateNodeState(nodeId, 'running', { cliSessionId: session.id });
 
-    // Wait for CLI exit or timeout
-    const timeoutMs = (node.config.timeoutSeconds ?? 0) * 1000 || this.nodeTimeoutMs;
+    // Wait for CLI exit or timeout (P15-F14: progressive + warning)
+    const baseTimeoutMs = (node.config.timeoutSeconds ?? 0) * 1000 || this.nodeTimeoutMs;
+    const retryCount = this.execution?.nodeStates[nodeId]?.retryCount ?? 0;
+    const timeoutMs = computeProgressiveTimeout(baseTimeoutMs, retryCount);
+
+    // Emit 80% timeout warning (P15-F14)
+    const warningTimer = setTimeout(() => {
+      this.emitEvent('node_timeout_warning', nodeId, `Node approaching timeout (80%)`, {
+        nodeId,
+        timeoutMs,
+        elapsedPercent: 80,
+      });
+    }, Math.floor(timeoutMs * 0.8));
 
     const exitCode = await this.waitForCLIExit(session.id, timeoutMs);
+    clearTimeout(warningTimer);
 
     if (this.isAborted) {
       this.updateNodeState(nodeId, 'failed', { error: 'Execution aborted' });

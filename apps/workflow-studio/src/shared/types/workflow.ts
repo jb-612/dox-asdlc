@@ -55,6 +55,10 @@ export interface AgentNodeConfig {
   blockType?: BlockType;
   /** Per-block gate mode for multi-step UX (P15-F04) */
   gateMode?: GateMode;
+  /** Maximum retry attempts for this node (P15-F14) */
+  maxRetries?: number;
+  /** Exit codes that trigger a retry; empty = timeout only (P15-F14) */
+  retryableExitCodes?: number[];
 }
 
 export interface AgentNode {
@@ -209,4 +213,6 @@ export interface WorkflowDefinition {
   rules?: string[];
   /** Default scrutiny level for gate deliverable views */
   defaultScrutinyLevel?: ScrutinyLevel;
+  /** Workflow-level timeout in seconds (P15-F14) */
+  timeoutSeconds?: number;
 }

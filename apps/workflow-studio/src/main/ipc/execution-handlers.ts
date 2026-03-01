@@ -30,6 +30,8 @@ export interface ExecutionHandlerDeps {
   /** Getter for the container pool. Called at execution start time so the
    *  pool can be initialized asynchronously after handler registration. */
   getContainerPool?: () => ExecutorContainerPool | null;
+  /** Execution history service for persistent history (P15-F14) */
+  historyService?: import('../services/execution-history-service').ExecutionHistoryService;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +47,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
   const redisClient = deps?.redisClient;
   const settingsService = deps?.settingsService;
   const getContainerPool = deps?.getContainerPool;
+  const historyService = deps?.historyService;
 
   // --- Start execution ---------------------------------------------------
   ipcMain.handle(
@@ -111,6 +114,7 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         workingDirectory: config.repoMount?.localPath || undefined,
         fileRestrictions: config.repoMount?.fileRestrictions || undefined,
         readOnly: config.repoMount?.readOnly || undefined,
+        historyService: historyService ?? undefined,
       });
 
       // Wire container pool for parallel execution (P15-F09 T04)

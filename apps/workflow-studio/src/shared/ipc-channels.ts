@@ -149,6 +149,14 @@ export const IPC_CHANNELS = {
   MONITORING_RECEIVER_STOP: 'monitoring:receiver-stop',
   // Monitoring events (main -> renderer)
   MONITORING_EVENT: 'monitoring:event',
+
+  // ---------------------------------------------------------------------------
+  // Execution history + replay (P15-F14)
+  // ---------------------------------------------------------------------------
+  EXECUTION_HISTORY_LIST: 'execution:history-list',
+  EXECUTION_HISTORY_GET: 'execution:history-get',
+  EXECUTION_HISTORY_CLEAR: 'execution:history-clear',
+  EXECUTION_REPLAY: 'execution:replay',
 } as const;
 
 export type IPCChannel = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

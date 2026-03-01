@@ -31,6 +31,10 @@ export interface NodeExecutionState {
   revisionCount?: number;
   /** Per-block gate mode inherited from AgentNodeConfig (P15-F04) */
   gateMode?: 'auto_continue' | 'gate';
+  /** Number of retry attempts for this node (P15-F14) */
+  retryCount?: number;
+  /** ISO timestamp of the last retry attempt (P15-F14) */
+  lastRetryAt?: string;
 }
 
 export type ExecutionEventType =
@@ -54,7 +58,11 @@ export type ExecutionEventType =
   | 'tool_call'
   | 'bash_command'
   | 'block_gate_open'
-  | 'block_revision';
+  | 'block_revision'
+  // P15-F14: retry and timeout events
+  | 'node_retry'
+  | 'node_retry_exhausted'
+  | 'node_timeout_warning';
 
 export interface ExecutionEvent {
   id: string;
@@ -217,6 +225,28 @@ export interface MergeResolution {
   filePath: string;
   keepBlockId: string | 'abort';
 }
+
+// ---------------------------------------------------------------------------
+// Execution History (P15-F14)
+// ---------------------------------------------------------------------------
+
+export interface ExecutionHistoryEntry {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  workflow: WorkflowDefinition;
+  workItem?: WorkItemReference;
+  status: ExecutionStatus;
+  startedAt: string;
+  completedAt?: string;
+  nodeStates: Record<string, NodeExecutionState>;
+  retryStats: Record<string, number>;
+}
+
+export type ExecutionHistorySummary = Pick<
+  ExecutionHistoryEntry,
+  'id' | 'workflowId' | 'workflowName' | 'status' | 'startedAt' | 'completedAt'
+>;
 
 // ---------------------------------------------------------------------------
 // Execution

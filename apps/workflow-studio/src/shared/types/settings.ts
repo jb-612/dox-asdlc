@@ -92,6 +92,10 @@ export interface AppSettings {
   containerImage?: string;
   /** Dormancy timeout in ms before idle containers are terminated (default: 300000) */
   dormancyTimeoutMs?: number;
+  /** Default max retries for node execution (default: 0 = no retry) (P15-F14) */
+  defaultMaxRetries?: number;
+  /** Base backoff in ms between retries (default: 1000) (P15-F14) */
+  retryBackoffMs?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -115,4 +119,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   agentTimeoutSeconds: 300,
   containerImage: 'asdlc-agent:1.0.0',
   dormancyTimeoutMs: 300_000,
+  defaultMaxRetries: 0,
+  retryBackoffMs: 1000,
 };
