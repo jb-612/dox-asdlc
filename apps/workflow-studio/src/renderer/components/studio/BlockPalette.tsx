@@ -6,18 +6,32 @@ import {
   NODE_TYPE_METADATA,
 } from '../../../shared/constants';
 
+const CONTROL_FLOW_TYPES: BlockType[] = ['condition', 'forEach', 'subWorkflow'];
+
+const CONTROL_FLOW_COLORS: Record<string, { color: string; bgColor: string }> = {
+  condition: { color: '#8B5CF6', bgColor: '#8B5CF620' },
+  forEach: { color: '#3B82F6', bgColor: '#3B82F620' },
+  subWorkflow: { color: '#22C55E', bgColor: '#22C55E20' },
+};
+
 interface BlockCardProps {
   blockType: BlockType;
 }
 
 function BlockCard({ blockType }: BlockCardProps): JSX.Element {
   const meta = BLOCK_TYPE_METADATA[blockType];
-  const nodeMeta = NODE_TYPE_METADATA[meta.agentNodeType];
+  const isControlFlow = CONTROL_FLOW_TYPES.includes(blockType);
+  const nodeMeta = !isControlFlow && meta.agentNodeType
+    ? NODE_TYPE_METADATA[meta.agentNodeType]
+    : null;
+  const colors = isControlFlow
+    ? CONTROL_FLOW_COLORS[blockType]
+    : { color: nodeMeta?.color ?? '#6B7280', bgColor: nodeMeta?.bgColor ?? '#6B728020' };
 
   function handleDragStart(event: DragEvent<HTMLDivElement>): void {
     const payload = JSON.stringify({
-      nodeKind: 'agent',
-      agentType: meta.agentNodeType,
+      nodeKind: isControlFlow ? 'control' : 'agent',
+      agentType: meta.agentNodeType ?? blockType,
       blockType,
     });
     event.dataTransfer.setData('application/reactflow', payload);
@@ -42,7 +56,7 @@ function BlockCard({ blockType }: BlockCardProps): JSX.Element {
         transition: 'border-color 0.15s',
       }}
       onMouseOver={(e) => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = nodeMeta.color;
+        (e.currentTarget as HTMLDivElement).style.borderColor = colors.color;
       }}
       onMouseOut={(e) => {
         (e.currentTarget as HTMLDivElement).style.borderColor = '#374151';
@@ -53,7 +67,7 @@ function BlockCard({ blockType }: BlockCardProps): JSX.Element {
           width: 28,
           height: 28,
           borderRadius: 6,
-          backgroundColor: nodeMeta.bgColor,
+          backgroundColor: colors.bgColor,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -66,7 +80,7 @@ function BlockCard({ blockType }: BlockCardProps): JSX.Element {
             width: 10,
             height: 10,
             borderRadius: '50%',
-            backgroundColor: nodeMeta.color,
+            backgroundColor: colors.color,
           }}
         />
       </div>
@@ -82,7 +96,29 @@ function BlockCard({ blockType }: BlockCardProps): JSX.Element {
   );
 }
 
+function SectionHeader({ title }: { title: string }): JSX.Element {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 600,
+        color: '#6b7280',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        padding: '8px 2px 4px',
+        borderTop: '1px solid #374151',
+        marginTop: 4,
+      }}
+    >
+      {title}
+    </div>
+  );
+}
+
 export function BlockPalette(): JSX.Element {
+  const agentBlocks = AVAILABLE_BLOCK_TYPES.filter((bt) => !CONTROL_FLOW_TYPES.includes(bt));
+  const controlFlowBlocks = AVAILABLE_BLOCK_TYPES.filter((bt) => CONTROL_FLOW_TYPES.includes(bt));
+
   return (
     <div
       data-testid="block-palette"
@@ -129,9 +165,18 @@ export function BlockPalette(): JSX.Element {
           gap: 6,
         }}
       >
-        {AVAILABLE_BLOCK_TYPES.map((blockType) => (
+        {agentBlocks.map((blockType) => (
           <BlockCard key={blockType} blockType={blockType} />
         ))}
+
+        {controlFlowBlocks.length > 0 && (
+          <>
+            <SectionHeader title="Control Flow" />
+            {controlFlowBlocks.map((blockType) => (
+              <BlockCard key={blockType} blockType={blockType} />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );

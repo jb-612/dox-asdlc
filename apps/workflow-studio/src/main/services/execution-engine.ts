@@ -24,6 +24,7 @@ import type { CLISpawner } from './cli-spawner';
 import type { RedisEventClient } from './redis-client';
 import { captureGitDiff } from './diff-capture';
 import { computeProgressiveTimeout } from './retry-utils';
+import { evaluateExpression } from './expression-evaluator';
 import type { ExecutionHistoryService } from './execution-history-service';
 import type { ExecutionHistoryEntry } from '../../shared/types/execution';
 
@@ -70,6 +71,10 @@ export interface ExecutionEngineOptions {
   readOnly?: boolean;
   /** Execution history service for persistent history (P15-F14) */
   historyService?: ExecutionHistoryService;
+  /** Resolver for loading sub-workflow definitions by ID (P15-F15) */
+  workflowResolver?: (workflowId: string) => WorkflowDefinition | null;
+  /** Current sub-workflow nesting depth (P15-F15, internal) */
+  subWorkflowDepth?: number;
 }
 
 export class ExecutionEngine {
@@ -96,8 +101,14 @@ export class ExecutionEngine {
   private readOnly: boolean;
   /** Optional history service for persisting execution results (P15-F14). */
   private historyService: ExecutionHistoryService | null;
+  /** Resolver for loading sub-workflow definitions by ID (P15-F15). */
+  private workflowResolver: ((workflowId: string) => WorkflowDefinition | null) | null;
+  /** Current sub-workflow nesting depth (P15-F15). */
+  private subWorkflowDepth: number;
   /** Node IDs to skip during resume replay (P15-F14). */
   private resumeSkipNodeIds: Set<string> | null = null;
+  /** Node IDs to skip due to condition branch routing (P15-F15). */
+  private conditionSkipNodeIds = new Set<string>();
 
   /**
    * Optional container pool for parallel execution (P15-F09 T07).
@@ -126,6 +137,8 @@ export class ExecutionEngine {
     this.fileRestrictions = options?.fileRestrictions ?? [];
     this.readOnly = options?.readOnly ?? false;
     this.historyService = options?.historyService ?? null;
+    this.workflowResolver = options?.workflowResolver ?? null;
+    this.subWorkflowDepth = options?.subWorkflowDepth ?? 0;
   }
 
   // -----------------------------------------------------------------------
@@ -152,6 +165,7 @@ export class ExecutionEngine {
     this.gateResolvers.clear();
     this.cliExitResolvers.clear();
     this.sessionToNode.clear();
+    this.conditionSkipNodeIds.clear();
 
     // Create execution state
     const executionId = uuidv4();
@@ -168,6 +182,13 @@ export class ExecutionEngine {
       variables: {},
       startedAt: now,
     };
+
+    // Initialize variables from workflow defaults (P15-F15)
+    for (const v of workflow.variables) {
+      if (v.defaultValue !== undefined) {
+        this.execution.variables[v.name] = v.defaultValue;
+      }
+    }
 
     // Initialize all node states to pending
     for (const node of workflow.nodes) {
@@ -231,6 +252,13 @@ export class ExecutionEngine {
         continue;
       }
 
+      // Condition branch routing: skip nodes not chosen by a condition (P15-F15)
+      if (this.conditionSkipNodeIds.has(nodeId)) {
+        this.updateNodeState(nodeId, 'skipped');
+        this.emitEvent('node_skipped', nodeId, `Skipped: ${node.label} (condition branch not taken)`);
+        continue;
+      }
+
       // Evaluate transition conditions: skip this node if no incoming
       // transition is satisfied (root nodes with no incoming edges always run).
       if (!this.shouldExecuteNode(nodeId, workflow)) {
@@ -251,6 +279,20 @@ export class ExecutionEngine {
       // Execute node using the appropriate mode
       this.updateNodeState(nodeId, 'running', { startedAt: new Date().toISOString() });
       this.emitEvent('node_started', nodeId, `Started: ${node.label}`);
+
+      // Control-flow node dispatch (P15-F15)
+      if (node.kind === 'control' && node.config.blockType === 'condition') {
+        this.executeConditionNode(nodeId, node);
+        continue;
+      }
+      if (node.kind === 'control' && node.config.blockType === 'forEach') {
+        await this.executeForEachNode(nodeId, node, workflow);
+        continue;
+      }
+      if (node.kind === 'control' && node.config.blockType === 'subWorkflow') {
+        await this.executeSubWorkflowNode(nodeId, node);
+        continue;
+      }
 
       if (node.config.backend === 'codex') {
         this.updateNodeState(nodeId, 'failed', {
@@ -331,6 +373,162 @@ export class ExecutionEngine {
     };
 
     await this.historyService.addEntry(entry);
+  }
+
+  // -----------------------------------------------------------------------
+  // Control-flow node handlers (P15-F15)
+  // -----------------------------------------------------------------------
+
+  /** Execute a condition node: evaluate expression, route branches. CC=3 */
+  private executeConditionNode(nodeId: string, node: import('../../shared/types/workflow').AgentNode): void {
+    const config = node.config.conditionConfig;
+    if (!config) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: 'Missing conditionConfig',
+      });
+      this.emitEvent('node_failed', nodeId, 'Missing conditionConfig');
+      return;
+    }
+
+    const result = evaluateExpression(config.expression, this.execution.variables);
+    this.execution.variables[`__condition_${nodeId}`] = result;
+
+    if (result) {
+      this.conditionSkipNodeIds.add(config.falseBranchNodeId);
+    } else {
+      this.conditionSkipNodeIds.add(config.trueBranchNodeId);
+    }
+
+    this.updateNodeState(nodeId, 'completed', { completedAt: new Date().toISOString() });
+    this.emitEvent('node_completed', nodeId, `Condition evaluated: ${result}`);
+  }
+
+  /** Execute a ForEach node: iterate collection, run body nodes per item. CC=5 */
+  private async executeForEachNode(
+    nodeId: string,
+    node: import('../../shared/types/workflow').AgentNode,
+    workflow: WorkflowDefinition,
+  ): Promise<void> {
+    const config = node.config.forEachConfig;
+    if (!config) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: 'Missing forEachConfig',
+      });
+      this.emitEvent('node_failed', nodeId, 'Missing forEachConfig');
+      return;
+    }
+
+    // Mark body nodes so main loop skips them
+    for (const bodyId of config.bodyNodeIds) {
+      this.conditionSkipNodeIds.add(bodyId);
+    }
+
+    const collection = this.execution.variables[config.collectionVariable];
+    const items = Array.isArray(collection) ? collection : [];
+    const maxIter = config.maxIterations ?? 100;
+
+    if (items.length === 0) {
+      this.updateNodeState(nodeId, 'completed', { completedAt: new Date().toISOString() });
+      this.emitEvent('node_completed', nodeId, 'ForEach: empty collection, skipped body');
+      return;
+    }
+
+    const iterCount = Math.min(items.length, maxIter);
+    for (let i = 0; i < iterCount; i++) {
+      if (this.isAborted) break;
+
+      this.execution.variables[config.itemVariable] = items[i];
+      this.execution.variables['__forEach_index'] = i;
+      this.emitEvent('node_progress', nodeId, `ForEach iteration ${i + 1}/${iterCount}`);
+
+      // Execute each body node in mock mode for this iteration
+      for (const bodyNodeId of config.bodyNodeIds) {
+        if (this.isAborted) break;
+        if (this.mockMode) {
+          await this.executeNodeMock(bodyNodeId);
+        }
+      }
+    }
+
+    this.updateNodeState(nodeId, 'completed', { completedAt: new Date().toISOString() });
+    this.emitEvent('node_completed', nodeId, `ForEach completed: ${iterCount} iterations`);
+  }
+
+  /** Execute a SubWorkflow node: load + run child workflow. CC=4 */
+  private async executeSubWorkflowNode(
+    nodeId: string,
+    node: import('../../shared/types/workflow').AgentNode,
+  ): Promise<void> {
+    const config = node.config.subWorkflowConfig;
+    if (!config) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: 'Missing subWorkflowConfig',
+      });
+      this.emitEvent('node_failed', nodeId, 'Missing subWorkflowConfig');
+      return;
+    }
+
+    if (this.subWorkflowDepth >= 3) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: 'Maximum sub-workflow nesting depth (3) exceeded',
+      });
+      this.emitEvent('node_failed', nodeId, 'Max depth exceeded');
+      return;
+    }
+
+    const resolved = this.workflowResolver?.(config.workflowId) ?? null;
+    if (!resolved) {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: `Sub-workflow not found: ${config.workflowId}`,
+      });
+      this.emitEvent('node_failed', nodeId, `Sub-workflow not found: ${config.workflowId}`);
+      return;
+    }
+
+    // Deep-clone to avoid mutating the resolver's cached workflow
+    const childWorkflow = structuredClone(resolved);
+
+    // Create child engine with incremented depth
+    const childEngine = new ExecutionEngine(this.mainWindow, {
+      mockMode: this.mockMode,
+      workflowResolver: this.workflowResolver ?? undefined,
+      subWorkflowDepth: this.subWorkflowDepth + 1,
+    });
+
+    // Map input variables
+    if (config.inputMappings) {
+      for (const [parentVar, childVar] of Object.entries(config.inputMappings)) {
+        const childVarDef = childWorkflow.variables.find(v => v.name === childVar);
+        if (childVarDef) {
+          childVarDef.defaultValue = this.execution.variables[parentVar];
+        }
+      }
+    }
+
+    const childResult = await childEngine.start(childWorkflow);
+
+    // Map output variables back
+    if (config.outputMappings) {
+      for (const [childVar, parentVar] of Object.entries(config.outputMappings)) {
+        this.execution.variables[parentVar] = childResult.variables[childVar];
+      }
+    }
+
+    if (childResult.status === 'completed') {
+      this.updateNodeState(nodeId, 'completed', { completedAt: new Date().toISOString() });
+      this.emitEvent('node_completed', nodeId, `SubWorkflow completed: ${childWorkflow.metadata.name}`);
+    } else {
+      this.updateNodeState(nodeId, 'failed', {
+        completedAt: new Date().toISOString(),
+        error: `Sub-workflow ${config.workflowId} ${childResult.status}`,
+      });
+      this.emitEvent('node_failed', nodeId, `SubWorkflow failed: ${childWorkflow.metadata.name}`);
+    }
   }
 
   /** Pause the execution. Nodes in progress will finish but no new node starts. */
@@ -1489,7 +1687,7 @@ export class ExecutionEngine {
    *   - 'always': always satisfied (regardless of source status)
    *   - 'on_success': satisfied only if the source node completed
    *   - 'on_failure': satisfied only if the source node failed
-   *   - 'expression': treated as 'always' (expression eval not yet implemented)
+   *   - 'expression': evaluates the expression string against workflow variables
    */
   private shouldExecuteNode(
     nodeId: string,
@@ -1511,10 +1709,17 @@ export class ExecutionEngine {
 
       switch (conditionType) {
         case 'always':
-        case 'expression':
-          // 'always' is always satisfied; 'expression' falls through to always
-          // until expression evaluation is implemented
           return true;
+        case 'expression': {
+          const expr = t.condition?.expression;
+          if (!expr) return false;
+          try {
+            if (evaluateExpression(expr, this.execution.variables)) return true;
+          } catch {
+            return false;
+          }
+          break;
+        }
         case 'on_success':
           if (sourceState.status === 'completed') return true;
           break;

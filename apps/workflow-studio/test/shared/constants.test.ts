@@ -40,15 +40,18 @@ describe('BLOCK_TYPE_METADATA (F11-T01)', () => {
 // ---------------------------------------------------------------------------
 
 describe('AVAILABLE_BLOCK_TYPES (F11-T02)', () => {
-  it('includes all 5 block types', () => {
-    expect(AVAILABLE_BLOCK_TYPES).toHaveLength(5);
+  it('includes all 8 block types', () => {
+    expect(AVAILABLE_BLOCK_TYPES).toHaveLength(8);
   });
 
-  it('includes plan, dev, test, review, devops', () => {
+  it('includes plan, dev, test, review, devops, condition, forEach, subWorkflow', () => {
     expect(AVAILABLE_BLOCK_TYPES).toContain('plan');
     expect(AVAILABLE_BLOCK_TYPES).toContain('dev');
     expect(AVAILABLE_BLOCK_TYPES).toContain('test');
     expect(AVAILABLE_BLOCK_TYPES).toContain('review');
     expect(AVAILABLE_BLOCK_TYPES).toContain('devops');
+    expect(AVAILABLE_BLOCK_TYPES).toContain('condition');
+    expect(AVAILABLE_BLOCK_TYPES).toContain('forEach');
+    expect(AVAILABLE_BLOCK_TYPES).toContain('subWorkflow');
   });
 });

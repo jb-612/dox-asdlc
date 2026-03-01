@@ -59,12 +59,20 @@ export interface AgentNodeConfig {
   maxRetries?: number;
   /** Exit codes that trigger a retry; empty = timeout only (P15-F14) */
   retryableExitCodes?: number[];
+  /** Condition block config (P15-F15) */
+  conditionConfig?: ConditionConfig;
+  /** ForEach block config (P15-F15) */
+  forEachConfig?: ForEachConfig;
+  /** SubWorkflow block config (P15-F15) */
+  subWorkflowConfig?: SubWorkflowConfig;
 }
 
 export interface AgentNode {
   id: string;
   type: AgentNodeType;
   label: string;
+  /** Discriminator: 'agent' (default) or 'control' for control-flow nodes (P15-F15) */
+  kind?: 'agent' | 'control';
   config: AgentNodeConfig;
   inputs: PortSchema[];
   outputs: PortSchema[];
@@ -77,7 +85,30 @@ export interface AgentNode {
 // ---------------------------------------------------------------------------
 
 /** High-level block type for the Studio block composer. */
-export type BlockType = 'plan' | 'dev' | 'test' | 'review' | 'devops';
+export type BlockType = 'plan' | 'dev' | 'test' | 'review' | 'devops' | 'condition' | 'forEach' | 'subWorkflow';
+
+// ---------------------------------------------------------------------------
+// Control-flow configs (P15-F15)
+// ---------------------------------------------------------------------------
+
+export interface ConditionConfig {
+  expression: string;
+  trueBranchNodeId: string;
+  falseBranchNodeId: string;
+}
+
+export interface ForEachConfig {
+  collectionVariable: string;
+  itemVariable: string;
+  bodyNodeIds: string[];
+  maxIterations?: number;
+}
+
+export interface SubWorkflowConfig {
+  workflowId: string;
+  inputMappings?: Record<string, string>;
+  outputMappings?: Record<string, string>;
+}
 
 // ---------------------------------------------------------------------------
 // Parallel execution (P15-F05)
@@ -174,7 +205,7 @@ export interface HITLGateDefinition {
 
 export interface WorkflowVariable {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'json';
+  type: 'string' | 'number' | 'boolean' | 'json' | 'array';
   defaultValue?: unknown;
   description?: string;
   required: boolean;

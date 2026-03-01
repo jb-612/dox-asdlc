@@ -169,12 +169,13 @@ export const NODE_TYPE_METADATA: Record<AgentNodeType, NodeTypeMetadata> = {
 // ---------------------------------------------------------------------------
 
 export interface BlockTypeMetadata {
-  agentNodeType: AgentNodeType;
+  /** Agent node type for agent blocks; undefined for control-flow blocks. */
+  agentNodeType?: AgentNodeType;
   label: string;
   description: string;
   icon: string;
-  defaultSystemPromptPrefix: string;
-  defaultOutputChecklist: string[];
+  defaultSystemPromptPrefix?: string;
+  defaultOutputChecklist?: string[];
   /** Phase in which this block becomes available in the palette. */
   phase: number;
 }
@@ -265,12 +266,30 @@ export const BLOCK_TYPE_METADATA: Record<import('./types/workflow').BlockType, B
     ],
     phase: 2,
   },
+  condition: {
+    label: 'Condition',
+    description: 'Branch workflow based on an expression',
+    icon: 'ArrowsRightLeftIcon',
+    phase: 3,
+  },
+  forEach: {
+    label: 'ForEach',
+    description: 'Iterate over a collection variable',
+    icon: 'ArrowPathIcon',
+    phase: 3,
+  },
+  subWorkflow: {
+    label: 'SubWorkflow',
+    description: 'Embed a saved workflow as a single node',
+    icon: 'Square2StackIcon',
+    phase: 3,
+  },
 };
 
-/** Block types available in the current phase (Phase 2). */
+/** Block types available in the current phase (Phase 3). */
 export const AVAILABLE_BLOCK_TYPES = (
   Object.entries(BLOCK_TYPE_METADATA) as [import('./types/workflow').BlockType, BlockTypeMetadata][]
-).filter(([, meta]) => meta.phase <= 2).map(([type]) => type);
+).filter(([, meta]) => meta.phase <= 3).map(([type]) => type);
 
 export const NODE_CATEGORIES = [
   'discovery',
