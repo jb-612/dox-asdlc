@@ -96,6 +96,10 @@ export interface AppSettings {
   defaultMaxRetries?: number;
   /** Base backoff in ms between retries (default: 1000) (P15-F14) */
   retryBackoffMs?: number;
+  /** Port for webhook HTTP server (default: 9480) (P15-F17) */
+  webhookPort?: number;
+  /** Shared secret for HMAC-SHA256 webhook auth (P15-F17) */
+  webhookSecret?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -121,4 +125,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dormancyTimeoutMs: 300_000,
   defaultMaxRetries: 0,
   retryBackoffMs: 1000,
+  webhookPort: 9480,
+  webhookSecret: '',
 };

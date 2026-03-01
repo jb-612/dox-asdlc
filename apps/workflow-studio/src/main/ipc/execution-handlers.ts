@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { ExecutionEngine } from '../services/execution-engine';
+import type { EngineHost } from '../../cli/types';
 import type { CLISpawner } from '../services/cli-spawner';
 import type { RedisEventClient } from '../services/redis-client';
 import type { SettingsService } from '../services/settings-service';
@@ -106,7 +107,8 @@ export function registerExecutionHandlers(deps?: ExecutionHandlerDeps): void {
         return { success: false, error: 'No BrowserWindow available' };
       }
 
-      engine = new ExecutionEngine(mainWindow, {
+      const host: EngineHost = { send: (ch, ...args) => mainWindow.webContents.send(ch, ...args) };
+      engine = new ExecutionEngine(host, {
         mockMode: config.mockMode ?? false,
         cliSpawner: cliSpawner ?? undefined,
         redisClient: redisClient ?? undefined,

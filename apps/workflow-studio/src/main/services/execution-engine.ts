@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -20,6 +19,7 @@ import type { ExecutorContainerPool } from './workflow-executor';
 import { ExecutorEngineAdapter } from './executor-engine-adapter';
 import type { WorkItemReference } from '../../shared/types/workitem';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
+import type { EngineHost } from '../../cli/types';
 import type { CLISpawner } from './cli-spawner';
 import type { RedisEventClient } from './redis-client';
 import { captureGitDiff } from './diff-capture';
@@ -79,13 +79,15 @@ export interface ExecutionEngineOptions {
   subWorkflowDepth?: number;
   /** Analytics service for cost tracking persistence (P15-F16) */
   analyticsService?: AnalyticsService;
+  /** Headless gate handler: returns decision string for HITL gates (P15-F17) */
+  gateHandler?: (gateId: string, prompt: string) => string;
 }
 
 export class ExecutionEngine {
   private execution: Execution | null = null;
   private isPaused = false;
   private isAborted = false;
-  private mainWindow: BrowserWindow | null = null;
+  private host: EngineHost | null = null;
 
   /** Whether to use mock execution (true) or real CLI spawning (false, default). */
   private mockMode: boolean;
@@ -111,6 +113,8 @@ export class ExecutionEngine {
   private subWorkflowDepth: number;
   /** Analytics service for cost tracking persistence (P15-F16). */
   private analyticsService: AnalyticsService | null;
+  /** Headless gate handler (P15-F17). */
+  private gateHandler: ((gateId: string, prompt: string) => string) | null;
   /** Node IDs to skip during resume replay (P15-F14). */
   private resumeSkipNodeIds: Set<string> | null = null;
   /** Node IDs to skip due to condition branch routing (P15-F15). */
@@ -132,8 +136,14 @@ export class ExecutionEngine {
   /** Maps CLI session IDs to node IDs for exit handling. */
   private sessionToNode = new Map<string, string>();
 
-  constructor(mainWindow: BrowserWindow, options?: ExecutionEngineOptions) {
-    this.mainWindow = mainWindow;
+  constructor(host: EngineHost, options?: ExecutionEngineOptions) {
+    // Adapt BrowserWindow shape ({ webContents: { send } }) to EngineHost
+    const bw = host as unknown as { webContents?: { send: (...a: unknown[]) => void } };
+    if (bw.webContents && typeof bw.webContents.send === 'function') {
+      this.host = { send: (ch: string, ...args: unknown[]) => bw.webContents!.send(ch, ...args) };
+    } else {
+      this.host = host;
+    }
     this.mockMode = options?.mockMode ?? false;
     this.cliSpawner = options?.cliSpawner ?? null;
     this.redisClient = options?.redisClient ?? null;
@@ -146,6 +156,7 @@ export class ExecutionEngine {
     this.workflowResolver = options?.workflowResolver ?? null;
     this.subWorkflowDepth = options?.subWorkflowDepth ?? 0;
     this.analyticsService = options?.analyticsService ?? null;
+    this.gateHandler = options?.gateHandler ?? null;
   }
 
   // -----------------------------------------------------------------------
@@ -412,7 +423,7 @@ export class ExecutionEngine {
 
     try {
       await this.analyticsService.saveExecution(summary);
-      this.mainWindow?.webContents.send(IPC_CHANNELS.ANALYTICS_DATA_UPDATED);
+      this.host?.send(IPC_CHANNELS.ANALYTICS_DATA_UPDATED);
     } catch {
       // Analytics persistence is best-effort; don't fail the execution
     }
@@ -537,7 +548,7 @@ export class ExecutionEngine {
     const childWorkflow = structuredClone(resolved);
 
     // Create child engine with incremented depth
-    const childEngine = new ExecutionEngine(this.mainWindow, {
+    const childEngine = new ExecutionEngine(this.host!, {
       mockMode: this.mockMode,
       workflowResolver: this.workflowResolver ?? undefined,
       subWorkflowDepth: this.subWorkflowDepth + 1,
@@ -861,7 +872,7 @@ export class ExecutionEngine {
     });
 
     const emitIPC = (channel: string, data: unknown): void => {
-      this.mainWindow?.webContents.send(channel, data);
+      this.host?.send(channel, data);
     };
 
     const executor = new WorkflowExecutor(this.containerPool!, adapter, emitIPC);
@@ -1601,6 +1612,19 @@ export class ExecutionEngine {
     );
     this.sendStateUpdate();
 
+    // Headless gate handler: auto-resolve without waiting for IPC (P15-F17)
+    if (this.gateHandler) {
+      const decision = this.gateHandler(gate.id, gate.prompt ?? '');
+      if (decision === '__gate_fail__') {
+        this.updateNodeState(nodeId, 'failed', { error: 'Gate rejected in headless mode' });
+        this.emitEvent('node_failed', nodeId, 'Gate rejected: --gate-mode=fail');
+        return false;
+      }
+      this.updateNodeState(nodeId, 'completed');
+      this.emitEvent('gate_approved', nodeId, `Gate auto-approved: ${decision}`);
+      return true;
+    }
+
     // Block until the renderer submits a decision
     const decision = await new Promise<string>((resolve) => {
       this.gateResolvers.set(nodeId, resolve);
@@ -1707,13 +1731,13 @@ export class ExecutionEngine {
       spanId: nodeId ? uuidv4() : undefined,
     };
     this.execution?.events.push(event);
-    this.mainWindow?.webContents.send(IPC_CHANNELS.EXECUTION_EVENT, event);
+    this.host?.send(IPC_CHANNELS.EXECUTION_EVENT, event);
   }
 
   /** Push the full execution snapshot to the renderer. */
   private sendStateUpdate(): void {
     if (!this.execution) return;
-    this.mainWindow?.webContents.send(
+    this.host?.send(
       IPC_CHANNELS.EXECUTION_STATE_UPDATE,
       this.execution,
     );
